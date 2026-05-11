@@ -491,7 +491,7 @@ function formatDraftDate(isoString) {
 // Limpiar borradores antiguos al cargar
 cleanOldDrafts()
 
-function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, sinopsisInfo, countryConfig, isNewBlank, onNewReportReady, fromSolicitud }) {
+function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, sinopsisInfo, countryConfig, isNewBlank, onNewReportReady, fromSolicitud, isFromPdfUpload = false }) {
   const { isAdmin } = useAuth()
   const isNewReport = !data && !empresaId && !!countryConfig
   const afipData = countryConfig?.afipData || {}
@@ -604,7 +604,13 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     const originalData = data || initialData || {}
     originalDataRef.current = { ...originalData }
 
-    // Detectar si hay un borrador guardado
+    // Si viene de subir un PDF, limpiar borrador existente y NO mostrar modal
+    if (isFromPdfUpload) {
+      clearDraft(key)
+      return
+    }
+
+    // Detectar si hay un borrador guardado (solo si NO es subida de PDF)
     const existingDraft = loadDraft(key)
     if (existingDraft && existingDraft.data) {
       // Verificar si el borrador es diferente a los datos actuales
@@ -626,7 +632,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
         }
       }
     }
-  }, []) // Solo al montar
+  }, [isFromPdfUpload]) // Solo al montar o cuando cambia isFromPdfUpload
 
   // ── Autosave: guardar borrador cada N segundos SOLO si hay cambios ──
   useEffect(() => {

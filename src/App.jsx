@@ -787,6 +787,7 @@ function App() {
               onBack={extractedData || newReportCountry ? handleBackToSearch : handleBackFromView}
               sinopsisInfo={sinopsisInfo}
               countryConfig={newReportCountry}
+              isFromPdfUpload={!!extractedData && !selectedEmpresaId}
             />
         )}
 
