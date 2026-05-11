@@ -1,0 +1,303 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: #f3f4f6;
+}
+
+.field-group {
+  @apply bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4;
+}
+
+.field-label {
+  @apply block text-sm font-medium text-gray-700 mb-1;
+}
+
+.field-input {
+  @apply w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm 
+         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+         text-sm;
+}
+
+.field-input:disabled {
+  @apply bg-gray-100 text-gray-500;
+}
+
+.field-textarea {
+  @apply w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm 
+         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+         text-sm min-h-[100px] resize-y;
+}
+
+/* Textarea estilo documento Word */
+.field-textarea-word {
+  @apply w-full border border-gray-300 rounded-lg shadow-inner
+         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500;
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 14px;
+  line-height: 1.7;
+  padding: 16px 20px;
+  min-height: 60px;
+  max-height: 500px;
+  overflow-y: auto;
+  resize: none;
+  background: linear-gradient(to bottom, #fefefe 0%, #f9f9f9 100%);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.08);
+  transition: all 0.2s ease;
+}
+
+.field-textarea-word:focus {
+  background: #fff;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.05), 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.field-textarea-word:disabled {
+  background: #f5f5f5;
+  color: #333;
+  cursor: default;
+}
+
+.field-textarea-word::placeholder {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+/* ========================================
+   EDITOR QUILL - ESTILO WORD
+   ======================================== */
+.quill-wrapper {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  transition: all 0.2s ease;
+}
+
+.quill-wrapper:hover {
+  border-color: #9ca3af;
+}
+
+.quill-wrapper:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.quill-wrapper.quill-empty {
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.quill-wrapper.quill-disabled {
+  background: #f9fafb;
+}
+
+.quill-wrapper.quill-disabled .ql-toolbar {
+  display: none;
+}
+
+/* Barra de herramientas */
+.quill-wrapper .ql-toolbar {
+  border: none !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  background: linear-gradient(to bottom, #f9fafb 0%, #f3f4f6 100%);
+  padding: 8px 12px !important;
+}
+
+.quill-wrapper .ql-toolbar .ql-formats {
+  margin-right: 12px;
+}
+
+.quill-wrapper .ql-toolbar button {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.quill-wrapper .ql-toolbar button:hover {
+  background: #e5e7eb;
+}
+
+.quill-wrapper .ql-toolbar button.ql-active {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.quill-wrapper .ql-toolbar .ql-picker {
+  border-radius: 4px;
+}
+
+.quill-wrapper .ql-toolbar .ql-picker:hover .ql-picker-label {
+  background: #e5e7eb;
+}
+
+/* Área de edición - estilo documento */
+.quill-wrapper .ql-container {
+  border: none !important;
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 14px;
+}
+
+.quill-wrapper .ql-editor {
+  min-height: 100px;
+  max-height: 400px;
+  padding: 16px 20px;
+  line-height: 1.8;
+  color: #1f2937;
+  text-align: justify;
+  text-justify: inter-word;
+  background: linear-gradient(to bottom, #ffffff 0%, #fefefe 100%);
+}
+
+.quill-wrapper .ql-editor:focus {
+  background: #fff;
+}
+
+.quill-wrapper .ql-editor p {
+  margin-bottom: 1em;
+  text-align: justify;
+  min-height: 1.4em; /* Asegurar altura mínima para párrafos vacíos */
+}
+
+/* Forzar que párrafos vacíos mantengan su espacio */
+.quill-wrapper .ql-editor p:empty::before {
+  content: '\00a0'; /* non-breaking space */
+  visibility: hidden;
+}
+
+.quill-wrapper .ql-editor p br:only-child {
+  display: block;
+  content: '';
+  margin-top: 0;
+}
+
+.quill-wrapper .ql-editor li {
+  text-align: justify;
+}
+
+.quill-wrapper .ql-editor h1 {
+  font-size: 1.5em;
+  font-weight: bold;
+  margin-bottom: 0.5em;
+  color: #111827;
+}
+
+.quill-wrapper .ql-editor h2 {
+  font-size: 1.25em;
+  font-weight: bold;
+  margin-bottom: 0.5em;
+  color: #1f2937;
+}
+
+.quill-wrapper .ql-editor h3 {
+  font-size: 1.1em;
+  font-weight: bold;
+  margin-bottom: 0.5em;
+  color: #374151;
+}
+
+.quill-wrapper .ql-editor ul,
+.quill-wrapper .ql-editor ol {
+  padding-left: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.quill-wrapper .ql-editor.ql-blank::before {
+  font-style: italic;
+  color: #9ca3af;
+  left: 20px;
+}
+
+/* Modo lectura */
+.quill-disabled .ql-editor {
+  background: #f9fafb;
+  cursor: default;
+}
+
+.btn-primary {
+  @apply px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 
+         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+         disabled:opacity-50 disabled:cursor-not-allowed
+         transition-colors font-medium;
+}
+
+.btn-secondary {
+  @apply px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 
+         focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2
+         transition-colors font-medium;
+}
+
+.btn-success {
+  @apply px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 
+         focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2
+         disabled:opacity-50 disabled:cursor-not-allowed
+         transition-colors font-medium;
+}
+
+/* ========================================
+   RESPONSIVE / MOBILE ADJUSTMENTS
+   ======================================== */
+
+/* Quill editor en móvil: barra de herramientas compacta */
+@media (max-width: 640px) {
+  .quill-wrapper .ql-toolbar {
+    padding: 4px 6px !important;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+
+  .quill-wrapper .ql-toolbar .ql-formats {
+    margin-right: 4px;
+  }
+
+  .quill-wrapper .ql-toolbar button {
+    width: 24px;
+    height: 24px;
+  }
+
+  .quill-wrapper .ql-editor {
+    min-height: 80px;
+    max-height: 250px;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .quill-wrapper .ql-container {
+    font-size: 13px;
+  }
+
+  .field-group {
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+
+  .field-input {
+    font-size: 16px; /* Prevent iOS zoom on focus */
+  }
+
+  .field-textarea-word {
+    font-size: 14px;
+    padding: 10px 12px;
+    min-height: 60px;
+    max-height: 300px;
+  }
+
+  /* Touch-friendly button targets */
+  .btn-primary,
+  .btn-secondary,
+  .btn-success {
+    min-height: 44px;
+  }
+}
+
+/* Tablet adjustments */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .quill-wrapper .ql-editor {
+    max-height: 350px;
+  }
+}

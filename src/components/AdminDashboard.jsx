@@ -1,0 +1,651 @@
+import { useState, useEffect } from 'react'
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend, LineChart, Line, RadarChart, Radar,
+  PolarGrid, PolarAngleAxis, PolarRadiusAxis, AreaChart, Area
+} from 'recharts'
+import {
+  Building2, ClipboardList, TrendingUp, Users, Shield, AlertTriangle,
+  FileText, Database, Activity, Loader2, RefreshCcw, ChevronDown, ChevronUp, X,
+  Download, FileJson2, FileSpreadsheet, FileDown
+} from 'lucide-react'
+import axios from 'axios'
+import toast from 'react-hot-toast'
+
+const COLORS_PIE = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f43f5e']
+const RATING_COLORS = {
+  AAA: '#059669', AA: '#10b981', A: '#34d399',
+  BBB: '#f59e0b', BB: '#f97316',
+  B: '#ef4444', CCC: '#dc2626'
+}
+const ESTADO_LABELS = {
+  pendiente: 'Pendiente', en_proceso: 'En Proceso', completada: 'Completada',
+  cancelada: 'Cancelada', consulta: 'Consulta', precarga: 'Precarga'
+}
+const ESTADO_COLORS = {
+  pendiente: '#f59e0b', en_proceso: '#3b82f6', completada: '#10b981',
+  cancelada: '#9ca3af', consulta: '#8b5cf6', precarga: '#06b6d4'
+}
+
+function KpiCard({ icon: Icon, label, value, sub, color = 'blue', active, onClick, description }) {
+  const colorMap = {
+    blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    green: 'bg-green-50 text-green-600 border-green-100',
+    amber: 'bg-amber-50 text-amber-600 border-amber-100',
+    purple: 'bg-purple-50 text-purple-600 border-purple-100',
+    rose: 'bg-rose-50 text-rose-600 border-rose-100',
+    cyan: 'bg-cyan-50 text-cyan-600 border-cyan-100',
+  }
+  const ringColor = {
+    blue: 'ring-blue-300', green: 'ring-green-300', amber: 'ring-amber-300',
+    purple: 'ring-purple-300', rose: 'ring-rose-300', cyan: 'ring-cyan-300',
+  }
+  return (
+    <button
+      onClick={onClick}
+      className={`bg-white rounded-xl border p-3 sm:p-4 flex items-start gap-3 transition-all text-left w-full ${
+        onClick ? 'cursor-pointer hover:shadow-md' : 'cursor-default'
+      } ${active ? `ring-2 ${ringColor[color]} shadow-md` : ''}`}
+    >
+      <div className={`p-2 sm:p-2.5 rounded-xl border ${colorMap[color]} flex-shrink-0`}>
+        <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] sm:text-xs text-gray-500 leading-tight">{label}</p>
+        <p className="text-lg sm:text-xl font-bold text-gray-900 mt-0.5">{typeof value === 'number' ? value.toLocaleString() : value}</p>
+        {sub && <p className="text-[10px] text-gray-400">{sub}</p>}
+        {description && <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{description}</p>}
+      </div>
+      {onClick && (
+        <div className="flex-shrink-0 mt-1">
+          {active ? <ChevronUp className="h-3.5 w-3.5 text-gray-400" /> : <ChevronDown className="h-3.5 w-3.5 text-gray-400" />}
+        </div>
+      )}
+    </button>
+  )
+}
+
+function ChartCard({ title, children, className = '' }) {
+  return (
+    <div className={`bg-white rounded-xl border p-4 sm:p-5 ${className}`}>
+      <h3 className="text-sm font-semibold text-gray-700 mb-4">{title}</h3>
+      {children}
+    </div>
+  )
+}
+
+function DetailPanel({ data, title, nameKey = 'pais', valueKey = 'cantidad', valueLabel = 'Registros', onClose, source }) {
+  const total = data.reduce((a, b) => a + b[valueKey], 0)
+  const [downloading, setDownloading] = useState(null) // 'json' | 'csv' | 'pdf' | 'pais:Argentina:json' etc
+
+  const handleDownload = async (format, pais = '') => {
+    const key = pais ? `pais:${pais}:${format}` : format
+    setDownloading(key)
+    try {
+      const params = new URLSearchParams({ format })
+      if (pais) params.set('pais', pais)
+      const res = await axios.get(`/api/admin/export/${source}?${params}`, { responseType: 'blob' })
+      const url = window.URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = res.headers['content-disposition']?.match(/filename=(.+)/)?.[1]
+        || `${source}${pais ? '_' + pais : ''}.${format}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+      toast.success(`${format.toUpperCase()} descargado`)
+    } catch {
+      toast.error('Error al descargar')
+    } finally {
+      setDownloading(null)
+    }
+  }
+
+  const DownloadBtns = ({ pais = '', size = 'sm' }) => {
+    const btnBase = size === 'sm'
+      ? 'p-1 rounded hover:bg-gray-200 transition-colors'
+      : 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border hover:bg-gray-50 transition-colors text-xs font-medium'
+    return (
+      <div className="flex items-center gap-1">
+        <button onClick={() => handleDownload('json', pais)} title="Descargar JSON"
+          className={`${btnBase} text-amber-600`}
+          disabled={!!downloading}>
+          {downloading === (pais ? `pais:${pais}:json` : 'json')
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            : <><FileJson2 className="h-3.5 w-3.5" />{size !== 'sm' && <span>JSON</span>}</>}
+        </button>
+        <button onClick={() => handleDownload('csv', pais)} title="Descargar CSV (Excel)"
+          className={`${btnBase} text-green-600`}
+          disabled={!!downloading}>
+          {downloading === (pais ? `pais:${pais}:csv` : 'csv')
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            : <><FileSpreadsheet className="h-3.5 w-3.5" />{size !== 'sm' && <span>Excel</span>}</>}
+        </button>
+        <button onClick={() => handleDownload('pdf', pais)} title="Descargar PDF"
+          className={`${btnBase} text-red-600`}
+          disabled={!!downloading}>
+          {downloading === (pais ? `pais:${pais}:pdf` : 'pdf')
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            : <><FileDown className="h-3.5 w-3.5" />{size !== 'sm' && <span>PDF</span>}</>}
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-4 sm:px-5 py-3 bg-gray-50 border-b">
+        <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-1 text-[11px] text-gray-400 mr-1">
+            <Download className="h-3 w-3" /> Descargar todo:
+          </div>
+          <DownloadBtns size="md" />
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-200 text-gray-400 ml-1"><X className="h-4 w-4" /></button>
+        </div>
+      </div>
+      <div className="p-4 sm:p-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+          {data.map((item, i) => {
+            const pct = total > 0 ? (item[valueKey] / total * 100) : 0
+            return (
+              <div key={i} className="group flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-blue-50 transition-colors">
+                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS_PIE[i % COLORS_PIE.length] }} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-800 truncate">{item[nameKey]}</p>
+                  <p className="text-xs text-gray-500">{item[valueKey].toLocaleString()} {valueLabel} · {pct.toFixed(1)}%</p>
+                </div>
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                  <DownloadBtns pais={item[nameKey]} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <div className="mt-3 pt-3 border-t flex items-center justify-between text-sm">
+          <span className="text-gray-500">Total</span>
+          <span className="font-bold text-gray-800">{total.toLocaleString()} {valueLabel}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const CustomTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="bg-white rounded-lg shadow-lg border px-3 py-2 text-xs">
+      <p className="font-medium text-gray-700">{label}</p>
+      {payload.map((p, i) => (
+        <p key={i} style={{ color: p.color }}>
+          {p.name}: <span className="font-semibold">{typeof p.value === 'number' ? p.value.toLocaleString() : p.value}</span>
+        </p>
+      ))}
+    </div>
+  )
+}
+
+export default function AdminDashboard() {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [expandedKpi, setExpandedKpi] = useState(null) // 'empresas' | 'precarga' | null
+
+  const toggleKpi = (key) => setExpandedKpi(prev => prev === key ? null : key)
+
+  const loadDashboard = async () => {
+    setLoading(true)
+    try {
+      const res = await axios.get('/api/admin/dashboard')
+      if (res.data.success) setData(res.data.data)
+    } catch {
+      toast.error('Error al cargar dashboard')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { loadDashboard() }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      </div>
+    )
+  }
+
+  if (!data) {
+    return (
+      <div className="text-center py-16 text-gray-500">
+        <AlertTriangle className="h-10 w-10 mx-auto mb-3 text-amber-400" />
+        <p>No se pudo cargar el dashboard</p>
+        <button onClick={loadDashboard} className="mt-3 text-blue-600 hover:underline text-sm">Reintentar</button>
+      </div>
+    )
+  }
+
+  const { kpis } = data
+
+  // Preparar datos de solicitudes por estado con labels legibles
+  const solEstado = (data.solicitudes_por_estado || []).map(s => ({
+    ...s,
+    name: ESTADO_LABELS[s.estado] || s.estado,
+    fill: ESTADO_COLORS[s.estado] || '#9ca3af'
+  }))
+
+  // Preparar datos de ratings
+  const ratings = (data.distribucion_ratings || []).map(r => ({
+    ...r,
+    fill: RATING_COLORS[r.rating] || '#9ca3af'
+  }))
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard Ejecutivo</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Vista general del sistema Inforysk</p>
+        </div>
+        <button
+          onClick={loadDashboard}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-xl hover:bg-gray-50 transition-colors self-start sm:self-auto"
+        >
+          <RefreshCcw className="h-4 w-4" />
+          Actualizar
+        </button>
+      </div>
+
+      {/* ── KPIs ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <KpiCard
+          icon={Building2} label="Empresas" value={kpis.total_empresas} color="blue"
+          description="Informes en el sistema"
+          active={expandedKpi === 'empresas'}
+          onClick={() => toggleKpi('empresas')}
+        />
+        <KpiCard icon={ClipboardList} label="Solicitudes" value={kpis.solicitudes_activas} color="amber"
+          description="Pendientes + en proceso"
+        />
+        <KpiCard icon={FileText} label="Informes del mes" value={kpis.informes_mes} color="green"
+          description="Completados este mes"
+        />
+        <KpiCard icon={TrendingUp} label="Score promedio" value={kpis.score_promedio} sub="/ 100" color="purple" />
+        <KpiCard icon={Users} label="Usuarios" value={kpis.usuarios_activos} color="cyan"
+          description="Usuarios activos"
+        />
+        <KpiCard
+          icon={Database} label="Precarga" value={kpis.total_solicitudes} color="rose"
+          description="Data disponible para informes"
+          active={expandedKpi === 'precarga'}
+          onClick={() => toggleKpi('precarga')}
+        />
+      </div>
+
+      {/* ── Panel expandible: Empresas por país ── */}
+      {expandedKpi === 'empresas' && (data.empresas_por_pais || []).length > 0 && (
+        <DetailPanel
+          data={data.empresas_por_pais}
+          title="Empresas por País — Click en un país para descargar"
+          nameKey="pais"
+          valueKey="cantidad"
+          valueLabel="empresas"
+          onClose={() => setExpandedKpi(null)}
+          source="empresas"
+        />
+      )}
+
+      {/* ── Panel expandible: Precarga por país ── */}
+      {expandedKpi === 'precarga' && (data.precarga_por_pais || []).length > 0 && (
+        <DetailPanel
+          data={data.precarga_por_pais}
+          title="Precarga por Origen — Click en un país para descargar"
+          nameKey="pais"
+          valueKey="cantidad"
+          valueLabel="registros"
+          onClose={() => setExpandedKpi(null)}
+          source="precarga"
+        />
+      )}
+
+      {/* ── Fila 1: Empresas por país + Solicitudes por estado ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <ChartCard title="Empresas por País">
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data.empresas_por_pais || []} layout="vertical" margin={{ left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis type="number" tick={{ fontSize: 12 }} />
+                <YAxis dataKey="pais" type="category" width={110} tick={{ fontSize: 11 }} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="cantidad" name="Empresas" radius={[0, 6, 6, 0]}>
+                  {(data.empresas_por_pais || []).map((_, i) => (
+                    <Cell key={i} fill={COLORS_PIE[i % COLORS_PIE.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartCard>
+
+        <ChartCard title="Solicitudes por Estado">
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={solEstado} layout="vertical" margin={{ left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis type="number" tick={{ fontSize: 12 }} />
+                <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="cantidad" name="Cantidad" radius={[0, 6, 6, 0]}>
+                  {solEstado.map((s, i) => (
+                    <Cell key={i} fill={s.fill} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartCard>
+      </div>
+
+      {/* ── Fila 2: Precarga por origen + tendencia mensual ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <ChartCard title="Precarga por Origen">
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data.precarga_por_pais || []}
+                  dataKey="cantidad"
+                  nameKey="pais"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius="40%"
+                  outerRadius="75%"
+                  label={({ pais, percent }) => `${pais} ${(percent * 100).toFixed(0)}%`}
+                  labelLine
+                >
+                  {(data.precarga_por_pais || []).map((_, i) => (
+                    <Cell key={i} fill={COLORS_PIE[i % COLORS_PIE.length]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartCard>
+
+        <ChartCard title="Precarga — últimos 6 meses">
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={data.solicitudes_por_mes || []} margin={{ top: 5, right: 10 }}>
+                <defs>
+                  <linearGradient id="gradSol" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip content={<CustomTooltip />} />
+                <Area type="monotone" dataKey="cantidad" name="Registros" stroke="#3b82f6" fill="url(#gradSol)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartCard>
+      </div>
+
+      {/* ── Fila 3: Distribución ratings + Radar scoring ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <ChartCard title="Distribución de Ratings Crediticios">
+          {ratings.length > 0 ? (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={ratings} margin={{ top: 5, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                  <XAxis dataKey="rating" tick={{ fontSize: 12, fontWeight: 600 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="cantidad" name="Empresas" radius={[6, 6, 0, 0]}>
+                    {ratings.map((r, i) => (
+                      <Cell key={i} fill={r.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
+              Sin datos de scoring aún
+            </div>
+          )}
+        </ChartCard>
+
+        <ChartCard title="Promedios por Módulo de Scoring">
+          {(data.scoring_promedios || []).length > 0 ? (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data.scoring_promedios}>
+                  <PolarGrid stroke="#e5e7eb" />
+                  <PolarAngleAxis dataKey="modulo" tick={{ fontSize: 10 }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 10 }} />
+                  <Radar name="Score" dataKey="score" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.25} strokeWidth={2} />
+                  <Tooltip content={<CustomTooltip />} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
+              Sin datos de scoring aún
+            </div>
+          )}
+        </ChartCard>
+      </div>
+
+      {/* ── Fila 4: Tendencia empresas + Actividad sistema ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <ChartCard title="Empresas ingresadas — últimos 12 meses">
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={data.empresas_por_mes || []} margin={{ top: 5, right: 10 }}>
+                <defs>
+                  <linearGradient id="gradEmp" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip content={<CustomTooltip />} />
+                <Area type="monotone" dataKey="cantidad" name="Empresas" stroke="#10b981" fill="url(#gradEmp)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartCard>
+
+        <ChartCard title="Actividad del sistema — últimos 30 días">
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data.actividad_diaria || []} margin={{ top: 5, right: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis dataKey="dia" tick={{ fontSize: 10 }} tickFormatter={d => d.slice(5)} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip content={<CustomTooltip />} />
+                <Line type="monotone" dataKey="acciones" name="Acciones" stroke="#f59e0b" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartCard>
+      </div>
+
+      {/* ── Fila 5: Actividad usuarios + Créditos por confianza ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <ChartCard title="Actividad por Usuario — últimos 30 días">
+          {(data.actividad_usuarios || []).length > 0 ? (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data.actividad_usuarios} layout="vertical" margin={{ left: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                  <XAxis type="number" tick={{ fontSize: 12 }} />
+                  <YAxis dataKey="username" type="category" width={90} tick={{ fontSize: 11 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="acciones" name="Acciones" fill="#06b6d4" radius={[0, 6, 6, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
+              Sin actividad registrada
+            </div>
+          )}
+        </ChartCard>
+
+        <ChartCard title="Créditos Sugeridos por Nivel de Confianza">
+          {(data.creditos_por_confianza || []).length > 0 ? (
+            <div className="space-y-3 pt-2">
+              {data.creditos_por_confianza.map((c, i) => {
+                const total = data.creditos_por_confianza.reduce((a, b) => a + b.cantidad, 0)
+                const pct = total > 0 ? (c.cantidad / total * 100) : 0
+                const colors = { alta: 'bg-green-500', media: 'bg-amber-500', baja: 'bg-red-500', sin_dato: 'bg-gray-400' }
+                return (
+                  <div key={i}>
+                    <div className="flex items-center justify-between text-sm mb-1">
+                      <span className="font-medium text-gray-700 capitalize">{c.confianza === 'sin_dato' ? 'Sin dato' : c.confianza}</span>
+                      <span className="text-gray-500">{c.cantidad} empresas · Prom: ${Number(c.promedio).toLocaleString()}</span>
+                    </div>
+                    <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${colors[c.confianza] || 'bg-gray-400'}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
+              Sin datos de crédito aún
+            </div>
+          )}
+        </ChartCard>
+      </div>
+
+      {/* ── Fila 6: Top mejores/peores + Alertas ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        {/* Top mejores */}
+        <ChartCard title="Top 5 — Mejor Score">
+          {(data.top_mejores || []).length > 0 ? (
+            <div className="space-y-2.5">
+              {data.top_mejores.map((e, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-xs font-bold">
+                    {i + 1}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-800 truncate">{e.razon_social || e.cuit}</p>
+                    <p className="text-xs text-gray-400">{e.cuit}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-bold text-green-600">{e.score_total}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                      RATING_COLORS[e.rating] ? 'text-white' : 'text-gray-600 bg-gray-100'
+                    }`} style={{ backgroundColor: RATING_COLORS[e.rating] }}>{e.rating}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-400 text-sm text-center py-8">Sin datos</p>
+          )}
+        </ChartCard>
+
+        {/* Top peores */}
+        <ChartCard title="Top 5 — Menor Score">
+          {(data.top_peores || []).length > 0 ? (
+            <div className="space-y-2.5">
+              {data.top_peores.map((e, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-xs font-bold">
+                    {i + 1}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-800 truncate">{e.razon_social || e.cuit}</p>
+                    <p className="text-xs text-gray-400">{e.cuit}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-bold text-red-600">{e.score_total}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold text-white`}
+                      style={{ backgroundColor: RATING_COLORS[e.rating] || '#9ca3af' }}>{e.rating}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-400 text-sm text-center py-8">Sin datos</p>
+          )}
+        </ChartCard>
+
+        {/* Alertas */}
+        <ChartCard title="Alertas y Pendientes">
+          <div className="space-y-4">
+            {/* Urgentes sin asignar */}
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-red-50 text-red-600">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-800">
+                  {(data.urgentes_sin_asignar || []).length} urgente{(data.urgentes_sin_asignar || []).length !== 1 ? 's' : ''} sin asignar
+                </p>
+                <div className="mt-1 space-y-1">
+                  {(data.urgentes_sin_asignar || []).slice(0, 3).map((u, i) => (
+                    <p key={i} className="text-xs text-gray-500 truncate">
+                      <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${u.prioridad === 'urgente' ? 'bg-red-500' : 'bg-orange-400'}`} />
+                      {u.razon_social || u.cuit}
+                    </p>
+                  ))}
+                  {(data.urgentes_sin_asignar || []).length > 3 && (
+                    <p className="text-xs text-blue-500">+{(data.urgentes_sin_asignar || []).length - 3} más</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Empresas sin scoring */}
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-amber-50 text-amber-600">
+                <Shield className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-800">
+                  {(data.empresas_sin_scoring || 0).toLocaleString()} empresa{data.empresas_sin_scoring !== 1 ? 's' : ''} sin scoring
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {kpis.total_empresas > 0
+                    ? `${((data.empresas_sin_scoring / kpis.total_empresas) * 100).toFixed(0)}% del total`
+                    : 'Sin empresas'
+                  }
+                </p>
+              </div>
+            </div>
+
+            {/* Solicitudes activas */}
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
+                <Activity className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-800">
+                  {kpis.solicitudes_activas} solicitud{kpis.solicitudes_activas !== 1 ? 'es' : ''} activa{kpis.solicitudes_activas !== 1 ? 's' : ''}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Pendientes y en proceso
+                </p>
+              </div>
+            </div>
+          </div>
+        </ChartCard>
+      </div>
+    </div>
+  )
+}
