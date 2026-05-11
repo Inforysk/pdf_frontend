@@ -371,8 +371,37 @@ const FIELD_LABELS = {
 function normalizeValueForCompare(val) {
   if (val === null || val === undefined) return ''
   if (typeof val === 'string') {
-    // Quitar HTML y normalizar espacios
-    return val.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase()
+    // Normalización robusta para comparar HTML de Quill vs texto plano
+    let normalized = val
+      // Primero, convertir saltos de línea HTML a espacio
+      .replace(/<br\s*\/?>/gi, ' ')     // <br> y <br/> a espacio
+      .replace(/<\/p>\s*<p[^>]*>/gi, ' ') // </p><p> a espacio (con posibles atributos)
+      .replace(/<p[^>]*>/gi, ' ')        // <p> inicial a espacio
+      .replace(/<\/p>/gi, ' ')           // </p> final a espacio
+      // Quitar atributos de estilo de Quill (class="ql-...")
+      .replace(/\sclass="[^"]*"/gi, '')
+      .replace(/\sstyle="[^"]*"/gi, '')
+      // Quitar resto de tags HTML
+      .replace(/<[^>]*>/g, '')
+      // Decodificar entidades HTML comunes
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/&apos;/gi, "'")
+      // Normalizar caracteres de nueva línea
+      .replace(/\r\n/g, ' ')
+      .replace(/\r/g, ' ')
+      .replace(/\n/g, ' ')
+      // Quitar caracteres no imprimibles
+      .replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
+      // Normalizar espacios múltiples y trim
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase()
+    return normalized
   }
   if (typeof val === 'number') return String(val)
   if (Array.isArray(val)) return JSON.stringify(val)
@@ -540,6 +569,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
   const [showDraftModal, setShowDraftModal] = useState(false)
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const autosaveTimerRef = useRef(null)
+  const autosaveEnabledRef = useRef(true) // Flag para pausar autosave después de recuperar/descartar
   const formDataRef = useRef(formData) // Para acceder a formData actual en el timer
   const selectedPaisRef = useRef(selectedPais)
   const originalDataRef = useRef(null) // Datos originales para comparar cambios
@@ -600,8 +630,9 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     const key = getDraftKey(cuit, empresaId)
     setDraftKey(key)
 
-    // Guardar datos originales para comparar cambios
-    const originalData = data || initialData || {}
+    // Guardar datos originales NORMALIZADOS para comparar cambios correctamente
+    // Esto asegura que tanto originalData como el borrador usen el mismo formato (HTML)
+    const originalData = normalizeForEditor(data || initialData || {})
     originalDataRef.current = { ...originalData }
 
     // Si viene de subir un PDF, limpiar borrador existente y NO mostrar modal
@@ -639,6 +670,9 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     if (!draftKey || !editMode) return
 
     const saveCurrentDraft = () => {
+      // No guardar si autosave está desactivado (después de recuperar/descartar)
+      if (!autosaveEnabledRef.current) return
+      
       const currentData = formDataRef.current
       if (!currentData || (!currentData.cuit && !currentData.razon_social)) return
 
@@ -690,6 +724,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     if (pendingDraft && pendingDraft.data) {
       // Si hay campos seleccionados, recuperar solo esos
       const selectedCount = Object.values(draftSelectedFields).filter(Boolean).length
+      let newFormData
       if (selectedCount > 0 && pendingDraft.changes) {
         // Recuperar parcialmente: empezar con datos originales y aplicar solo seleccionados
         const baseData = originalDataRef.current || formData
@@ -699,19 +734,39 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
             mergedData[change.field] = pendingDraft.data[change.field]
           }
         })
-        setFormData(normalizeForEditor(mergedData))
+        newFormData = normalizeForEditor(mergedData)
+        setFormData(newFormData)
         toast.success(`${selectedCount} campo(s) recuperado(s) del borrador`)
       } else {
         // Recuperar todo
-        setFormData(normalizeForEditor(pendingDraft.data))
+        newFormData = normalizeForEditor(pendingDraft.data)
+        setFormData(newFormData)
         toast.success('Datos recuperados del borrador')
       }
+      // Actualizar originalDataRef con los datos recuperados para evitar
+      // que el borrador se vuelva a mostrar como "cambio detectado"
+      originalDataRef.current = { ...newFormData }
+      
       if (pendingDraft.selectedPais) {
         setSelectedPais(pendingDraft.selectedPais)
       }
       setEditMode(true)
-      // ⚠️ NO limpiamos el borrador aquí - se limpia solo al GUARDAR exitosamente
-      // Así si el usuario no guarda, al volver verá el modal de nuevo
+      // Limpiar el borrador después de recuperar para evitar que vuelva a aparecer
+      if (draftKey) {
+        clearDraft(draftKey)
+      }
+      // Limpiar TODOS los borradores de este CUIT (por si hay variaciones)
+      const cuitClean = (formData?.cuit || data?.cuit || '').replace(/[-.\s/]/g, '')
+      if (cuitClean) {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i)
+          if (key?.startsWith('inforysk_draft_') && key.includes(cuitClean)) {
+            localStorage.removeItem(key)
+          }
+        }
+      }
+      // Desactivar autosave para esta sesión (hasta que se guarde al servidor)
+      autosaveEnabledRef.current = false
     }
     setShowDraftModal(false)
     setPendingDraft(null)
@@ -719,12 +774,25 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
 
   // ── Función para descartar borrador ──
   const handleDiscardDraft = () => {
+    // Limpiar el borrador específico
     if (draftKey) {
       clearDraft(draftKey)
     }
+    // Limpiar TODOS los borradores de este CUIT (por si hay variaciones en la key)
+    const cuitClean = (formData?.cuit || data?.cuit || '').replace(/[-.\s/]/g, '')
+    if (cuitClean) {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key?.startsWith('inforysk_draft_') && key.includes(cuitClean)) {
+          localStorage.removeItem(key)
+        }
+      }
+    }
+    // Desactivar autosave para esta sesión
+    autosaveEnabledRef.current = false
     setShowDraftModal(false)
     setPendingDraft(null)
-    toast('Borrador descartado', { icon: '🗑️' })
+    toast('Borrador descartado permanentemente', { icon: '🗑️' })
   }
 
   // ── Toggle selección de campo en borrador ──
@@ -1974,6 +2042,20 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
             cuit={formData.cuit}
             razonSocial={formData.razon_social}
             email={formData.email_empresa || formData.emails_contacto}
+            onAddExtraField={editMode ? (group, label, value, type = 'url') => {
+              // Agregar campo extra al grupo especificado
+              const newField = {
+                id: `extra_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                group,
+                label,
+                type,
+                value,
+              }
+              setFormData(prev => ({
+                ...prev,
+                extra_fields: [...(prev.extra_fields || []), newField]
+              }))
+            } : null}
           />
         </div>
       )}

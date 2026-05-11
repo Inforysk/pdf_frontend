@@ -1,7 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { Globe, Shield, Search, Newspaper, Linkedin, AlertTriangle, CheckCircle, XCircle, Loader2, RefreshCw, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
+import { Globe, Shield, Search, Newspaper, Linkedin, AlertTriangle, CheckCircle, XCircle, Loader2, RefreshCw, ChevronDown, ChevronUp, ExternalLink, Plus } from 'lucide-react'
+
+// Pasos de OSINT para el modal de progreso
+const OSINT_STEPS = [
+  { time: 0, msg: 'Iniciando análisis OSINT...' },
+  { time: 3, msg: 'Buscando perfil en LinkedIn...' },
+  { time: 8, msg: 'Analizando presencia web...' },
+  { time: 15, msg: 'Verificando dominio y SSL...' },
+  { time: 22, msg: 'Buscando noticias negativas...' },
+  { time: 30, msg: 'Consultando listas negras...' },
+  { time: 40, msg: 'Procesando resultados...' },
+]
 
 const ScoreBadge = ({ score, label, icon: Icon }) => {
   const color = score >= 70 ? 'text-green-700 bg-green-50 border-green-200'
@@ -18,15 +29,41 @@ const ScoreBadge = ({ score, label, icon: Icon }) => {
   )
 }
 
-export default function OsintPanel({ cuit, razonSocial, email }) {
+export default function OsintPanel({ cuit, razonSocial, email, onAddExtraField }) {
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState(null)
   const [expanded, setExpanded] = useState(false)
   const [source, setSource] = useState(null)
+  // Timer para modal de progreso
+  const [osintElapsed, setOsintElapsed] = useState(0)
+  const osintStartRef = useRef(null)
 
   const clean = (cuit || '').replace(/\D/g, '')
 
-  // Auto-cargar OSINT del cache al montar
+  // Función para aplicar sitio web o LinkedIn como campo extra
+  const handleApplyAsExtraField = (label, value, type = 'url') => {
+    if (!onAddExtraField || !value) return
+    onAddExtraField('contacto', label, value, type)
+    toast.success(`"${label}" agregado en Datos de Contacto`)
+  }
+
+  // Timer para actualizar tiempo transcurrido durante OSINT
+  useEffect(() => {
+    if (!loading) {
+      setOsintElapsed(0)
+      return
+    }
+    osintStartRef.current = Date.now()
+    const interval = setInterval(() => {
+      setOsintElapsed(Math.floor((Date.now() - osintStartRef.current) / 1000))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [loading])
+
+  // Obtener paso actual del modal de progreso
+  const currentOsintStep = OSINT_STEPS.filter(s => s.time <= osintElapsed).pop() || OSINT_STEPS[0]
+
+  // Auto-cargar OSINT del cache al montar (solo si no hay datos mejores)
   useEffect(() => {
     let ignore = false
     const loadCached = async () => {
@@ -37,9 +74,14 @@ export default function OsintPanel({ cuit, razonSocial, email }) {
           email: email || null,
         })
         if (!ignore && res.data.success && res.data.source === 'cache') {
-          setData(res.data.osint)
-          setSource('cache')
-          setExpanded(false)
+          // Solo usar cache si no hay datos actuales o si el cache tiene mejor LinkedIn score
+          const cachedLinkedin = res.data.osint?.linkedin_score || 0
+          const currentLinkedin = data?.linkedin_score || 0
+          if (!data || cachedLinkedin >= currentLinkedin) {
+            setData(res.data.osint)
+            setSource('cache')
+            setExpanded(false)
+          }
         }
       } catch {}
     }
@@ -85,6 +127,42 @@ export default function OsintPanel({ cuit, razonSocial, email }) {
 
   return (
     <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+      {/* Modal de OSINT en progreso - bloquea toda interacción */}
+      {loading && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 text-center">
+            <div className="mb-6">
+              <div className="relative w-24 h-24 mx-auto">
+                <svg className="w-24 h-24 animate-spin" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="40" fill="none" stroke="#e5e7eb" strokeWidth="8" />
+                  <circle cx="50" cy="50" r="40" fill="none" stroke="#8b5cf6" strokeWidth="8" 
+                    strokeDasharray="251" strokeDashoffset="188" strokeLinecap="round" />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-2xl font-bold text-violet-600">{osintElapsed}s</span>
+                </div>
+              </div>
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Ejecutando OSINT</h3>
+            <p className="text-gray-600 mb-4 min-h-[24px] transition-all duration-300">
+              {currentOsintStep.msg}
+            </p>
+            <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+              <div 
+                className="bg-violet-600 h-2 rounded-full transition-all duration-1000" 
+                style={{ width: `${Math.min(100, (osintElapsed / 50) * 100)}%` }}
+              />
+            </div>
+            <p className="text-sm text-gray-400">
+              Analizando presencia digital
+            </p>
+            <p className="text-xs text-gray-400 mt-2">
+              No cierre esta ventana
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Header — mismo estilo que ValidationPanel */}
       <div className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -149,9 +227,28 @@ export default function OsintPanel({ cuit, razonSocial, email }) {
               </div>
             )}
             {data.negative_media_mentions > 0 && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-700">
-                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                <span>{data.negative_media_mentions} mención(es) negativa(s) en medios</span>
+              <div className="px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-700">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                  <span className="font-medium">{data.negative_media_mentions} mención(es) negativa(s) en medios</span>
+                </div>
+                {/* Mostrar links de noticias negativas */}
+                {data.news_details?.noticias?.filter(n => n.sentimiento === 'negativo').length > 0 && (
+                  <div className="mt-2 ml-6 space-y-1">
+                    {data.news_details.noticias.filter(n => n.sentimiento === 'negativo').map((n, i) => (
+                      <div key={i} className="text-xs">
+                        {n.link ? (
+                          <a href={n.link} target="_blank" rel="noopener noreferrer" className="text-yellow-800 hover:underline inline-flex items-start gap-1">
+                            <span className="line-clamp-1">{n.titulo}</span>
+                            <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                          </a>
+                        ) : (
+                          <span>{n.titulo}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             {data.website_online && data.url_analizada && (
@@ -161,6 +258,15 @@ export default function OsintPanel({ cuit, razonSocial, email }) {
                 <a href={data.url_analizada} target="_blank" rel="noopener noreferrer" className="underline inline-flex items-center gap-1">
                   {data.url_analizada} <ExternalLink className="h-3 w-3" />
                 </a>
+                {onAddExtraField && (
+                  <button
+                    onClick={() => handleApplyAsExtraField('Sitio Web', data.url_analizada, 'url')}
+                    className="ml-auto flex items-center gap-1 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                    title="Agregar a Datos de Contacto"
+                  >
+                    <Plus className="h-3 w-3" /> Aplicar
+                  </button>
+                )}
               </div>
             )}
             {data.ssl_valid === false && data.url_analizada && (
@@ -289,13 +395,25 @@ export default function OsintPanel({ cuit, razonSocial, email }) {
                   {data.linkedin_details.perfil_url && (
                     <div className="flex items-start gap-2 text-xs">
                       <span className="text-gray-400 min-w-[100px]">Perfil:</span>
-                      <a href={data.linkedin_details.perfil_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1">
+                      <a href={data.linkedin_details.perfil_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1 flex-1">
                         {data.linkedin_details.perfil_url} <ExternalLink className="h-3 w-3" />
                       </a>
+                      {onAddExtraField && (
+                        <button
+                          onClick={() => handleApplyAsExtraField('LinkedIn', data.linkedin_details.perfil_url, 'url')}
+                          className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex-shrink-0"
+                          title="Agregar a Datos de Contacto"
+                        >
+                          <Plus className="h-3 w-3" /> Aplicar
+                        </button>
+                      )}
                     </div>
                   )}
+                  {data.linkedin_details.nombre_en_linkedin && <DetailRow label="Nombre" value={data.linkedin_details.nombre_en_linkedin} />}
                   {data.linkedin_details.descripcion && <DetailRow label="Descripción" value={data.linkedin_details.descripcion} />}
-                  {data.linkedin_details.seguidores_estimado && <DetailRow label="Seguidores" value={data.linkedin_details.seguidores_estimado} />}
+                  {(data.linkedin_details.seguidores > 0 || data.linkedin_details.seguidores_texto) && (
+                    <DetailRow label="Seguidores" value={data.linkedin_details.seguidores_texto || data.linkedin_details.seguidores?.toLocaleString() || data.linkedin_details.seguidores_estimado} />
+                  )}
                   {data.linkedin_details.empleados_en_linkedin > 0 && <DetailRow label="Empleados en LinkedIn" value={data.linkedin_details.empleados_en_linkedin} />}
                   {data.linkedin_details.resultados && data.linkedin_details.resultados.length > 0 && (
                     <div className="mt-2 space-y-1">

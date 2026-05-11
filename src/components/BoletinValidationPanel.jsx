@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import {
@@ -16,6 +16,15 @@ import {
   History,
   Sparkles,
 } from 'lucide-react'
+
+// Pasos de Boletín para el modal de progreso
+const BOLETIN_STEPS = [
+  { time: 0, msg: 'Iniciando búsqueda...' },
+  { time: 3, msg: 'Consultando Boletín Oficial...' },
+  { time: 8, msg: 'Analizando publicaciones...' },
+  { time: 15, msg: 'Verificando historial...' },
+  { time: 22, msg: 'Procesando resultados...' },
+]
 
 const safeText = (value) => (value || '').toString().trim()
 
@@ -111,8 +120,28 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
   const [historialOpen, setHistorialOpen] = useState(false)
   const [historialLoading, setHistorialLoading] = useState(false)
   const [historialData, setHistorialData] = useState(null)
+  // Timer para modal de progreso
+  const [boletinElapsed, setBoletinElapsed] = useState(0)
+  const boletinStartRef = useRef(null)
 
   const cuitClean = (cuit || '').replace(/\D/g, '')
+
+  // Timer para actualizar tiempo transcurrido durante búsqueda
+  useEffect(() => {
+    if (!loading) {
+      setBoletinElapsed(0)
+      return
+    }
+    boletinStartRef.current = Date.now()
+    const interval = setInterval(() => {
+      setBoletinElapsed(Math.floor((Date.now() - boletinStartRef.current) / 1000))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [loading])
+
+  // Obtener paso actual del modal de progreso
+  const currentBoletinStep = BOLETIN_STEPS.filter(s => s.time <= boletinElapsed).pop() || BOLETIN_STEPS[0]
+
   if (cuitClean.length < 9) return null
 
   const handleValidarBoletin = async () => {
@@ -187,6 +216,42 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+      {/* Modal de Boletín en progreso - bloquea toda interacción */}
+      {loading && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 text-center">
+            <div className="mb-6">
+              <div className="relative w-24 h-24 mx-auto">
+                <svg className="w-24 h-24 animate-spin" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="40" fill="none" stroke="#e5e7eb" strokeWidth="8" />
+                  <circle cx="50" cy="50" r="40" fill="none" stroke="#10b981" strokeWidth="8" 
+                    strokeDasharray="251" strokeDashoffset="188" strokeLinecap="round" />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-2xl font-bold text-emerald-600">{boletinElapsed}s</span>
+                </div>
+              </div>
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Consultando Boletín Oficial</h3>
+            <p className="text-gray-600 mb-4 min-h-[24px] transition-all duration-300">
+              {currentBoletinStep.msg}
+            </p>
+            <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+              <div 
+                className="bg-emerald-600 h-2 rounded-full transition-all duration-1000" 
+                style={{ width: `${Math.min(100, (boletinElapsed / 30) * 100)}%` }}
+              />
+            </div>
+            <p className="text-sm text-gray-400">
+              Buscando publicaciones oficiales
+            </p>
+            <p className="text-xs text-gray-400 mt-2">
+              No cierre esta ventana
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Newspaper className="h-5 w-5 text-indigo-600" />
