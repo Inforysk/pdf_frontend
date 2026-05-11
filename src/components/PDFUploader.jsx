@@ -29,7 +29,6 @@ function PDFUploader({ onDataExtracted }) {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('skip_id_validation', skipIdValidation ? 'true' : 'false')
-    console.log('[PDFUploader] skipIdValidation:', skipIdValidation)
 
     try {
       const response = await axios.post('/api/extract', formData, {

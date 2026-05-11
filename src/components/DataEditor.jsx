@@ -23,7 +23,9 @@ import {
   XCircle,
   Globe,
   RotateCcw,
-  Clock
+  Clock,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react'
 import ValidationPanel from './ValidationPanel'
 import OsintPanel from './OsintPanel'
@@ -225,7 +227,7 @@ const quillModules = {
 const quillFormats = [
   'header',
   'bold', 'italic', 'underline', 'strike',
-  'list', 'bullet', 'indent',
+  'list', 'indent',
   'color', 'background',
   'align'
 ]
@@ -337,6 +339,66 @@ const COUNTRY_FLAGS = {
 const DRAFT_PREFIX = 'inforysk_draft_'
 const DRAFT_INTERVAL_MS = 5000 // Autosave cada 5 segundos
 
+// Campos importantes para detectar cambios en borrador
+const DRAFT_IMPORTANT_FIELDS = [
+  'razon_social', 'cuit', 'tipo_identificacion', 'actividad_principal',
+  'domicilio', 'telefono_1', 'telefono_2', 'email', 'capital_social',
+  'sinopsis', 'objeto_social', 'estructura_societaria', 'composicion_capital',
+  'datos_directivos', 'historia', 'situacion_economica_financiera',
+  'bienes_uso', 'evolucion_resultados', 'sociedades_vinculadas',
+  'cumplimiento_concepto', 'sucursales', 'relaciones_bancarias_riesgo',
+  'conclusion', 'ingresos_brutos', 'forma_legal', 'fecha_contrato_social',
+  'fecha_inscripcion_afip', 'duracion_anios', 'cierre_ejercicio'
+]
+
+const FIELD_LABELS = {
+  razon_social: 'Razón Social', cuit: 'ID Fiscal', tipo_identificacion: 'Tipo ID',
+  actividad_principal: 'Actividad Principal', domicilio: 'Domicilio',
+  telefono_1: 'Teléfono 1', telefono_2: 'Teléfono 2', email: 'Email',
+  capital_social: 'Capital Social', sinopsis: 'Sinopsis', objeto_social: 'Objeto Social',
+  estructura_societaria: 'Estructura Societaria', composicion_capital: 'Composición Capital',
+  datos_directivos: 'Datos Directivos', historia: 'Historia',
+  situacion_economica_financiera: 'Situación Económica', bienes_uso: 'Bienes de Uso',
+  evolucion_resultados: 'Evolución y Resultados', sociedades_vinculadas: 'Sociedades Vinculadas',
+  cumplimiento_concepto: 'Cumplimiento', sucursales: 'Sucursales',
+  relaciones_bancarias_riesgo: 'Relaciones Bancarias', conclusion: 'Conclusión',
+  ingresos_brutos: 'Ingresos Brutos', forma_legal: 'Forma Legal',
+  fecha_contrato_social: 'Fecha Contrato', fecha_inscripcion_afip: 'Fecha AFIP',
+  duracion_anios: 'Duración', cierre_ejercicio: 'Cierre Ejercicio'
+}
+
+/** Normaliza un valor para comparación (elimina HTML, espacios extra, etc.) */
+function normalizeValueForCompare(val) {
+  if (val === null || val === undefined) return ''
+  if (typeof val === 'string') {
+    // Quitar HTML y normalizar espacios
+    return val.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase()
+  }
+  if (typeof val === 'number') return String(val)
+  if (Array.isArray(val)) return JSON.stringify(val)
+  if (typeof val === 'object') return JSON.stringify(val)
+  return String(val)
+}
+
+/** Detecta cambios entre datos originales y datos actuales */
+function detectDraftChanges(originalData, currentData) {
+  const changes = []
+  for (const field of DRAFT_IMPORTANT_FIELDS) {
+    const origVal = normalizeValueForCompare(originalData?.[field])
+    const currVal = normalizeValueForCompare(currentData?.[field])
+    if (origVal !== currVal) {
+      changes.push({
+        field,
+        label: FIELD_LABELS[field] || field,
+        oldValue: originalData?.[field],
+        newValue: currentData?.[field],
+        type: !origVal && currVal ? 'added' : (origVal && !currVal ? 'removed' : 'modified')
+      })
+    }
+  }
+  return changes
+}
+
 /** Genera una clave única para el borrador basada en CUIT o empresaId */
 function getDraftKey(cuit, empresaId) {
   if (cuit) {
@@ -347,14 +409,16 @@ function getDraftKey(cuit, empresaId) {
   return `${DRAFT_PREFIX}new`
 }
 
-/** Guarda un borrador en localStorage */
-function saveDraft(key, data, selectedPais) {
+/** Guarda un borrador en localStorage (solo si hay cambios) */
+function saveDraft(key, data, selectedPais, originalData = null, changes = null) {
   try {
     const draft = {
       data,
       selectedPais,
       savedAt: new Date().toISOString(),
-      version: 1
+      version: 2,
+      originalData, // Guardar datos originales para referencia
+      changes // Cambios detectados
     }
     localStorage.setItem(key, JSON.stringify(draft))
     return true
@@ -478,6 +542,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
   const autosaveTimerRef = useRef(null)
   const formDataRef = useRef(formData) // Para acceder a formData actual en el timer
   const selectedPaisRef = useRef(selectedPais)
+  const originalDataRef = useRef(null) // Datos originales para comparar cambios
 
   // Mantener refs actualizados
   useEffect(() => { formDataRef.current = formData }, [formData])
@@ -529,11 +594,15 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // ── Inicializar draftKey y detectar borradores existentes ──
+  // ── Inicializar draftKey, datos originales y detectar borradores existentes ──
   useEffect(() => {
     const cuit = formData?.cuit || data?.cuit || ''
     const key = getDraftKey(cuit, empresaId)
     setDraftKey(key)
+
+    // Guardar datos originales para comparar cambios
+    const originalData = data || initialData || {}
+    originalDataRef.current = { ...originalData }
 
     // Detectar si hay un borrador guardado
     const existingDraft = loadDraft(key)
@@ -542,30 +611,44 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
       const draftCuit = existingDraft.data.cuit || ''
       const currentCuit = formData?.cuit || data?.cuit || ''
       if (draftCuit.replace(/[-.\s/]/g, '') === currentCuit.replace(/[-.\s/]/g, '') || !currentCuit) {
-        setPendingDraft(existingDraft)
-        setShowDraftModal(true)
+        // Verificar si el borrador tiene cambios reales respecto a los datos originales
+        const changes = existingDraft.changes || detectDraftChanges(originalDataRef.current, existingDraft.data)
+        if (changes && changes.length > 0) {
+          // Guardar los cambios en el borrador si no estaban
+          if (!existingDraft.changes) {
+            existingDraft.changes = changes
+          }
+          setPendingDraft(existingDraft)
+          setShowDraftModal(true)
+        } else {
+          // No hay cambios reales, limpiar el borrador
+          clearDraft(key)
+        }
       }
     }
   }, []) // Solo al montar
 
-  // ── Autosave: guardar borrador cada N segundos si hay cambios ──
+  // ── Autosave: guardar borrador cada N segundos SOLO si hay cambios ──
   useEffect(() => {
     if (!draftKey || !editMode) return
 
     const saveCurrentDraft = () => {
       const currentData = formDataRef.current
-      if (currentData && (currentData.cuit || currentData.razon_social)) {
-        const saved = saveDraft(draftKey, currentData, selectedPaisRef.current)
+      if (!currentData || (!currentData.cuit && !currentData.razon_social)) return
+
+      // Detectar cambios respecto a los datos originales
+      const changes = detectDraftChanges(originalDataRef.current, currentData)
+      
+      // Solo guardar si hay cambios reales
+      if (changes.length > 0) {
+        const saved = saveDraft(draftKey, currentData, selectedPaisRef.current, originalDataRef.current, changes)
         if (saved) {
           setLastSavedAt(new Date().toISOString())
         }
       }
     }
 
-    // Guardar inmediatamente al cambiar a modo edición
-    saveCurrentDraft()
-
-    // Configurar intervalo de autosave
+    // Configurar intervalo de autosave (no guardar inmediatamente, esperar cambios)
     autosaveTimerRef.current = setInterval(saveCurrentDraft, DRAFT_INTERVAL_MS)
 
     return () => {
@@ -582,15 +665,47 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     }
   }, [])
 
-  // ── Función para recuperar borrador ──
+  // ── Estados para modal de borrador mejorado ──
+  const [draftSelectedFields, setDraftSelectedFields] = useState({})
+  const [draftExpandedFields, setDraftExpandedFields] = useState({})
+
+  // Inicializar campos seleccionados cuando se detecta borrador
+  useEffect(() => {
+    if (pendingDraft?.changes) {
+      const initial = {}
+      pendingDraft.changes.forEach(c => { initial[c.field] = true })
+      setDraftSelectedFields(initial)
+      setDraftExpandedFields({})
+    }
+  }, [pendingDraft])
+
+  // ── Función para recuperar borrador (solo campos seleccionados) ──
   const handleRecoverDraft = () => {
     if (pendingDraft && pendingDraft.data) {
-      setFormData(normalizeForEditor(pendingDraft.data))
+      // Si hay campos seleccionados, recuperar solo esos
+      const selectedCount = Object.values(draftSelectedFields).filter(Boolean).length
+      if (selectedCount > 0 && pendingDraft.changes) {
+        // Recuperar parcialmente: empezar con datos originales y aplicar solo seleccionados
+        const baseData = originalDataRef.current || formData
+        const mergedData = { ...baseData }
+        pendingDraft.changes.forEach(change => {
+          if (draftSelectedFields[change.field]) {
+            mergedData[change.field] = pendingDraft.data[change.field]
+          }
+        })
+        setFormData(normalizeForEditor(mergedData))
+        toast.success(`${selectedCount} campo(s) recuperado(s) del borrador`)
+      } else {
+        // Recuperar todo
+        setFormData(normalizeForEditor(pendingDraft.data))
+        toast.success('Datos recuperados del borrador')
+      }
       if (pendingDraft.selectedPais) {
         setSelectedPais(pendingDraft.selectedPais)
       }
       setEditMode(true)
-      toast.success('Datos recuperados del borrador')
+      // ⚠️ NO limpiamos el borrador aquí - se limpia solo al GUARDAR exitosamente
+      // Así si el usuario no guarda, al volver verá el modal de nuevo
     }
     setShowDraftModal(false)
     setPendingDraft(null)
@@ -604,6 +719,38 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     setShowDraftModal(false)
     setPendingDraft(null)
     toast('Borrador descartado', { icon: '🗑️' })
+  }
+
+  // ── Toggle selección de campo en borrador ──
+  const toggleDraftField = (field) => {
+    setDraftSelectedFields(prev => ({ ...prev, [field]: !prev[field] }))
+  }
+
+  // ── Toggle expandir campo en borrador ──
+  const toggleDraftExpand = (field) => {
+    setDraftExpandedFields(prev => ({ ...prev, [field]: !prev[field] }))
+  }
+
+  // ── Seleccionar/deseleccionar todos los campos ──
+  const toggleAllDraftFields = (selectAll) => {
+    if (pendingDraft?.changes) {
+      const updated = {}
+      pendingDraft.changes.forEach(c => { updated[c.field] = selectAll })
+      setDraftSelectedFields(updated)
+    }
+  }
+
+  // ── Formatear valor para mostrar en modal ──
+  const formatDraftValue = (value) => {
+    if (value === null || value === undefined || value === '') return '(vacío)'
+    if (typeof value === 'string') {
+      // Limpiar HTML y truncar
+      const clean = value.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
+      return clean.length > 150 ? clean.substring(0, 150) + '...' : clean
+    }
+    if (typeof value === 'number') return String(value)
+    if (Array.isArray(value)) return value.join(', ')
+    return String(value)
   }
 
   const handlePaisChange = (codigo) => {
@@ -702,26 +849,21 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
       const response = await axios.get(`/api/empresas/${empresaId}`)
       if (response.data.success) {
         const empresaData = normalizeForEditor(response.data.empresa || {})
-        console.log('[DataEditor.loadEmpresa] Datos empresa cargados:', empresaData)
-        console.log('[DataEditor.loadEmpresa] fromSolicitud:', fromSolicitud)
+        // Actualizar datos originales para comparación de borradores
+        originalDataRef.current = { ...empresaData }
         // Si viene de solicitud, aplicar datos del pedido sobre los de la empresa
         if (fromSolicitud) {
-          console.log('[DataEditor.loadEmpresa] Aplicando datos del pedido...')
           if (fromSolicitud.abonado) {
             empresaData.abonado = String(fromSolicitud.abonado)
-            console.log('[DataEditor.loadEmpresa] -> abonado:', empresaData.abonado)
           }
           if (fromSolicitud.expediente) {
             empresaData.expediente = String(fromSolicitud.expediente)
-            console.log('[DataEditor.loadEmpresa] -> expediente:', empresaData.expediente)
           }
           if (fromSolicitud.referencia) {
             empresaData.referencia = fromSolicitud.referencia
-            console.log('[DataEditor.loadEmpresa] -> referencia:', empresaData.referencia)
           }
           if (fromSolicitud.fecha_informe) {
             empresaData.fecha_informe = fromSolicitud.fecha_informe
-            console.log('[DataEditor.loadEmpresa] -> fecha_informe:', empresaData.fecha_informe)
           }
           // Expandir grupo informe para mostrar los datos del pedido
           setExpandedGroups(prev => [...new Set([...prev, 'informe'])])
@@ -965,8 +1107,6 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
         dataToSave.pais = selectedPais.nombre_pais
         dataToSave.codigo_pais = selectedPais.codigo_pais
       }
-      // DEBUG: Ver qué se envía
-      console.log('[SAVE] SINOPSIS:', dataToSave.sinopsis)
       const response = await axios.post('/api/save', dataToSave)
       
       if (response.data.success) {
@@ -991,8 +1131,6 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
               headers: { 'Cache-Control': 'no-cache' }
             })
             if (fresh.data.success) {
-              console.log('[RELOAD] SINOPSIS from server:', fresh.data.empresa?.sinopsis)
-              console.log('[RELOAD] COMPOSICION from server:', fresh.data.empresa?.composicion_capital)
               setFormData(normalizeForEditor(fresh.data.empresa || {}))
             }
           } catch (_) {
@@ -1271,6 +1409,8 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
   const habilitaValidacionArgentina = tipoIdentificacion === 'CUIT' && idSoloDigitos.length === 11
   const habilitaValidacionUruguay = tipoIdentificacion === 'RUT' && (idSoloDigitos.length === 9 || idSoloDigitos.length === 12)
   const habilitaValidacionExterna = habilitaValidacionArgentina || habilitaValidacionUruguay
+  // OSINT disponible para cualquier país con ID fiscal y razón social
+  const habilitaOsint = !!(formData.cuit && formData.razon_social)
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -1509,14 +1649,15 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
       {showDraftModal && pendingDraft && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowDraftModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4">
-            <div className="p-6">
-              <div className="flex items-center gap-3 mb-4">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl mx-4 max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="p-5 border-b flex-shrink-0">
+              <div className="flex items-center gap-3">
                 <div className="p-3 bg-amber-100 rounded-full">
                   <RotateCcw className="w-6 h-6 text-amber-600" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-800">Borrador encontrado</h3>
+                  <h3 className="text-lg font-semibold text-gray-800">Borrador con cambios detectado</h3>
                   <p className="text-sm text-gray-500 flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5" />
                     Guardado: {formatDraftDate(pendingDraft.savedAt)}
@@ -1524,43 +1665,192 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
                 </div>
               </div>
 
-              <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                <p className="text-sm text-gray-600 mb-2">
-                  Se encontró un borrador sin guardar con los siguientes datos:
-                </p>
-                <div className="space-y-1 text-sm">
+              {/* Info del registro */}
+              <div className="mt-4 bg-gray-50 rounded-lg p-3">
+                <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
                   {pendingDraft.data.razon_social && (
                     <div className="flex gap-2">
-                      <span className="text-gray-400 w-24 shrink-0">Razón Social:</span>
-                      <span className="font-medium text-gray-700 truncate">{pendingDraft.data.razon_social}</span>
+                      <span className="text-gray-400">Razón Social:</span>
+                      <span className="font-medium text-gray-700">{pendingDraft.data.razon_social}</span>
                     </div>
                   )}
                   {pendingDraft.data.cuit && (
                     <div className="flex gap-2">
-                      <span className="text-gray-400 w-24 shrink-0">ID Fiscal:</span>
+                      <span className="text-gray-400">ID Fiscal:</span>
                       <span className="font-medium text-gray-700">{pendingDraft.data.cuit}</span>
                     </div>
                   )}
                 </div>
               </div>
+            </div>
 
-              <p className="text-sm text-gray-500 mb-4">
-                ¿Deseas recuperar estos datos o descartarlos?
+            {/* Lista de campos modificados con checkboxes */}
+            {pendingDraft.changes && pendingDraft.changes.length > 0 && (
+              <div className="flex-1 overflow-hidden flex flex-col">
+                {/* Header de lista con seleccionar todo */}
+                <div className="px-5 py-3 border-b bg-gray-50 flex items-center justify-between">
+                  <p className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                    <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Campos modificados ({pendingDraft.changes.length})
+                  </p>
+                  <div className="flex items-center gap-2 text-xs">
+                    <button
+                      onClick={() => toggleAllDraftFields(true)}
+                      className="text-blue-600 hover:text-blue-800 hover:underline"
+                    >
+                      Seleccionar todos
+                    </button>
+                    <span className="text-gray-300">|</span>
+                    <button
+                      onClick={() => toggleAllDraftFields(false)}
+                      className="text-gray-500 hover:text-gray-700 hover:underline"
+                    >
+                      Ninguno
+                    </button>
+                  </div>
+                </div>
+
+                {/* Lista scrolleable */}
+                <div className="flex-1 overflow-y-auto p-3">
+                  <div className="space-y-2">
+                    {pendingDraft.changes.map((change, idx) => {
+                      const isSelected = draftSelectedFields[change.field]
+                      const isExpanded = draftExpandedFields[change.field]
+                      const newValue = formatDraftValue(change.newValue)
+                      const oldValue = formatDraftValue(change.oldValue)
+
+                      return (
+                        <div 
+                          key={idx} 
+                          className={`rounded-lg border transition-all ${
+                            isSelected 
+                              ? 'border-blue-300 bg-blue-50/50' 
+                              : 'border-gray-200 bg-white hover:border-gray-300'
+                          }`}
+                        >
+                          {/* Fila principal */}
+                          <div className="flex items-center gap-3 px-3 py-2.5">
+                            {/* Checkbox */}
+                            <label className="flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleDraftField(change.field)}
+                                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                              />
+                            </label>
+
+                            {/* Icono de tipo */}
+                            {change.type === 'added' && (
+                              <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-sm font-bold flex-shrink-0">+</span>
+                            )}
+                            {change.type === 'removed' && (
+                              <span className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-sm font-bold flex-shrink-0">−</span>
+                            )}
+                            {change.type === 'modified' && (
+                              <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs flex-shrink-0">✎</span>
+                            )}
+
+                            {/* Nombre del campo y badge */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium text-gray-800">{change.label}</span>
+                                <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                  change.type === 'added' ? 'bg-green-100 text-green-700' :
+                                  change.type === 'removed' ? 'bg-red-100 text-red-700' :
+                                  'bg-blue-100 text-blue-700'
+                                }`}>
+                                  {change.type === 'added' ? 'nuevo' : change.type === 'removed' ? 'eliminado' : 'modificado'}
+                                </span>
+                              </div>
+                              {/* Preview del valor (colapsado) */}
+                              {!isExpanded && change.type !== 'removed' && (
+                                <p className="text-xs text-gray-500 mt-0.5 truncate">
+                                  {newValue}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Botón expandir */}
+                            <button
+                              onClick={() => toggleDraftExpand(change.field)}
+                              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
+                              title={isExpanded ? 'Colapsar' : 'Ver detalles'}
+                            >
+                              {isExpanded ? (
+                                <ChevronUp className="w-4 h-4" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
+
+                          {/* Contenido expandido */}
+                          {isExpanded && (
+                            <div className="px-3 pb-3 pt-1 border-t border-gray-100 ml-7">
+                              {change.type === 'modified' && (
+                                <div className="space-y-2 text-sm">
+                                  <div>
+                                    <span className="text-xs font-medium text-gray-400 uppercase">Valor anterior:</span>
+                                    <p className="text-gray-500 bg-gray-50 rounded p-2 mt-1 text-xs break-words">
+                                      {oldValue}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <span className="text-xs font-medium text-blue-500 uppercase">Nuevo valor:</span>
+                                    <p className="text-gray-700 bg-blue-50 rounded p-2 mt-1 text-xs break-words">
+                                      {newValue}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                              {change.type === 'added' && (
+                                <div className="text-sm">
+                                  <span className="text-xs font-medium text-green-500 uppercase">Valor agregado:</span>
+                                  <p className="text-gray-700 bg-green-50 rounded p-2 mt-1 text-xs break-words">
+                                    {newValue}
+                                  </p>
+                                </div>
+                              )}
+                              {change.type === 'removed' && (
+                                <div className="text-sm">
+                                  <span className="text-xs font-medium text-red-500 uppercase">Valor eliminado:</span>
+                                  <p className="text-gray-500 bg-red-50 rounded p-2 mt-1 text-xs break-words line-through">
+                                    {oldValue}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Footer con botones */}
+            <div className="p-5 border-t flex-shrink-0 bg-gray-50">
+              <p className="text-xs text-gray-500 mb-3 text-center">
+                Selecciona los campos que deseas recuperar o usa los botones para aplicar todos o descartar.
               </p>
-
               <div className="flex gap-3">
                 <button
                   onClick={handleDiscardDraft}
-                  className="flex-1 px-4 py-2.5 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors font-medium"
+                  className="flex-1 px-4 py-2.5 text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors font-medium"
                 >
-                  Descartar
+                  Descartar todo
                 </button>
                 <button
                   onClick={handleRecoverDraft}
-                  className="flex-1 px-4 py-2.5 text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+                  disabled={Object.values(draftSelectedFields).filter(Boolean).length === 0}
+                  className="flex-1 px-4 py-2.5 text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
                 >
                   <RotateCcw className="w-4 h-4" />
-                  Recuperar
+                  Recuperar ({Object.values(draftSelectedFields).filter(Boolean).length})
                 </button>
               </div>
             </div>
@@ -1644,14 +1934,20 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
       {/* Contenido del formulario — disabled si no hay país seleccionado */}
       <div className={!countrySelected ? 'opacity-40 pointer-events-none' : ''}>
 
-      {/* Validación externa — Argentina (CUIT) y Uruguay (RUT de 9 o 12 dígitos) */}
-      {habilitaValidacionExterna && mode !== 'view' && (
+      {/* Validación AFIP/ARCA — Solo Argentina (CUIT) */}
+      {habilitaValidacionArgentina && mode !== 'view' && (
         <div className="mb-4 sm:mb-6">
           <ValidationPanel
             cuit={formData.cuit}
             tipoId={tipoIdentificacion}
-            onApplyField={editMode ? (campo, valor) => {
-              handleChange(campo, normalizeAppliedValue(campo, valor))
+            onApplyField={editMode ? (campo, valor, append = false) => {
+              let nuevoValor = normalizeAppliedValue(campo, valor)
+              // Si append es true, agregar al valor existente
+              if (append && formData[campo]) {
+                const valorActual = formData[campo]
+                nuevoValor = valorActual + '<br/><br/>' + nuevoValor
+              }
+              handleChange(campo, nuevoValor)
               setHighlightedField(campo)
               if (highlightTimerRef.current) {
                 clearTimeout(highlightTimerRef.current)
@@ -1659,14 +1955,14 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
               highlightTimerRef.current = setTimeout(() => {
                 setHighlightedField(null)
               }, 2000)
-              toast.success(`Campo "${campo}" actualizado con datos de AFIP`)
+              toast.success(`Campo "${campo}" actualizado`)
             } : null}
           />
         </div>
       )}
 
-      {/* OSINT Panel — disponible cuando hay CUIT válido */}
-      {habilitaValidacionExterna && (
+      {/* OSINT Panel — disponible para todos los países con ID fiscal y razón social */}
+      {habilitaOsint && (
         <div className="mb-4 sm:mb-6">
           <OsintPanel
             cuit={formData.cuit}
@@ -1676,8 +1972,8 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
         </div>
       )}
 
-      {/* Boletín Oficial — búsqueda por CUIT + razón social del informe */}
-      {habilitaValidacionExterna && mode !== 'view' && (
+      {/* Boletín Oficial — Solo Argentina (CUIT) */}
+      {habilitaValidacionArgentina && mode !== 'view' && (
         <div className="mb-4 sm:mb-6">
           <BoletinValidationPanel
             cuit={formData.cuit}

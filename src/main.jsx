@@ -8,6 +8,15 @@ import toast from 'react-hot-toast'
 import { AuthProvider } from './contexts/AuthContext.jsx'
 import axios from 'axios'
 
+// ── Limpiar Service Workers viejos (pueden causar llamadas duplicadas) ──
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(registrations => {
+    registrations.forEach(registration => {
+      registration.unregister()
+    })
+  })
+}
+
 // ── Interceptor global: manejo de créditos insuficientes (403) ──
 axios.interceptors.response.use(
   response => response,

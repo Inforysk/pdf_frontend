@@ -30,7 +30,7 @@ export default function OsintPanel({ cuit, razonSocial, email }) {
   useEffect(() => {
     let ignore = false
     const loadCached = async () => {
-      if (clean.length < 9) return
+      if (clean.length < 6) return  // Permitir IDs más cortos (mínimo 6 dígitos)
       try {
         const res = await axios.post(`/api/osint/${cuit}`, {
           razon_social: razonSocial || '',
@@ -47,7 +47,8 @@ export default function OsintPanel({ cuit, razonSocial, email }) {
     return () => { ignore = true }
   }, [cuit])
 
-  if (clean.length < 9) return null
+  // Mínimo 6 dígitos para mostrar el panel (NITs de Colombia pueden tener 8 dígitos)
+  if (clean.length < 6) return null
 
   const handleOsint = async (force = false) => {
     if (!razonSocial?.trim()) {
