@@ -7,7 +7,7 @@ import {
 import {
   Building2, ClipboardList, TrendingUp, Users, Shield, AlertTriangle,
   FileText, Database, Activity, Loader2, RefreshCcw, ChevronDown, ChevronUp, X,
-  Download, FileJson2, FileSpreadsheet, FileDown
+  Download, FileJson2, FileSpreadsheet, FileDown, Filter, Calendar
 } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
@@ -189,9 +189,101 @@ const CustomTooltip = ({ active, payload, label }) => {
 export default function AdminDashboard() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [expandedKpi, setExpandedKpi] = useState(null) // 'empresas' | 'precarga' | null
+  const [expandedKpi, setExpandedKpi] = useState(null) // 'empresas' | 'precarga' | 'solicitudes' | 'informes' | null
+  const [solicitudesActivas, setSolicitudesActivas] = useState(null)
+  const [informesMes, setInformesMes] = useState(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
+  
+  // Filtros para solicitudes activas
+  const [filtroEstado, setFiltroEstado] = useState('')
+  const [filtroPrioridad, setFiltroPrioridad] = useState('')
+  
+  // Filtros para informes
+  const [filtroDesde, setFiltroDesde] = useState('')
+  const [filtroHasta, setFiltroHasta] = useState('')
+  
+  // Estado de descarga
+  const [downloading, setDownloading] = useState(null)
 
-  const toggleKpi = (key) => setExpandedKpi(prev => prev === key ? null : key)
+  const loadSolicitudesActivas = async (estado = '', prioridad = '') => {
+    setLoadingDetail(true)
+    try {
+      const params = new URLSearchParams()
+      if (estado) params.set('estado', estado)
+      if (prioridad) params.set('prioridad', prioridad)
+      const res = await axios.get(`/api/admin/dashboard/solicitudes-activas?${params}`)
+      if (res.data.success) setSolicitudesActivas(res.data.data)
+    } catch { toast.error('Error al cargar solicitudes') }
+    finally { setLoadingDetail(false) }
+  }
+
+  const loadInformesMes = async (desde = '', hasta = '') => {
+    setLoadingDetail(true)
+    try {
+      const params = new URLSearchParams()
+      if (desde) params.set('desde', desde)
+      if (hasta) params.set('hasta', hasta)
+      const res = await axios.get(`/api/admin/dashboard/informes-mes?${params}`)
+      if (res.data.success) setInformesMes(res.data.data)
+    } catch { toast.error('Error al cargar informes') }
+    finally { setLoadingDetail(false) }
+  }
+
+  const handleDownloadSolicitudes = async (format) => {
+    setDownloading(`sol-${format}`)
+    try {
+      const params = new URLSearchParams({ format })
+      if (filtroEstado) params.set('estado', filtroEstado)
+      if (filtroPrioridad) params.set('prioridad', filtroPrioridad)
+      const res = await axios.get(`/api/admin/dashboard/solicitudes-activas?${params}`, { responseType: 'blob' })
+      const url = window.URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = res.headers['content-disposition']?.match(/filename=(.+)/)?.[1] || `solicitudes_activas.${format}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+      toast.success(`${format.toUpperCase()} descargado`)
+    } catch { toast.error('Error al descargar') }
+    finally { setDownloading(null) }
+  }
+
+  const handleDownloadInformes = async (format) => {
+    setDownloading(`inf-${format}`)
+    try {
+      const params = new URLSearchParams({ format })
+      if (filtroDesde) params.set('desde', filtroDesde)
+      if (filtroHasta) params.set('hasta', filtroHasta)
+      const res = await axios.get(`/api/admin/dashboard/informes-mes?${params}`, { responseType: 'blob' })
+      const url = window.URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = res.headers['content-disposition']?.match(/filename=(.+)/)?.[1] || `informes.${format}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+      toast.success(`${format.toUpperCase()} descargado`)
+    } catch { toast.error('Error al descargar') }
+    finally { setDownloading(null) }
+  }
+
+  const toggleKpi = async (key) => {
+    if (expandedKpi === key) {
+      setExpandedKpi(null)
+      return
+    }
+    setExpandedKpi(key)
+    
+    // Cargar datos detallados si es necesario
+    if (key === 'solicitudes' && !solicitudesActivas) {
+      loadSolicitudesActivas()
+    }
+    if (key === 'informes' && !informesMes) {
+      loadInformesMes()
+    }
+  }
 
   const loadDashboard = async () => {
     setLoading(true)
@@ -267,9 +359,13 @@ export default function AdminDashboard() {
         />
         <KpiCard icon={ClipboardList} label="Solicitudes" value={kpis.solicitudes_activas} color="amber"
           description="Pendientes + en proceso"
+          active={expandedKpi === 'solicitudes'}
+          onClick={() => toggleKpi('solicitudes')}
         />
         <KpiCard icon={FileText} label="Informes del mes" value={kpis.informes_mes} color="green"
           description="Completados este mes"
+          active={expandedKpi === 'informes'}
+          onClick={() => toggleKpi('informes')}
         />
         <KpiCard icon={TrendingUp} label="Score promedio" value={kpis.score_promedio} sub="/ 100" color="purple" />
         <KpiCard icon={Users} label="Usuarios" value={kpis.usuarios_activos} color="cyan"
@@ -307,6 +403,202 @@ export default function AdminDashboard() {
           onClose={() => setExpandedKpi(null)}
           source="precarga"
         />
+      )}
+
+      {/* ── Panel expandible: Solicitudes Activas ── */}
+      {expandedKpi === 'solicitudes' && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-5 py-3 bg-amber-50 border-b border-amber-100 gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700">Solicitudes Activas (Pendientes + En Proceso)</h3>
+              {solicitudesActivas && (
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {solicitudesActivas.resumen?.pendiente || 0} pendientes · {solicitudesActivas.resumen?.en_proceso || 0} en proceso
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Filtros */}
+              <div className="flex items-center gap-1">
+                <Filter className="h-3.5 w-3.5 text-gray-400" />
+                <select
+                  value={filtroEstado}
+                  onChange={(e) => { setFiltroEstado(e.target.value); loadSolicitudesActivas(e.target.value, filtroPrioridad) }}
+                  className="text-xs border rounded-lg px-2 py-1.5 bg-white focus:ring-1 focus:ring-amber-300"
+                >
+                  <option value="">Todo Estado</option>
+                  <option value="pendiente">Pendiente</option>
+                  <option value="en_proceso">En Proceso</option>
+                </select>
+                <select
+                  value={filtroPrioridad}
+                  onChange={(e) => { setFiltroPrioridad(e.target.value); loadSolicitudesActivas(filtroEstado, e.target.value) }}
+                  className="text-xs border rounded-lg px-2 py-1.5 bg-white focus:ring-1 focus:ring-amber-300"
+                >
+                  <option value="">Toda Prioridad</option>
+                  <option value="urgente">Urgente</option>
+                  <option value="alta">Alta</option>
+                  <option value="normal">Normal</option>
+                </select>
+              </div>
+              {/* Descargas */}
+              <div className="flex items-center gap-1 border-l pl-2 ml-1">
+                <button
+                  onClick={() => handleDownloadSolicitudes('csv')}
+                  disabled={!!downloading}
+                  className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
+                  title="Descargar Excel"
+                >
+                  {downloading === 'sol-csv' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+                  <span className="hidden sm:inline">Excel</span>
+                </button>
+                <button
+                  onClick={() => handleDownloadSolicitudes('pdf')}
+                  disabled={!!downloading}
+                  className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                  title="Descargar PDF"
+                >
+                  {downloading === 'sol-pdf' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+                  <span className="hidden sm:inline">PDF</span>
+                </button>
+              </div>
+              <button onClick={() => setExpandedKpi(null)} className="p-1 rounded-lg hover:bg-amber-100 text-gray-400 ml-1">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          <div className="p-4 sm:p-5">
+            {loadingDetail ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-amber-500" />
+              </div>
+            ) : solicitudesActivas?.solicitudes?.length > 0 ? (
+              <div className="space-y-2">
+                {solicitudesActivas.solicitudes.map((sol, i) => (
+                  <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-amber-50 transition-colors">
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${sol.estado === 'pendiente' ? 'bg-amber-500' : 'bg-blue-500'}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-gray-800 truncate">{sol.razon_social}</p>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                          sol.estado === 'pendiente' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {sol.estado === 'pendiente' ? 'Pendiente' : 'En Proceso'}
+                        </span>
+                        {sol.prioridad === 'urgente' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">Urgente</span>
+                        )}
+                        {sol.prioridad === 'alta' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium">Alta</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        {sol.cuit} · {sol.solicitado_por} · {sol.dias_pendiente > 0 ? `hace ${sol.dias_pendiente} días` : 'hoy'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-gray-400 py-8">No hay solicitudes activas</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Panel expandible: Informes del Mes ── */}
+      {expandedKpi === 'informes' && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-5 py-3 bg-green-50 border-b border-green-100 gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700">Informes Completados {informesMes?.periodo || 'Este Mes'}</h3>
+              {informesMes && (
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {informesMes.total} informes · {informesMes.empresas_nuevas || 0} empresas nuevas · {informesMes.empresas_actualizadas || 0} actualizadas
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Filtros de fecha */}
+              <div className="flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5 text-gray-400" />
+                <input
+                  type="date"
+                  value={filtroDesde}
+                  onChange={(e) => setFiltroDesde(e.target.value)}
+                  className="text-xs border rounded-lg px-2 py-1.5 bg-white focus:ring-1 focus:ring-green-300 w-[115px]"
+                  placeholder="Desde"
+                />
+                <span className="text-gray-400 text-xs">a</span>
+                <input
+                  type="date"
+                  value={filtroHasta}
+                  onChange={(e) => setFiltroHasta(e.target.value)}
+                  className="text-xs border rounded-lg px-2 py-1.5 bg-white focus:ring-1 focus:ring-green-300 w-[115px]"
+                  placeholder="Hasta"
+                />
+                <button
+                  onClick={() => loadInformesMes(filtroDesde, filtroHasta)}
+                  className="px-2 py-1.5 text-xs font-medium text-green-700 bg-green-100 rounded-lg hover:bg-green-200 transition-colors"
+                >
+                  Buscar
+                </button>
+              </div>
+              {/* Descargas */}
+              <div className="flex items-center gap-1 border-l pl-2 ml-1">
+                <button
+                  onClick={() => handleDownloadInformes('csv')}
+                  disabled={!!downloading}
+                  className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
+                  title="Descargar Excel"
+                >
+                  {downloading === 'inf-csv' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+                  <span className="hidden sm:inline">Excel</span>
+                </button>
+                <button
+                  onClick={() => handleDownloadInformes('pdf')}
+                  disabled={!!downloading}
+                  className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                  title="Descargar PDF"
+                >
+                  {downloading === 'inf-pdf' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+                  <span className="hidden sm:inline">PDF</span>
+                </button>
+              </div>
+              <button onClick={() => setExpandedKpi(null)} className="p-1 rounded-lg hover:bg-green-100 text-gray-400 ml-1">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          <div className="p-4 sm:p-5">
+            {loadingDetail ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-green-500" />
+              </div>
+            ) : informesMes?.informes?.length > 0 ? (
+              <div className="space-y-2">
+                {informesMes.informes.map((inf, i) => (
+                  <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-green-50 transition-colors">
+                    <div className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-gray-800 truncate">{inf.razon_social}</p>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-medium">
+                          {inf.tipo_informe || 'Standard'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        {inf.cuit} · {inf.solicitado_por} · {inf.created_at ? new Date(inf.created_at).toLocaleDateString() : ''}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-gray-400 py-8">No hay informes completados en este período</p>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ── Fila 1: Empresas por país + Solicitudes por estado ── */}
