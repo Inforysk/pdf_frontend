@@ -1,0 +1,62 @@
+name: Deploy Frontend to AWS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # Permite ejecutar manualmente
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build
+        run: npm run build
+      
+      - name: Deploy to AWS EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USER }}
+          key: ${{ secrets.AWS_SSH_KEY }}
+          script: |
+            cd /opt/inforysk/frontend
+            
+            # Pull cambios del código fuente (para referencia)
+            git fetch origin main
+            git reset --hard origin/main
+            
+            echo "✅ Frontend repo updated!"
+      
+      - name: Upload build to AWS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USER }}
+          key: ${{ secrets.AWS_SSH_KEY }}
+          source: "dist/*"
+          target: "/opt/inforysk/frontend/"
+          strip_components: 1
+          overwrite: true
+      
+      - name: Set permissions
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USER }}
+          key: ${{ secrets.AWS_SSH_KEY }}
+          script: |
+            sudo chown -R nginx:nginx /opt/inforysk/frontend/
+            echo "✅ Frontend deployed successfully!"
