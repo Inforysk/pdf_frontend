@@ -25,21 +25,6 @@ jobs:
       - name: Build
         run: npm run build
       
-      - name: Deploy to AWS EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.AWS_HOST }}
-          username: ${{ secrets.AWS_USER }}
-          key: ${{ secrets.AWS_SSH_KEY }}
-          script: |
-            cd /opt/inforysk/frontend
-            
-            # Pull cambios del código fuente (para referencia)
-            git fetch origin main
-            git reset --hard origin/main
-            
-            echo "✅ Frontend repo updated!"
-      
       - name: Upload build to AWS
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -47,16 +32,20 @@ jobs:
           username: ${{ secrets.AWS_USER }}
           key: ${{ secrets.AWS_SSH_KEY }}
           source: "dist/*"
-          target: "/opt/inforysk/frontend/"
+          target: "/tmp/frontend_deploy/"
           strip_components: 1
           overwrite: true
       
-      - name: Set permissions
+      - name: Deploy and set permissions
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.AWS_HOST }}
           username: ${{ secrets.AWS_USER }}
           key: ${{ secrets.AWS_SSH_KEY }}
           script: |
+            # Move files to final location
+            sudo rm -rf /opt/inforysk/frontend/assets /opt/inforysk/frontend/index.html /opt/inforysk/frontend/favicon.ico 2>/dev/null || true
+            sudo mv /tmp/frontend_deploy/* /opt/inforysk/frontend/
             sudo chown -R nginx:nginx /opt/inforysk/frontend/
+            sudo rm -rf /tmp/frontend_deploy
             echo "✅ Frontend deployed successfully!"
