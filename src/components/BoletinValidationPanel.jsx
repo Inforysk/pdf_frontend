@@ -120,11 +120,39 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
   const [historialOpen, setHistorialOpen] = useState(false)
   const [historialLoading, setHistorialLoading] = useState(false)
   const [historialData, setHistorialData] = useState(null)
+  const [initialLoading, setInitialLoading] = useState(true)
   // Timer para modal de progreso
   const [boletinElapsed, setBoletinElapsed] = useState(0)
   const boletinStartRef = useRef(null)
 
   const cuitClean = (cuit || '').replace(/\D/g, '')
+
+  // Cargar datos existentes al montar el componente
+  useEffect(() => {
+    const loadExistingData = async () => {
+      if (cuitClean.length < 9) {
+        setInitialLoading(false)
+        return
+      }
+      
+      try {
+        const res = await axios.get(`/api/v1/boletin-oficial/${encodeURIComponent(cuitClean)}`)
+        if (res.data?.success && res.data.data?.encontrado) {
+          setResultado(res.data.data)
+          setExpanded(true)
+        }
+      } catch (err) {
+        // 404 es normal - no hay datos guardados
+        if (err.response?.status !== 404) {
+          console.error('Error cargando datos de Boletín:', err)
+        }
+      } finally {
+        setInitialLoading(false)
+      }
+    }
+    
+    loadExistingData()
+  }, [cuitClean])
 
   // Timer para actualizar tiempo transcurrido durante búsqueda
   useEffect(() => {
@@ -143,6 +171,18 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
   const currentBoletinStep = BOLETIN_STEPS.filter(s => s.time <= boletinElapsed).pop() || BOLETIN_STEPS[0]
 
   if (cuitClean.length < 9) return null
+  
+  // Mostrar skeleton mientras carga datos iniciales
+  if (initialLoading) {
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-5 w-5 text-indigo-600 animate-spin" />
+          <span className="text-sm text-gray-500">Cargando datos de Boletín...</span>
+        </div>
+      </div>
+    )
+  }
 
   const handleValidarBoletin = async () => {
     setLoading(true)
