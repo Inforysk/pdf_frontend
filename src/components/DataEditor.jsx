@@ -10,6 +10,7 @@ import {
   ArrowLeft, 
   CheckCircle, 
   AlertTriangle,
+  AlertCircle,
   Building2,
   FileText,
   Phone,
@@ -25,11 +26,29 @@ import {
   RotateCcw,
   Clock,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Mail,
+  X,
+  MapPin,
+  Linkedin
 } from 'lucide-react'
 import ValidationPanel from './ValidationPanel'
 import OsintPanel from './OsintPanel'
 import BoletinValidationPanel from './BoletinValidationPanel'
+import ActividadSelector from './ActividadSelector'
+import FormaLegalSelector from './FormaLegalSelector'
+import DomicilioAutocomplete from './DomicilioAutocomplete'
+import PhoneInput from './PhoneInput'
+
+// ── Validación de email ──
+function validateEmail(email) {
+  if (!email || !email.trim()) return { valid: true, message: '' } // Vacío es válido (no requerido)
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(email.trim())) {
+    return { valid: false, message: 'Formato de email inválido' }
+  }
+  return { valid: true, message: '' }
+}
 
 // ── Validación de identificador fiscal ──
 function validateTaxId(taxId, tipo) {
@@ -303,12 +322,18 @@ const FIELDS = [
   { name: 'cierre_ejercicio', label: 'Cierre de Ejercicio', type: 'text', group: 'principal', description: 'Fecha de cierre del ejercicio fiscal' },
   { name: 'capital_social', label: 'Capital Social ($)', type: 'number', group: 'principal', description: 'Capital social en pesos argentinos' },
   
-  // Contacto
-  { name: 'domicilio', label: 'Domicilio', type: 'textarea', group: 'contacto', description: 'Dirección legal de la empresa' },
-  { name: 'telefono_1', label: 'Teléfono 1', type: 'text', group: 'contacto', description: 'Teléfono principal' },
-  { name: 'telefono_2', label: 'Teléfono 2', type: 'text', group: 'contacto', description: 'Teléfono secundario' },
-  { name: 'email', label: 'Email', type: 'email', group: 'contacto', description: 'Correo electrónico de contacto' },
-  { name: 'emails_contacto', label: 'Emails adicionales', type: 'email_list', group: 'contacto', description: 'Lista de correos separados por coma o salto de línea' },
+  // Contacto - Ahora usa arrays dinámicos para teléfonos y emails
+  { name: 'domicilio', label: 'Domicilio', type: 'text', group: 'contacto', description: 'Dirección legal de la empresa', fullWidth: true },
+  { name: 'domicilio_lat', label: 'Latitud', type: 'hidden', group: 'contacto' },
+  { name: 'domicilio_lng', label: 'Longitud', type: 'hidden', group: 'contacto' },
+  // Los teléfonos y emails se manejan de forma especial en renderContactoBlock
+  { name: 'telefonos', label: 'Teléfonos', type: 'phone_array', group: 'contacto', hidden: true },
+  { name: 'emails', label: 'Emails', type: 'email_array', group: 'contacto', hidden: true },
+  // Campos legacy para compatibilidad
+  { name: 'telefono_1', label: 'Teléfono 1', type: 'hidden', group: 'contacto' },
+  { name: 'telefono_2', label: 'Teléfono 2', type: 'hidden', group: 'contacto' },
+  { name: 'email', label: 'Email', type: 'hidden', group: 'contacto' },
+  { name: 'emails_contacto', label: 'Emails adicionales', type: 'hidden', group: 'contacto' },
   
   // Texto
   { name: 'sinopsis', label: 'Sinopsis', type: 'textarea', group: 'texto', description: 'Resumen general del informe' },
@@ -539,7 +564,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
   const [editMode, setEditMode] = useState(mode === 'edit')
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(!!empresaId)
-  const [expandedGroups, setExpandedGroups] = useState(['principal', 'texto'])
+  const [expandedGroups, setExpandedGroups] = useState([])
   const [highlightedField, setHighlightedField] = useState(null)
   const highlightTimerRef = useRef(null)
   const [taxIdError, setTaxIdError] = useState(null)
@@ -605,7 +630,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
                 fecha_informe: fromSolicitud.fecha_informe || new Date().toISOString().split('T')[0],
               }))
               setEditMode(true)
-              setExpandedGroups(['principal', 'texto', 'informe'])
+              // Acordeones cerrados por defecto
             }
           }
         }
@@ -840,7 +865,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     if (checkCuitTimerRef.current) clearTimeout(checkCuitTimerRef.current)
     if (pais) {
       setEditMode(true)
-      setExpandedGroups(['principal', 'texto'])
+      // Acordeones cerrados por defecto
     }
   }
 
@@ -879,7 +904,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
               tipo_identificacion: nuevoPais.tipo_id_fiscal || 'ID',
             }))
             setEditMode(true)
-            setExpandedGroups(['principal', 'texto'])
+            // Acordeones cerrados por defecto
           }
         }
         setShowOtrosPaisesModal(false)
@@ -1263,9 +1288,454 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     return false
   }
 
+  // Detectar si el CUIT actual es argentino (11 dígitos)
+  const isArgentinaCuit = () => {
+    const cuit = getFieldValue('cuit')
+    if (!cuit) return false
+    const clean = cuit.replace(/[-.\s/]/g, '')
+    return /^\d{11}$/.test(clean)
+  }
+
+  // Detectar si es RUT uruguayo (12 dígitos)
+  const isUruguayRut = () => {
+    const rut = getFieldValue('cuit')
+    if (!rut) return false
+    const clean = rut.replace(/[-.\s/]/g, '')
+    return /^\d{12}$/.test(clean)
+  }
+
+  // Obtener el país detectado para el selector de actividades
+  const getDetectedCountry = () => {
+    if (isArgentinaCuit()) return 'AR'
+    if (isUruguayRut()) return 'UY'
+    return null
+  }
+
+  // Obtener código de país para selector de forma legal
+  // Prioriza selectedPais (seleccionado por usuario) sobre detección automática
+  const getCountryCodeForFormaLegal = () => {
+    // Si hay país seleccionado, usar ese código
+    if (selectedPais?.codigo_pais) {
+      return selectedPais.codigo_pais.toUpperCase()
+    }
+    // Fallback: detectar por CUIT/RUT
+    return getDetectedCountry()
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // HELPER FUNCTIONS PARA TELÉFONOS Y EMAILS DINÁMICOS
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  // Obtener lista de teléfonos (combina campos legacy con nuevo formato)
+  const getTelefonos = () => {
+    // Si ya tenemos array de telefonos, usarlo (incluir vacíos para edición)
+    if (Array.isArray(formData.telefonos)) {
+      return formData.telefonos
+    }
+    // Fallback: construir desde campos legacy + extra_fields
+    const telefonos = []
+    if (formData.telefono_1) telefonos.push(formData.telefono_1)
+    if (formData.telefono_2) telefonos.push(formData.telefono_2)
+    
+    // Agregar teléfonos extra desde extra_fields
+    const extraFields = formData.extra_fields || []
+    const extraTelefonos = extraFields
+      .filter(f => f.label?.startsWith('Teléfono ') && f.group === 'contacto')
+      .sort((a, b) => {
+        const numA = parseInt(a.label.replace('Teléfono ', '')) || 0
+        const numB = parseInt(b.label.replace('Teléfono ', '')) || 0
+        return numA - numB
+      })
+      .map(f => f.value)
+    
+    telefonos.push(...extraTelefonos)
+    return telefonos
+  }
+
+  // Obtener lista de emails (combina campos legacy con nuevo formato)
+  const getEmails = () => {
+    // Si ya tenemos array de emails, usarlo (incluir vacíos para edición)
+    if (Array.isArray(formData.emails)) {
+      return formData.emails
+    }
+    // Fallback: construir desde campos legacy
+    const emails = []
+    if (formData.email) emails.push(formData.email)
+    if (formData.emails_contacto) {
+      const adicionales = parseEmailListFromInput(formData.emails_contacto)
+      emails.push(...adicionales)
+    }
+    return [...new Set(emails)]
+  }
+
+  // Agregar teléfono
+  const handleAddTelefono = () => {
+    const current = getTelefonos()
+    const newList = [...current, '']
+    handleChange('telefonos', newList)
+    syncTelefonosLegacy(newList)
+  }
+
+  // Actualizar teléfono
+  const handleUpdateTelefono = (index, value) => {
+    const current = getTelefonos()
+    // Si el array está vacío, crear uno nuevo
+    if (current.length === 0) {
+      handleChange('telefonos', [value])
+      syncTelefonosLegacy([value])
+      return
+    }
+    const updated = [...current]
+    updated[index] = value
+    handleChange('telefonos', updated)
+    syncTelefonosLegacy(updated)
+  }
+
+  // Eliminar teléfono
+  const handleRemoveTelefono = (index) => {
+    const current = getTelefonos()
+    const updated = current.filter((_, i) => i !== index)
+    handleChange('telefonos', updated)
+    syncTelefonosLegacy(updated)
+  }
+
+  // Sincronizar teléfonos con campos legacy (solo valores no vacíos)
+  // telefono_1 y telefono_2 son campos de BD, los demás van a extra_fields
+  const syncTelefonosLegacy = (telefonos) => {
+    const filtered = telefonos.filter(t => t && t.trim())
+    handleChange('telefono_1', filtered[0] || '')
+    handleChange('telefono_2', filtered[1] || '')
+    
+    // Guardar teléfonos adicionales (3+) en extra_fields
+    const extraTelefonos = filtered.slice(2)
+    setFormData(prev => {
+      // Remover teléfonos extra anteriores
+      const otherFields = (prev.extra_fields || []).filter(f => !f.label?.startsWith('Teléfono '))
+      // Agregar nuevos teléfonos extra
+      const newExtraFields = extraTelefonos.map((tel, idx) => ({
+        id: `tel_extra_${idx + 3}`,
+        group: 'contacto',
+        label: `Teléfono ${idx + 3}`,
+        type: 'text',
+        value: tel
+      }))
+      return { ...prev, extra_fields: [...otherFields, ...newExtraFields] }
+    })
+  }
+
+  // Agregar email
+  const handleAddEmail = () => {
+    const current = getEmails()
+    const newList = [...current, '']
+    handleChange('emails', newList)
+    syncEmailsLegacy(newList)
+  }
+
+  // Actualizar email
+  const handleUpdateEmail = (index, value) => {
+    const current = getEmails()
+    // Si el array está vacío, crear uno nuevo
+    if (current.length === 0) {
+      handleChange('emails', [value])
+      syncEmailsLegacy([value])
+      return
+    }
+    const updated = [...current]
+    updated[index] = value.toLowerCase().trim()
+    handleChange('emails', updated)
+    syncEmailsLegacy(updated)
+  }
+
+  // Eliminar email
+  const handleRemoveEmail = (index) => {
+    const current = getEmails()
+    const updated = current.filter((_, i) => i !== index)
+    handleChange('emails', updated)
+    syncEmailsLegacy(updated)
+  }
+
+  // Sincronizar emails con campos legacy (solo valores no vacíos)
+  const syncEmailsLegacy = (emails) => {
+    const filtered = emails.filter(e => e && e.trim())
+    handleChange('email', filtered[0] || '')
+    handleChange('emails_contacto', filtered.slice(1))
+  }
+
+  // Helper para obtener campo de extra_fields por label
+  const getExtraFieldValue = (label) => {
+    const extraFields = formData.extra_fields || []
+    const field = extraFields.find(f => f.label === label && f.group === 'contacto')
+    return field?.value || ''
+  }
+
+  // Helper para guardar/actualizar campo en extra_fields
+  const setExtraFieldValue = (label, value, type = 'url') => {
+    setFormData(prev => {
+      const extraFields = prev.extra_fields || []
+      const existingIndex = extraFields.findIndex(f => f.label === label && f.group === 'contacto')
+      
+      if (existingIndex >= 0) {
+        // Actualizar existente
+        const updated = [...extraFields]
+        if (value && value.trim()) {
+          updated[existingIndex] = { ...updated[existingIndex], value: value.trim() }
+        } else {
+          // Eliminar si está vacío
+          updated.splice(existingIndex, 1)
+        }
+        return { ...prev, extra_fields: updated }
+      } else if (value && value.trim()) {
+        // Agregar nuevo
+        return {
+          ...prev,
+          extra_fields: [...extraFields, {
+            id: `extra_${label.toLowerCase().replace(/\s/g, '_')}_${Date.now()}`,
+            group: 'contacto',
+            label,
+            type,
+            value: value.trim()
+          }]
+        }
+      }
+      return prev
+    })
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // RENDER CONTACTO BLOCK - UI ESPECIALIZADA
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  const renderContactoBlock = () => {
+    const telefonos = getTelefonos()
+    const emails = getEmails()
+    const domicilioValue = getFieldValue('domicilio')
+    const locked = isFieldLocked('domicilio')
+    const fieldDisabled = !editMode || locked
+    const isDomicilioEmpty = !domicilioValue || domicilioValue === ''
+
+    return (
+      <div className="space-y-6">
+        {/* DOMICILIO - Ancho completo */}
+        <div className={`transition-all ${highlightedField === 'domicilio' ? 'rounded-md ring-2 ring-green-400 ring-offset-1' : ''}`}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-gray-400" />
+              <span className="text-sm font-medium text-gray-700">Domicilio</span>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mb-2">
+            Dirección legal de la empresa
+            {locked && <span className="ml-1 text-blue-500 font-medium">(dato validado por AFIP)</span>}
+          </p>
+          <DomicilioAutocomplete
+            value={domicilioValue || ''}
+            onChange={(newValue) => handleChange('domicilio', newValue)}
+            onCoordinatesChange={(coords) => {
+              if (coords) {
+                handleChange('domicilio_lat', coords.lat?.toString() || '')
+                handleChange('domicilio_lng', coords.lng?.toString() || '')
+              }
+            }}
+            disabled={fieldDisabled}
+            placeholder="Escriba una dirección para buscar..."
+            countryCode={getCountryCodeForFormaLegal() || getDetectedCountry() || ''}
+            className={isDomicilioEmpty ? 'ring-1 ring-amber-300' : ''}
+          />
+          {isDomicilioEmpty && (
+            <p className="text-xs text-amber-600 flex items-center mt-1">
+              <AlertTriangle className="h-3 w-3 mr-1" />
+              Sin datos
+            </p>
+          )}
+        </div>
+
+        {/* TELÉFONOS Y EMAILS - Grid de 2 columnas */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* TELÉFONOS */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-gray-400" />
+                <span className="text-sm font-medium text-gray-700">Teléfonos</span>
+              </div>
+              {editMode && (
+                <button
+                  type="button"
+                  onClick={handleAddTelefono}
+                  className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50 border border-blue-200"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Agregar
+                </button>
+              )}
+            </div>
+            
+            <div className="space-y-3">
+              {telefonos.length === 0 ? (
+                // Mostrar un campo vacío si no hay teléfonos
+                <div>
+                  <PhoneInput
+                    value=""
+                    onChange={(val) => handleUpdateTelefono(0, val)}
+                    countryCode={getCountryCodeForFormaLegal() || getDetectedCountry() || 'AR'}
+                    disabled={!editMode}
+                    placeholder="11 XXXX-XXXX"
+                    isPrincipal={true}
+                    canRemove={false}
+                  />
+                  <p className="text-xs text-amber-600 flex items-center mt-1">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    Sin datos
+                  </p>
+                </div>
+              ) : (
+                telefonos.map((tel, idx) => (
+                  <PhoneInput
+                    key={idx}
+                    value={tel}
+                    onChange={(val) => handleUpdateTelefono(idx, val)}
+                    countryCode={getCountryCodeForFormaLegal() || getDetectedCountry() || 'AR'}
+                    disabled={!editMode}
+                    placeholder={idx === 0 ? "11 XXXX-XXXX" : `Teléfono ${idx + 1}`}
+                    isPrincipal={idx === 0 && !!tel}
+                    canRemove={editMode && telefonos.length > 1}
+                    onRemove={() => handleRemoveTelefono(idx)}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* EMAILS */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-gray-400" />
+                <span className="text-sm font-medium text-gray-700">Emails</span>
+              </div>
+              {editMode && (
+                <button
+                  type="button"
+                  onClick={handleAddEmail}
+                  className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50 border border-blue-200"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Agregar
+                </button>
+              )}
+            </div>
+            
+            <div className="space-y-2">
+              {emails.length === 0 ? (
+                // Mostrar un campo vacío si no hay emails
+                <div className="relative">
+                  <input
+                    type="email"
+                    value=""
+                    onChange={(e) => handleUpdateEmail(0, e.target.value)}
+                    disabled={!editMode}
+                    placeholder="correo@empresa.com"
+                    className="field-input bg-amber-50 border-amber-200 pr-8"
+                  />
+                  <p className="text-xs text-amber-600 flex items-center mt-1">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    Sin datos
+                  </p>
+                </div>
+              ) : (
+                emails.map((email, idx) => {
+                  const emailValidation = validateEmail(email)
+                  return (
+                    <div key={idx} className="space-y-1">
+                      <div className="relative flex items-center gap-2">
+                        <div className="flex-1 relative">
+                          <input
+                            type="email"
+                            value={email}
+                            onChange={(e) => handleUpdateEmail(idx, e.target.value)}
+                            disabled={!editMode}
+                            placeholder={idx === 0 ? "correo@empresa.com" : `email${idx + 1}@empresa.com`}
+                            className={`field-input pr-20 ${!email ? 'bg-amber-50 border-amber-200' : ''} ${!emailValidation.valid && email ? 'border-red-400 focus:ring-red-200 focus:border-red-400' : ''}`}
+                          />
+                          {idx === 0 && email && emailValidation.valid && (
+                            <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[10px] text-green-600 bg-green-100 px-1.5 py-0.5 rounded">
+                              Principal
+                            </span>
+                          )}
+                        </div>
+                        {editMode && emails.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEmail(idx)}
+                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
+                            title="Eliminar email"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                      {/* Mensaje de validación */}
+                      {!emailValidation.valid && email && (
+                        <span className="text-xs text-red-500 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" />
+                          {emailValidation.message}
+                        </span>
+                      )}
+                      {emailValidation.valid && email && (
+                        <span className="text-xs text-green-600 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" />
+                          Válido
+                        </span>
+                      )}
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* SITIO WEB Y LINKEDIN - Grid de 2 columnas */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* SITIO WEB */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Globe className="h-4 w-4 text-gray-400" />
+              <span className="text-sm font-medium text-gray-700">Sitio Web</span>
+            </div>
+            <input
+              type="url"
+              value={getExtraFieldValue('Sitio Web')}
+              onChange={(e) => setExtraFieldValue('Sitio Web', e.target.value, 'url')}
+              disabled={!editMode}
+              placeholder="www.empresa.com"
+              className="field-input"
+            />
+          </div>
+
+          {/* LINKEDIN */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Linkedin className="h-4 w-4 text-gray-400" />
+              <span className="text-sm font-medium text-gray-700">LinkedIn</span>
+            </div>
+            <input
+              type="url"
+              value={getExtraFieldValue('LinkedIn')}
+              onChange={(e) => setExtraFieldValue('LinkedIn', e.target.value, 'url')}
+              disabled={!editMode}
+              placeholder="linkedin.com/company/..."
+              className="field-input"
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const renderField = (field) => {
     // No renderizar campos ocultos
-    if (field.hidden) return null
+    if (field.hidden || field.type === 'hidden') return null
     
     const value = getFieldValue(field.name)
     const isEmpty = !value || value === ''
@@ -1324,6 +1794,40 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
             rows={3}
             className={`field-input ${isEmpty ? 'bg-amber-50 border-amber-200' : ''}`}
             placeholder="ej: correo1@empresa.com, correo2@empresa.com"
+          />
+        ) : field.name === 'actividad_principal' && getDetectedCountry() ? (
+          <ActividadSelector
+            value={value}
+            onChange={(newValue) => handleChange(field.name, newValue)}
+            disabled={fieldDisabled}
+            placeholder="Seleccionar actividad económica..."
+            multiple={true}
+            className={locked ? 'opacity-75' : ''}
+            country={getDetectedCountry()}
+          />
+        ) : field.name === 'forma_legal' && getCountryCodeForFormaLegal() ? (
+          <FormaLegalSelector
+            value={value}
+            onChange={(newValue) => handleChange(field.name, newValue)}
+            disabled={fieldDisabled}
+            placeholder="Seleccionar forma legal..."
+            className={locked ? 'opacity-75' : ''}
+            countryCode={getCountryCodeForFormaLegal()}
+          />
+        ) : field.name === 'domicilio' ? (
+          <DomicilioAutocomplete
+            value={value || ''}
+            onChange={(newValue) => handleChange(field.name, newValue)}
+            onCoordinatesChange={(coords) => {
+              if (coords) {
+                handleChange('domicilio_lat', coords.lat?.toString() || '')
+                handleChange('domicilio_lng', coords.lng?.toString() || '')
+              }
+            }}
+            disabled={fieldDisabled}
+            placeholder="Escriba una dirección para buscar..."
+            countryCode={getCountryCodeForFormaLegal() || getDetectedCountry() || ''}
+            className={isEmpty ? 'ring-1 ring-amber-300' : ''}
           />
         ) : (
           <>
@@ -2043,18 +2547,23 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
             razonSocial={formData.razon_social}
             email={formData.email_empresa || formData.emails_contacto}
             onAddExtraField={editMode ? (group, label, value, type = 'url') => {
-              // Agregar campo extra al grupo especificado
-              const newField = {
-                id: `extra_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                group,
-                label,
-                type,
-                value,
+              // Para Sitio Web y LinkedIn, usar los campos dedicados
+              if (label === 'Sitio Web' || label === 'LinkedIn') {
+                setExtraFieldValue(label, value, type)
+              } else {
+                // Agregar campo extra al grupo especificado
+                const newField = {
+                  id: `extra_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                  group,
+                  label,
+                  type,
+                  value,
+                }
+                setFormData(prev => ({
+                  ...prev,
+                  extra_fields: [...(prev.extra_fields || []), newField]
+                }))
               }
-              setFormData(prev => ({
-                ...prev,
-                extra_fields: [...(prev.extra_fields || []), newField]
-              }))
             } : null}
           />
         </div>
@@ -2107,7 +2616,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
             
             {isExpanded && (
               <div className="p-3 sm:p-6">
-                {mode === 'edit' && (
+                {mode === 'edit' && groupKey !== 'contacto' && (
                   <div className="mb-4 flex justify-end">
                     <button
                       type="button"
@@ -2120,10 +2629,16 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
                     </button>
                   </div>
                 )}
-                <div className={groupKey === 'texto' ? 'space-y-4' : 'grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4'}>
-                  {fields.map(renderField)}
-                  {extraFields.map(renderExtraField)}
-                </div>
+                
+                {/* Renderizado especial para bloque de contacto */}
+                {groupKey === 'contacto' ? (
+                  renderContactoBlock()
+                ) : (
+                  <div className={groupKey === 'texto' ? 'space-y-4' : 'grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4'}>
+                    {fields.map(renderField)}
+                    {extraFields.map(renderExtraField)}
+                  </div>
+                )}
               </div>
             )}
           </div>

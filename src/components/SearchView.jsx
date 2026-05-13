@@ -323,7 +323,16 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
   }, [])
 
   // Cargar todas las empresas al montar y al volver de otra vista
+  // También limpiar filtros cuando refreshKey cambia (al hacer click en Buscar del sidebar)
   useEffect(() => {
+    // Limpiar todos los filtros
+    setSearchTerm('')
+    setSearchType('all')
+    setCountryFilter('all')
+    setAfipFilter('all')
+    setScoringFilter('all')
+    setExternalResult(null)
+    // Recargar empresas
     loadEmpresas()
   }, [refreshKey])
 

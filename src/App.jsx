@@ -590,6 +590,10 @@ function App() {
                   if (item.id === 'new-blank') {
                     setExtractedData(null); setSelectedEmpresaId(null); setSelectedEmpresaCuit(null); setSelectedEmpresaMode(null); setNewReportCountry(null); setPreviousView(currentView);
                   }
+                  if (item.id === 'search') {
+                    // Limpiar filtros al volver a buscar
+                    setRefreshKey(k => k + 1);
+                  }
                   setCurrentView(item.id); setMobileMenuOpen(false);
                 }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all relative ${
@@ -677,6 +681,10 @@ function App() {
                     onClick={() => {
                       if (item.id === 'new-blank') {
                         setExtractedData(null); setSelectedEmpresaId(null); setSelectedEmpresaCuit(null); setSelectedEmpresaMode(null); setNewReportCountry(null); setPreviousView(currentView);
+                      }
+                      if (item.id === 'search') {
+                        // Limpiar filtros al volver a buscar
+                        setRefreshKey(k => k + 1);
                       }
                       setCurrentView(item.id); setMobileMenuOpen(false);
                     }}

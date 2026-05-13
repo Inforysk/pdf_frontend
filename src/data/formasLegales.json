@@ -1,0 +1,439 @@
+{
+  "AR": {
+    "pais": "Argentina",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "SRL", "descripcion": "Sociedad de Responsabilidad Limitada (S.R.L.)" },
+      { "codigo": "SAS", "descripcion": "Sociedad por Acciones Simplificada (S.A.S.)" },
+      { "codigo": "SAU", "descripcion": "Sociedad Anónima Unipersonal (S.A.U.)" },
+      { "codigo": "SCS", "descripcion": "Sociedad en Comandita Simple (S.C.S.)" },
+      { "codigo": "SCpA", "descripcion": "Sociedad en Comandita por Acciones (S.C.p.A.)" },
+      { "codigo": "SC", "descripcion": "Sociedad Colectiva (Soc.Col.)" },
+      { "codigo": "SCI", "descripcion": "Sociedad de Capital e Industria (S.C.e I.)" },
+      { "codigo": "SE", "descripcion": "Sociedad del Estado (S.E.)" },
+      { "codigo": "SGR", "descripcion": "Sociedad de Garantía Recíproca (S.G.R.)" },
+      { "codigo": "COOP", "descripcion": "Cooperativa" },
+      { "codigo": "FUND", "descripcion": "Fundación" },
+      { "codigo": "ASOC", "descripcion": "Asociación Civil" }
+    ]
+  },
+  "UY": {
+    "pais": "Uruguay",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "SRL", "descripcion": "Sociedad de Responsabilidad Limitada (S.R.L.)" },
+      { "codigo": "SAS", "descripcion": "Sociedad por Acciones Simplificada (S.A.S.)" },
+      { "codigo": "SC", "descripcion": "Sociedad Colectiva" },
+      { "codigo": "SCS", "descripcion": "Sociedad en Comandita Simple" },
+      { "codigo": "SCA", "descripcion": "Sociedad en Comandita por Acciones" },
+      { "codigo": "SCAP", "descripcion": "Sociedad de Capital e Industria" },
+      { "codigo": "COOP", "descripcion": "Cooperativa" },
+      { "codigo": "FUND", "descripcion": "Fundación" },
+      { "codigo": "ASOC", "descripcion": "Asociación Civil" }
+    ]
+  },
+  "BR": {
+    "pais": "Brasil",
+    "formas": [
+      { "codigo": "LTDA", "descripcion": "Sociedade Limitada (Ltda.)" },
+      { "codigo": "SA", "descripcion": "Sociedade Anônima (S.A.)" },
+      { "codigo": "EIRELI", "descripcion": "Empresa Individual de Responsabilidade Limitada (EIRELI)" },
+      { "codigo": "SS", "descripcion": "Sociedade Simples" },
+      { "codigo": "SCS", "descripcion": "Sociedade em Comandita Simples" },
+      { "codigo": "SNC", "descripcion": "Sociedade em Nome Coletivo" },
+      { "codigo": "COOP", "descripcion": "Cooperativa" },
+      { "codigo": "MEI", "descripcion": "Micro Empreendedor Individual" },
+      { "codigo": "EI", "descripcion": "Empresa Individual (Firma Individual)" }
+    ]
+  },
+  "CL": {
+    "pais": "Chile",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "SPA", "descripcion": "Sociedad por Acciones (SpA)" },
+      { "codigo": "SRL", "descripcion": "Sociedad de Responsabilidad Limitada (Ltda.)" },
+      { "codigo": "EIRL", "descripcion": "Empresa Individual de Responsabilidad Limitada (EIRL)" },
+      { "codigo": "SC", "descripcion": "Sociedad Colectiva" },
+      { "codigo": "SCS", "descripcion": "Sociedad en Comandita Simple" },
+      { "codigo": "SCM", "descripcion": "Sociedad Contractual Minera (S.C.M.)" },
+      { "codigo": "COOP", "descripcion": "Cooperativa" }
+    ]
+  },
+  "CO": {
+    "pais": "Colombia",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "SAS", "descripcion": "Sociedad por Acciones Simplificada (S.A.S.)" },
+      { "codigo": "LTDA", "descripcion": "Sociedad de Responsabilidad Limitada (Ltda.)" },
+      { "codigo": "SC", "descripcion": "Sociedad Colectiva (S.C.)" },
+      { "codigo": "SCS", "descripcion": "Sociedad en Comandita Simple (S. en C.)" },
+      { "codigo": "SCA", "descripcion": "Sociedad en Comandita por Acciones (S.C.A.)" },
+      { "codigo": "EU", "descripcion": "Empresa Unipersonal (E.U.)" },
+      { "codigo": "COOP", "descripcion": "Cooperativa" }
+    ]
+  },
+  "PE": {
+    "pais": "Perú",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "SAA", "descripcion": "Sociedad Anónima Abierta (S.A.A.)" },
+      { "codigo": "SAC", "descripcion": "Sociedad Anónima Cerrada (S.A.C.)" },
+      { "codigo": "SRL", "descripcion": "Sociedad de Responsabilidad Limitada (S.R.L.)" },
+      { "codigo": "SC", "descripcion": "Sociedad Colectiva" },
+      { "codigo": "SCS", "descripcion": "Sociedad en Comandita Simple" },
+      { "codigo": "SCA", "descripcion": "Sociedad en Comandita por Acciones" },
+      { "codigo": "EIRL", "descripcion": "Empresa Individual de Responsabilidad Limitada (E.I.R.L.)" }
+    ]
+  },
+  "MX": {
+    "pais": "México",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "SADECV", "descripcion": "Sociedad Anónima de Capital Variable (S.A. de C.V.)" },
+      { "codigo": "SRL", "descripcion": "Sociedad de Responsabilidad Limitada (S. de R.L.)" },
+      { "codigo": "SRLDECV", "descripcion": "Sociedad de Responsabilidad Limitada de C.V. (S. de R.L. de C.V.)" },
+      { "codigo": "SNC", "descripcion": "Sociedad en Nombre Colectivo" },
+      { "codigo": "SCS", "descripcion": "Sociedad en Comandita Simple (S. en C.)" },
+      { "codigo": "SCA", "descripcion": "Sociedad en Comandita por Acciones (S. en C. por A.)" },
+      { "codigo": "SAB", "descripcion": "Sociedad Anónima Bursátil (S.A.B.)" },
+      { "codigo": "SAPI", "descripcion": "Sociedad Anónima Promotora de Inversión (S.A.P.I.)" },
+      { "codigo": "SC", "descripcion": "Sociedad Cooperativa" }
+    ]
+  },
+  "EC": {
+    "pais": "Ecuador",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "CA", "descripcion": "Compañía Anónima (C.A.)" },
+      { "codigo": "SAS", "descripcion": "Sociedad por Acciones Simplificada (S.A.S.)" },
+      { "codigo": "LTDA", "descripcion": "Compañía Limitada (Cía. Ltda.)" },
+      { "codigo": "EP", "descripcion": "Empresa Pública (EP)" }
+    ]
+  },
+  "PY": {
+    "pais": "Paraguay",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "SRL", "descripcion": "Sociedad de Responsabilidad Limitada (S.R.L.)" },
+      { "codigo": "SCS", "descripcion": "Sociedad en Comandita Simple" },
+      { "codigo": "SCA", "descripcion": "Sociedad en Comandita por Acciones" },
+      { "codigo": "SC", "descripcion": "Sociedad Colectiva" },
+      { "codigo": "COOP", "descripcion": "Cooperativa" }
+    ]
+  },
+  "VE": {
+    "pais": "Venezuela",
+    "formas": [
+      { "codigo": "CA", "descripcion": "Compañía Anónima (C.A.)" },
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "SRL", "descripcion": "Sociedad de Responsabilidad Limitada (S.R.L.)" },
+      { "codigo": "SCS", "descripcion": "Sociedad en Comandita Simple" },
+      { "codigo": "SCA", "descripcion": "Sociedad en Comandita por Acciones" },
+      { "codigo": "SC", "descripcion": "Sociedad en Nombre Colectivo" }
+    ]
+  },
+  "BO": {
+    "pais": "Bolivia",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "SRL", "descripcion": "Sociedad de Responsabilidad Limitada (S.R.L.)" },
+      { "codigo": "SCS", "descripcion": "Sociedad en Comandita Simple" },
+      { "codigo": "SCA", "descripcion": "Sociedad en Comandita por Acciones" },
+      { "codigo": "SC", "descripcion": "Sociedad Colectiva" },
+      { "codigo": "COOP", "descripcion": "Cooperativa" }
+    ]
+  },
+  "CR": {
+    "pais": "Costa Rica",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "SRL", "descripcion": "Sociedad de Responsabilidad Limitada (S.R.L.)" },
+      { "codigo": "LTDA", "descripcion": "Sociedad de Responsabilidad Limitada (Ltda.)" }
+    ]
+  },
+  "PA": {
+    "pais": "Panamá",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "SRL", "descripcion": "Sociedad de Responsabilidad Limitada (S.R.L.)" },
+      { "codigo": "SC", "descripcion": "Sociedad Colectiva" },
+      { "codigo": "SCS", "descripcion": "Sociedad en Comandita Simple" },
+      { "codigo": "SCA", "descripcion": "Sociedad en Comandita por Acciones" }
+    ]
+  },
+  "DO": {
+    "pais": "República Dominicana",
+    "formas": [
+      { "codigo": "CXA", "descripcion": "Compañía por Acciones (C. por A. / CXA)" },
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "SAS", "descripcion": "Sociedad Anónima Simplificada (S.A.S.)" },
+      { "codigo": "SRL", "descripcion": "Sociedad de Responsabilidad Limitada (S.R.L.)" },
+      { "codigo": "EIRL", "descripcion": "Empresa Individual de Responsabilidad Limitada (E.I.R.L.)" },
+      { "codigo": "SCS", "descripcion": "Sociedad en Comandita Simple" }
+    ]
+  },
+  "HN": {
+    "pais": "Honduras",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "SADECV", "descripcion": "Sociedad Anónima de Capital Variable (S.A. de C.V.)" },
+      { "codigo": "SRL", "descripcion": "Sociedad de Responsabilidad Limitada (S. de R.L.)" },
+      { "codigo": "SC", "descripcion": "Sociedad Colectiva" },
+      { "codigo": "SCS", "descripcion": "Sociedad en Comandita Simple" },
+      { "codigo": "SCA", "descripcion": "Sociedad en Comandita por Acciones" }
+    ]
+  },
+  "GT": {
+    "pais": "Guatemala",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "SRL", "descripcion": "Sociedad de Responsabilidad Limitada (S.R.L.)" },
+      { "codigo": "SC", "descripcion": "Sociedad Colectiva" },
+      { "codigo": "SCS", "descripcion": "Sociedad en Comandita Simple" },
+      { "codigo": "SCA", "descripcion": "Sociedad en Comandita por Acciones" }
+    ]
+  },
+  "SV": {
+    "pais": "El Salvador",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "SADECV", "descripcion": "Sociedad Anónima de Capital Variable (S.A. de C.V.)" },
+      { "codigo": "SRL", "descripcion": "Sociedad de Responsabilidad Limitada (S. de R.L.)" },
+      { "codigo": "SC", "descripcion": "Sociedad Colectiva" },
+      { "codigo": "SCS", "descripcion": "Sociedad en Comandita Simple" }
+    ]
+  },
+  "NI": {
+    "pais": "Nicaragua",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "SRL", "descripcion": "Sociedad de Responsabilidad Limitada (S.R.L.)" },
+      { "codigo": "SC", "descripcion": "Sociedad Colectiva" },
+      { "codigo": "SCS", "descripcion": "Sociedad en Comandita Simple" },
+      { "codigo": "SCA", "descripcion": "Sociedad en Comandita por Acciones" }
+    ]
+  },
+  "US": {
+    "pais": "Estados Unidos",
+    "formas": [
+      { "codigo": "CORP", "descripcion": "Corporation (Corp. / Inc.)" },
+      { "codigo": "LLC", "descripcion": "Limited Liability Company (LLC)" },
+      { "codigo": "LP", "descripcion": "Limited Partnership (LP)" },
+      { "codigo": "LLP", "descripcion": "Limited Liability Partnership (LLP)" },
+      { "codigo": "LLLP", "descripcion": "Limited Liability Limited Partnership (LLLP)" },
+      { "codigo": "PC", "descripcion": "Professional Corporation (PC / P.C.)" },
+      { "codigo": "PLLC", "descripcion": "Professional Limited Liability Company (PLLC)" },
+      { "codigo": "SCORP", "descripcion": "S Corporation" },
+      { "codigo": "CCORP", "descripcion": "C Corporation" },
+      { "codigo": "PBC", "descripcion": "Public Benefit Corporation (PBC)" },
+      { "codigo": "COOP", "descripcion": "Cooperative (Co-Op)" },
+      { "codigo": "NP", "descripcion": "Nonprofit Corporation" }
+    ]
+  },
+  "ES": {
+    "pais": "España",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Sociedad Anónima (S.A.)" },
+      { "codigo": "SL", "descripcion": "Sociedad Limitada (S.L.)" },
+      { "codigo": "SLNE", "descripcion": "Sociedad Limitada Nueva Empresa (S.L.N.E.)" },
+      { "codigo": "SAD", "descripcion": "Sociedad Anónima Deportiva (S.A.D.)" },
+      { "codigo": "SLL", "descripcion": "Sociedad Limitada Laboral (S.L.L.)" },
+      { "codigo": "SC", "descripcion": "Sociedad Colectiva (S.C.)" },
+      { "codigo": "SCRA", "descripcion": "Sociedad Comanditaria (S.Cra.)" },
+      { "codigo": "SCOOP", "descripcion": "Sociedad Cooperativa (S.Coop.)" },
+      { "codigo": "CB", "descripcion": "Comunidad de Bienes (C.B.)" }
+    ]
+  },
+  "GB": {
+    "pais": "Reino Unido",
+    "formas": [
+      { "codigo": "LTD", "descripcion": "Private Limited Company (Ltd)" },
+      { "codigo": "PLC", "descripcion": "Public Limited Company (PLC)" },
+      { "codigo": "LLP", "descripcion": "Limited Liability Partnership (LLP)" },
+      { "codigo": "LP", "descripcion": "Limited Partnership (LP)" },
+      { "codigo": "GP", "descripcion": "General Partnership" },
+      { "codigo": "CIC", "descripcion": "Community Interest Company (CIC)" },
+      { "codigo": "CIO", "descripcion": "Charitable Incorporated Organisation (CIO)" }
+    ]
+  },
+  "DE": {
+    "pais": "Alemania",
+    "formas": [
+      { "codigo": "GMBH", "descripcion": "Gesellschaft mit beschränkter Haftung (GmbH)" },
+      { "codigo": "AG", "descripcion": "Aktiengesellschaft (AG)" },
+      { "codigo": "UG", "descripcion": "Unternehmergesellschaft (UG)" },
+      { "codigo": "OHG", "descripcion": "Offene Handelsgesellschaft (OHG)" },
+      { "codigo": "KG", "descripcion": "Kommanditgesellschaft (KG)" },
+      { "codigo": "GMBHCOKG", "descripcion": "GmbH & Co. KG" },
+      { "codigo": "KGAA", "descripcion": "Kommanditgesellschaft auf Aktien (KGaA)" },
+      { "codigo": "EK", "descripcion": "Eingetragener Kaufmann (e.K.)" },
+      { "codigo": "GBR", "descripcion": "Gesellschaft bürgerlichen Rechts (GbR)" },
+      { "codigo": "EG", "descripcion": "Eingetragene Genossenschaft (e.G.)" }
+    ]
+  },
+  "FR": {
+    "pais": "Francia",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Société Anonyme (SA)" },
+      { "codigo": "SAS", "descripcion": "Société par Actions Simplifiée (SAS)" },
+      { "codigo": "SASU", "descripcion": "Société par Actions Simplifiée Unipersonnelle (SASU)" },
+      { "codigo": "SARL", "descripcion": "Société à Responsabilité Limitée (SARL)" },
+      { "codigo": "EURL", "descripcion": "Entreprise Unipersonnelle à Responsabilité Limitée (EURL)" },
+      { "codigo": "SNC", "descripcion": "Société en Nom Collectif (SNC)" },
+      { "codigo": "SCS", "descripcion": "Société en Commandite Simple (SCS)" },
+      { "codigo": "SCA", "descripcion": "Société en Commandite par Actions (SCA)" },
+      { "codigo": "SCOP", "descripcion": "Société Coopérative de Production (SCOP)" }
+    ]
+  },
+  "IT": {
+    "pais": "Italia",
+    "formas": [
+      { "codigo": "SPA", "descripcion": "Società per Azioni (S.p.A.)" },
+      { "codigo": "SRL", "descripcion": "Società a Responsabilità Limitata (S.r.l.)" },
+      { "codigo": "SRLS", "descripcion": "Società a Responsabilità Limitata Semplificata (S.r.l.s.)" },
+      { "codigo": "SAS", "descripcion": "Società in Accomandita Semplice (S.a.s.)" },
+      { "codigo": "SAPA", "descripcion": "Società in Accomandita per Azioni (S.a.p.a.)" },
+      { "codigo": "SNC", "descripcion": "Società in Nome Collettivo (S.n.c.)" },
+      { "codigo": "SS", "descripcion": "Società Semplice (S.s.)" },
+      { "codigo": "SCRL", "descripcion": "Società Cooperativa a Responsabilità Limitata (S.c.r.l.)" }
+    ]
+  },
+  "PT": {
+    "pais": "Portugal",
+    "formas": [
+      { "codigo": "SA", "descripcion": "Sociedade Anónima (S.A.)" },
+      { "codigo": "LDA", "descripcion": "Sociedade por Quotas (Lda.)" },
+      { "codigo": "UNIPLDA", "descripcion": "Sociedade Unipessoal por Quotas (Unipessoal Lda.)" },
+      { "codigo": "SGPS", "descripcion": "Sociedade Gestora de Participações Sociais (SGPS)" },
+      { "codigo": "SUA", "descripcion": "Sociedade Unipessoal Anónima (SUA)" },
+      { "codigo": "CRL", "descripcion": "Cooperativa de Responsabilidade Limitada (CRL)" }
+    ]
+  },
+  "NL": {
+    "pais": "Países Bajos",
+    "formas": [
+      { "codigo": "BV", "descripcion": "Besloten Vennootschap (B.V.)" },
+      { "codigo": "NV", "descripcion": "Naamloze Vennootschap (N.V.)" },
+      { "codigo": "VOF", "descripcion": "Vennootschap Onder Firma (V.O.F.)" },
+      { "codigo": "CV", "descripcion": "Commanditaire Vennootschap (C.V.)" },
+      { "codigo": "COOP", "descripcion": "Coöperatie" },
+      { "codigo": "STICHT", "descripcion": "Stichting (Fundación)" }
+    ]
+  },
+  "BE": {
+    "pais": "Bélgica",
+    "formas": [
+      { "codigo": "NV", "descripcion": "Naamloze Vennootschap / Société Anonyme (NV/SA)" },
+      { "codigo": "BV", "descripcion": "Besloten Vennootschap / Société à Responsabilité Limitée (BV/SRL)" },
+      { "codigo": "VOF", "descripcion": "Vennootschap Onder Firma / Société en Nom Collectif (VOF/SNC)" },
+      { "codigo": "COMMV", "descripcion": "Commanditaire Vennootschap / Société en Commandite (Comm.V./SCS)" },
+      { "codigo": "CVBA", "descripcion": "Coöperatieve Vennootschap / Société Coopérative (CVBA/SCRL)" },
+      { "codigo": "VZW", "descripcion": "Vereniging Zonder Winstoogmerk / Association Sans But Lucratif (VZW/ASBL)" }
+    ]
+  },
+  "CH": {
+    "pais": "Suiza",
+    "formas": [
+      { "codigo": "AG", "descripcion": "Aktiengesellschaft / Société Anonyme (AG/SA)" },
+      { "codigo": "GMBH", "descripcion": "Gesellschaft mit beschränkter Haftung / Société à Responsabilité Limitée (GmbH/Sàrl)" },
+      { "codigo": "KG", "descripcion": "Kommanditgesellschaft / Société en Commandite (KG)" },
+      { "codigo": "KGAA", "descripcion": "Kommanditaktiengesellschaft" },
+      { "codigo": "GEN", "descripcion": "Genossenschaft / Société Coopérative" }
+    ]
+  },
+  "AT": {
+    "pais": "Austria",
+    "formas": [
+      { "codigo": "GMBH", "descripcion": "Gesellschaft mit beschränkter Haftung (GmbH)" },
+      { "codigo": "AG", "descripcion": "Aktiengesellschaft (AG)" },
+      { "codigo": "OG", "descripcion": "Offene Gesellschaft (OG)" },
+      { "codigo": "KG", "descripcion": "Kommanditgesellschaft (KG)" },
+      { "codigo": "GMBHCOKG", "descripcion": "GmbH & Co. KG" },
+      { "codigo": "GEN", "descripcion": "Genossenschaft (Gen)" },
+      { "codigo": "EU", "descripcion": "Eingetragenes Einzelunternehmen (e.U.)" }
+    ]
+  },
+  "CN": {
+    "pais": "China",
+    "formas": [
+      { "codigo": "LLC", "descripcion": "有限责任公司 - Company with Limited Liability" },
+      { "codigo": "JSC", "descripcion": "股份有限公司 - Joint Stock Company" },
+      { "codigo": "SOLE", "descripcion": "个人独资企业 - Sole Trader" },
+      { "codigo": "PART", "descripcion": "合伙制企业 - Partnership" }
+    ]
+  },
+  "JP": {
+    "pais": "Japón",
+    "formas": [
+      { "codigo": "KK", "descripcion": "株式会社 - Kabushiki Kaisha (K.K.)" },
+      { "codigo": "GK", "descripcion": "合同会社 - Gōdō Kaisha (G.K.)" },
+      { "codigo": "YK", "descripcion": "有限会社 - Yūgen Kaisha (Y.K.)" },
+      { "codigo": "GMK", "descripcion": "合名会社 - Gōmei Kaisha" },
+      { "codigo": "GSK", "descripcion": "合資会社 - Gōshi Kaisha" }
+    ]
+  },
+  "KR": {
+    "pais": "Corea del Sur",
+    "formas": [
+      { "codigo": "JUSIK", "descripcion": "주식회사 - Jusikhoesa (Corporation)" },
+      { "codigo": "YUHAN", "descripcion": "유한회사 - Yuhanhoesa (Limited Company)" },
+      { "codigo": "YUHANCHAEGIM", "descripcion": "유한책임회사 - Yuhanchaegimhoesa (LLC)" },
+      { "codigo": "HAMMYEONG", "descripcion": "합명회사 - Hammyeonghoesa (General Partnership)" },
+      { "codigo": "HAPJA", "descripcion": "합자회사 - Hapjahoesa (Limited Partnership)" }
+    ]
+  },
+  "IN": {
+    "pais": "India",
+    "formas": [
+      { "codigo": "PVTLTD", "descripcion": "Private Limited Company (Pvt. Ltd.)" },
+      { "codigo": "LTD", "descripcion": "Public Limited Company (Ltd.)" },
+      { "codigo": "OPC", "descripcion": "One Person Company (OPC)" },
+      { "codigo": "LLP", "descripcion": "Limited Liability Partnership (LLP)" },
+      { "codigo": "PART", "descripcion": "Partnership Firm" },
+      { "codigo": "SOLE", "descripcion": "Sole Proprietorship" }
+    ]
+  },
+  "AU": {
+    "pais": "Australia",
+    "formas": [
+      { "codigo": "PTYLTD", "descripcion": "Proprietary Limited Company (Pty. Ltd.)" },
+      { "codigo": "LTD", "descripcion": "Public Company Limited (Ltd.)" },
+      { "codigo": "NL", "descripcion": "No Liability Company (NL)" },
+      { "codigo": "INC", "descripcion": "Incorporated Association (Inc.)" },
+      { "codigo": "TRUST", "descripcion": "Trust" }
+    ]
+  },
+  "CA": {
+    "pais": "Canadá",
+    "formas": [
+      { "codigo": "LTD", "descripcion": "Limited / Limitée (Ltd. / Ltée)" },
+      { "codigo": "INC", "descripcion": "Incorporated / Incorporée (Inc.)" },
+      { "codigo": "CORP", "descripcion": "Corporation / Société (Corp.)" },
+      { "codigo": "LP", "descripcion": "Limited Partnership (LP)" },
+      { "codigo": "GP", "descripcion": "General Partnership (GP)" },
+      { "codigo": "ULC", "descripcion": "Unlimited Liability Corporation (ULC)" },
+      { "codigo": "COOP", "descripcion": "Cooperative" }
+    ]
+  },
+  "RU": {
+    "pais": "Rusia",
+    "formas": [
+      { "codigo": "OOO", "descripcion": "Общество с ограниченной ответственностью (ООО / LLC)" },
+      { "codigo": "AO", "descripcion": "Акционерное общество (АО / JSC)" },
+      { "codigo": "PAO", "descripcion": "Публичное акционерное общество (ПАО / PJSC)" },
+      { "codigo": "IP", "descripcion": "Индивидуальный предприниматель (ИП / Sole Proprietor)" },
+      { "codigo": "GUP", "descripcion": "Государственное унитарное предприятие (ГУП)" },
+      { "codigo": "COOP", "descripcion": "Кооператив (Cooperative)" }
+    ]
+  },
+  "ZA": {
+    "pais": "Sudáfrica",
+    "formas": [
+      { "codigo": "PTYLTD", "descripcion": "Private Company (Pty) Ltd" },
+      { "codigo": "LTD", "descripcion": "Public Company (Ltd)" },
+      { "codigo": "NPC", "descripcion": "Non-Profit Company (NPC)" },
+      { "codigo": "CC", "descripcion": "Close Corporation (CC)" },
+      { "codigo": "INC", "descripcion": "Incorporated (Inc)" }
+    ]
+  }
+}
