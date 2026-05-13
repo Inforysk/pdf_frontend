@@ -139,7 +139,6 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
         const res = await axios.get(`/api/v1/boletin-oficial/${encodeURIComponent(cuitClean)}`)
         if (res.data?.success && res.data.data?.encontrado) {
           setResultado(res.data.data)
-          setExpanded(true)
         }
       } catch (err) {
         // 404 es normal - no hay datos guardados
@@ -199,7 +198,6 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
 
       const data = res.data.data || {}
       setResultado(data)
-      setExpanded(true)
 
       // Cargar historial para mostrar evolución y cambios detectados
       setHistorialLoading(true)
