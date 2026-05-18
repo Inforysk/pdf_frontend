@@ -22,6 +22,7 @@
     "react-hot-toast": "^2.4.1",
     "react-i18next": "^17.0.6",
     "react-leaflet": "^4.2.1",
+    "react-quill": "^2.0.0",
     "react-quill-new": "^3.8.3",
     "recharts": "^3.8.1"
   },
