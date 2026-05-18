@@ -39,6 +39,8 @@ import ActividadSelector from './ActividadSelector'
 import FormaLegalSelector from './FormaLegalSelector'
 import DomicilioAutocomplete from './DomicilioAutocomplete'
 import PhoneInput from './PhoneInput'
+import ProgressModal from './ui/ProgressModal'
+import SocietariaStructureEditor from './SocietariaStructureEditor'
 
 // ── Validación de email ──
 function validateEmail(email) {
@@ -546,6 +548,13 @@ function formatDraftDate(isoString) {
 cleanOldDrafts()
 
 function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, sinopsisInfo, countryConfig, isNewBlank, onNewReportReady, fromSolicitud, isFromPdfUpload = false }) {
+  const BALANCE_EXTRACT_STEPS = [
+    { time: 0, msg: 'Subiendo balance PDF...' },
+    { time: 5, msg: 'Leyendo contenido del documento...' },
+    { time: 12, msg: 'Extrayendo datos financieros...' },
+    { time: 20, msg: 'Validando periodos y consolidando resultados...' },
+  ]
+
   const { isAdmin } = useAuth()
   const isNewReport = !data && !empresaId && !!countryConfig
   const afipData = countryConfig?.afipData || {}
@@ -598,6 +607,30 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
   const formDataRef = useRef(formData) // Para acceder a formData actual en el timer
   const selectedPaisRef = useRef(selectedPais)
   const originalDataRef = useRef(null) // Datos originales para comparar cambios
+
+  // ── Extracción de Balance desde PDF ──
+  const [extractingBalance, setExtractingBalance] = useState(false)
+  const balanceFileInputRef = useRef(null)
+  const [historicalBalances, setHistoricalBalances] = useState([]) // Balances históricos extraídos
+  const [showHistoricalModal, setShowHistoricalModal] = useState(false) // Modal para ver historial
+  const [savedBalances, setSavedBalances] = useState([]) // Balances guardados en BD
+  const [loadingBalances, setLoadingBalances] = useState(false)
+  const [selectedBalanceDetail, setSelectedBalanceDetail] = useState(null) // Balance seleccionado para ver detalle
+  const [extractBalanceElapsed, setExtractBalanceElapsed] = useState(0)
+  const extractBalanceStartRef = useRef(null)
+
+  // Timer de extracción para modal de carga bloqueante
+  useEffect(() => {
+    if (!extractingBalance) {
+      setExtractBalanceElapsed(0)
+      return
+    }
+    extractBalanceStartRef.current = Date.now()
+    const interval = setInterval(() => {
+      setExtractBalanceElapsed(Math.floor((Date.now() - extractBalanceStartRef.current) / 1000))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [extractingBalance])
 
   // Mantener refs actualizados
   useEffect(() => { formDataRef.current = formData }, [formData])
@@ -1163,6 +1196,165 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     })
   }
 
+  // ── Extracción de Balance desde PDF ──
+  // Formatear número para mostrar (con comas como separador de miles)
+  const formatBalanceNumber = (num) => {
+    if (num === null || num === undefined) return ''
+    const rounded = Math.round(num)
+    return rounded.toLocaleString('en-US')
+  }
+  
+  // Construir texto de un balance
+  const formatBalanceText = (balance) => {
+    const lines = []
+    if (balance.fecha_balance) lines.push(`Fecha balance: ${balance.fecha_balance} (último conocido)`)
+    if (balance.activo_corriente) lines.push(`Activo Corriente: ${formatBalanceNumber(balance.activo_corriente)}`)
+    if (balance.activo_no_corriente) lines.push(`Activo no Corriente: ${formatBalanceNumber(balance.activo_no_corriente)}`)
+    if (balance.total_activo) lines.push(`Total Activo: ${formatBalanceNumber(balance.total_activo)}`)
+    if (balance.pasivo_corriente) lines.push(`Pasivo Corriente: ${formatBalanceNumber(balance.pasivo_corriente)}`)
+    if (balance.pasivo_no_corriente) lines.push(`Pasivo no Corriente: ${formatBalanceNumber(balance.pasivo_no_corriente)}`)
+    if (balance.total_pasivo) lines.push(`Total Pasivo: ${formatBalanceNumber(balance.total_pasivo)}`)
+    if (balance.patrimonio_neto) lines.push(`Patrimonio Neto: ${formatBalanceNumber(balance.patrimonio_neto)}`)
+    if (balance.total_pasivo && balance.patrimonio_neto) {
+      lines.push(`Total Pasivo + Patrimonio Neto: ${formatBalanceNumber(balance.total_pasivo + balance.patrimonio_neto)}`)
+    }
+    if (balance.ventas_netas) lines.push(`Ventas Netas: ${formatBalanceNumber(balance.ventas_netas)}`)
+    if (balance.resultado_ejercicio !== null && balance.resultado_ejercicio !== undefined) {
+      lines.push(`Resultado del Ejercicio: ${formatBalanceNumber(balance.resultado_ejercicio)}`)
+    }
+    return lines.join('<br>')
+  }
+  
+  // Cargar balances históricos guardados
+  const loadSavedBalances = async (overrideId = null) => {
+    const idToUse = overrideId || empresaId
+    if (!idToUse) return
+    setLoadingBalances(true)
+    try {
+      const res = await axios.get(`/api/empresas/${idToUse}/balances`)
+      if (res.data.success) {
+        setSavedBalances(res.data.balances || [])
+      }
+    } catch (err) {
+      console.error('Error cargando balances:', err)
+    } finally {
+      setLoadingBalances(false)
+    }
+  }
+  
+  // Cargar balances guardados al abrir un informe existente o al detectar empresa por CUIT.
+  // Esto permite marcar informes que ya tienen balance general cargado.
+  useEffect(() => {
+    const idToUse = empresaId || existingEmpresa?.id
+    if (idToUse) {
+      loadSavedBalances(idToUse)
+    } else {
+      setSavedBalances([])
+    }
+  }, [empresaId, existingEmpresa?.id])
+  
+  // Guardar un balance histórico
+  const saveHistoricalBalance = async (balance) => {
+    if (!empresaId) {
+      toast.info('Guarda el informe primero para poder guardar el historial')
+      return
+    }
+    try {
+      const res = await axios.post(`/api/empresas/${empresaId}/balances`, balance)
+      if (res.data.success) {
+        toast.success(`Balance ${balance.year} guardado en historial`)
+        loadSavedBalances() // Recargar lista
+      } else {
+        toast.error(res.data.error || 'Error guardando balance')
+      }
+    } catch (err) {
+      toast.error('Error al guardar balance histórico')
+    }
+  }
+  
+  // Agregar balance histórico al formulario
+  const addHistoricalToForm = (balance) => {
+    const balanceText = formatBalanceText(balance)
+    if (balanceText) {
+      const currentContent = formData.situacion_economica_financiera || ''
+      const separator = `<br><br>--- Balance histórico ${balance.year || balance.fecha_balance} ---<br>`
+      const newContent = currentContent 
+        ? `${currentContent}${separator}${balanceText}`
+        : balanceText
+      handleChange('situacion_economica_financiera', newContent)
+      toast.success(`Balance ${balance.year || balance.fecha_balance} agregado al formulario`)
+      setShowHistoricalModal(false)
+    }
+  }
+  
+  const handleExtractBalance = async (file) => {
+    if (!file) return
+    
+    setExtractingBalance(true)
+    const formDataUpload = new FormData()
+    formDataUpload.append('file', file)
+    
+    try {
+      const res = await axios.post('/api/extract-balance', formDataUpload, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      
+      if (res.data.success && res.data.data) {
+        const balance = res.data.data
+        const extractedCount = res.data.extracted_fields || 0
+        const historicalData = res.data.historical || []
+        const allPeriods = res.data.all_periods || []
+        
+        // Guardar TODOS los balances extraídos (actual + históricos) para mostrar y guardar después
+        // Usamos all_periods que incluye tanto el actual como los anteriores
+        if (allPeriods.length > 0) {
+          setHistoricalBalances(allPeriods)
+        } else if (balance) {
+          // Si no hay all_periods, al menos guardar el actual
+          setHistoricalBalances([balance, ...historicalData])
+        }
+        
+        // Construir texto del balance actual con saltos de línea HTML
+        const balanceText = formatBalanceText(balance)
+        
+        if (balanceText) {
+          // Obtener contenido actual y agregar los datos extraídos
+          const currentContent = formData.situacion_economica_financiera || ''
+          const separator = '<br><br>--- Datos extraídos del balance ---<br>'
+          const newContent = currentContent 
+            ? `${currentContent}${separator}${balanceText}`
+            : balanceText
+          
+          handleChange('situacion_economica_financiera', newContent)
+          
+          // Mensaje con info de todos los períodos extraídos
+          if (allPeriods.length > 1) {
+            const years = allPeriods.map(h => h.year).join(', ')
+            toast.success(
+              `Se extrajeron datos de ${allPeriods.length} períodos: ${years}. Se guardarán automáticamente al guardar el informe.`,
+              { duration: 5000 }
+            )
+          } else {
+            toast.success(`Se extrajeron ${extractedCount} campos del balance`)
+          }
+        } else {
+          toast.error('No se pudieron extraer datos del PDF. Verifique que sea un estado financiero válido.')
+        }
+      } else {
+        toast.error(res.data.error || 'Error al extraer datos del PDF')
+      }
+    } catch (err) {
+      console.error('Error extrayendo balance:', err)
+      toast.error(err.response?.data?.error || 'Error al procesar el archivo PDF')
+    } finally {
+      setExtractingBalance(false)
+      // Reset input file
+      if (balanceFileInputRef.current) {
+        balanceFileInputRef.current.value = ''
+      }
+    }
+  }
+
   const handleSave = async () => {
     // Validar país primero (solo nuevo informe en blanco)
     if (isNewBlank && !selectedPais) {
@@ -1225,6 +1417,25 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
         if (newId) {
           // Actualizar draftKey con el nuevo ID
           setDraftKey(getDraftKey(formData.cuit, newId))
+          
+          // ✅ Guardar balances extraídos automáticamente
+          if (historicalBalances.length > 0) {
+            try {
+              const balancesRes = await axios.post(`/api/empresas/${newId}/balances/batch`, {
+                balances: historicalBalances
+              })
+              if (balancesRes.data.success && balancesRes.data.saved > 0) {
+                toast.success(`${balancesRes.data.saved} balances históricos guardados`, { duration: 3000 })
+                // Limpiar balances extraídos y recargar los guardados
+                setHistoricalBalances([])
+                loadSavedBalances(newId)
+              }
+            } catch (balanceErr) {
+              console.error('Error guardando balances:', balanceErr)
+              // No mostrar error al usuario, los balances son secundarios
+            }
+          }
+          
           try {
             const fresh = await axios.get(`/api/empresas/${newId}`, {
               headers: { 'Cache-Control': 'no-cache' }
@@ -1509,6 +1720,14 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     const telefonos = getTelefonos()
     const emails = getEmails()
     const domicilioValue = getFieldValue('domicilio')
+    const contactoExtraFields = (formData.extra_fields || []).filter((field) => {
+      if (field?.group !== 'contacto') return false
+      const label = String(field?.label || '')
+      // Estos ya tienen UI dedicada en este bloque
+      if (label.startsWith('Teléfono ')) return false
+      if (label === 'Sitio Web' || label === 'LinkedIn') return false
+      return true
+    })
     const locked = isFieldLocked('domicilio')
     const fieldDisabled = !editMode || locked
     const isDomicilioEmpty = !domicilioValue || domicilioValue === ''
@@ -1729,6 +1948,32 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
             />
           </div>
         </div>
+
+        {/* CAMPOS EXTRA DE CONTACTO */}
+        {mode === 'edit' && (
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-700">Campos extra de contacto</span>
+              <button
+                type="button"
+                onClick={() => handleAddExtraField('contacto')}
+                disabled={!editMode}
+                className="inline-flex items-center gap-1 rounded-md border border-blue-200 px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" />
+                Agregar campo extra
+              </button>
+            </div>
+
+            {contactoExtraFields.length > 0 ? (
+              <div className="space-y-3">
+                {contactoExtraFields.map(renderExtraField)}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">No hay campos extra en contacto.</p>
+            )}
+          </div>
+        )}
       </div>
     )
   }
@@ -1767,6 +2012,52 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
                 {isFieldJustified(field.name) ? 'Justificado' : 'Justificar'}
               </button>
             )}
+            {/* Botón especial para adjuntar balance PDF en Situación Económica */}
+            {field.name === 'situacion_economica_financiera' && editMode && (
+              <>
+                <input
+                  type="file"
+                  ref={balanceFileInputRef}
+                  accept=".pdf"
+                  onChange={(e) => handleExtractBalance(e.target.files[0])}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => balanceFileInputRef.current?.click()}
+                  disabled={extractingBalance}
+                  title="Adjuntar PDF de balance para extraer datos automáticamente"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition-colors bg-emerald-100 text-emerald-700 border border-emerald-300 hover:bg-emerald-200 disabled:opacity-50"
+                >
+                  {extractingBalance ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Extrayendo...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="h-3 w-3" />
+                      Adjuntar Balance PDF
+                    </>
+                  )}
+                </button>
+                {/* Botón para ver historial de balances - siempre visible si hay empresa o balances extraídos */}
+                {(historicalBalances.length > 0 || savedBalances.length > 0 || empresaId) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (empresaId) loadSavedBalances()
+                      setShowHistoricalModal(true)
+                    }}
+                    title="Ver balances históricos disponibles"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition-colors bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200"
+                  >
+                    <Clock className="h-3 w-3" />
+                    Historial {(historicalBalances.length + savedBalances.length) > 0 && `(${historicalBalances.length + savedBalances.length})`}
+                  </button>
+                )}
+              </>
+            )}
           </span>
         </label>
         
@@ -1774,7 +2065,13 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
           <p className="text-xs text-gray-500 mb-1">{field.description}{locked && <span className="ml-1 text-blue-500 font-medium">(dato validado por AFIP)</span>}</p>
         )}
         
-        {field.type === 'textarea' ? (
+        {field.name === 'estructura_societaria' ? (
+          <SocietariaStructureEditor
+            value={value || ''}
+            onChange={(content) => handleChange(field.name, content)}
+            disabled={fieldDisabled}
+          />
+        ) : field.type === 'textarea' ? (
           <div className={`quill-wrapper ${fieldDisabled ? 'quill-disabled' : ''} ${isEmpty ? 'quill-empty' : ''}`}>
             <ReactQuill
               theme="snow"
@@ -1989,9 +2286,22 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
   const habilitaValidacionExterna = habilitaValidacionArgentina || habilitaValidacionUruguay
   // OSINT disponible para cualquier país con ID fiscal y razón social
   const habilitaOsint = !!(formData.cuit && formData.razon_social)
+  const hasBalanceGeneral = (savedBalances?.length || 0) > 0 || (historicalBalances?.length || 0) > 0
+  const currentExtractStep = BALANCE_EXTRACT_STEPS.filter(s => s.time <= extractBalanceElapsed).pop() || BALANCE_EXTRACT_STEPS[0]
 
   return (
     <div className="max-w-5xl mx-auto">
+      <ProgressModal
+        isOpen={extractingBalance}
+        title="Procesando balance PDF"
+        message={currentExtractStep.msg}
+        elapsed={extractBalanceElapsed}
+        progressMaxSeconds={45}
+        accent="blue"
+        subtitle="La extracción puede tardar según el tamaño y calidad del PDF"
+        footer="No cierres esta ventana mientras se completa el proceso"
+      />
+
       {/* Loading State */}
       {loading && (
         <div className="flex items-center justify-center py-12">
@@ -2523,7 +2833,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
               // Si append es true, agregar al valor existente
               if (append && formData[campo]) {
                 const valorActual = formData[campo]
-                nuevoValor = valorActual + '<br/><br/>' + nuevoValor
+                nuevoValor = valorActual + '\n\n' + nuevoValor
               }
               handleChange(campo, nuevoValor)
               setHighlightedField(campo)
@@ -2575,8 +2885,17 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
           <BoletinValidationPanel
             cuit={formData.cuit}
             razonSocial={formData.razon_social}
-            onApplyField={editMode ? (campo, valor) => {
-              handleChange(campo, normalizeAppliedValue(campo, valor))
+            onApplyField={editMode ? (campo, valor, options = {}) => {
+              let nuevoValor = normalizeAppliedValue(campo, valor)
+              
+              // Si append es true, agregar al valor existente en vez de reemplazar
+              if (options.append && formData[campo]) {
+                const valorExistente = formData[campo] || ''
+                const separador = campo === 'estructura_societaria' ? '' : '\n\n---\n\n'
+                nuevoValor = valorExistente + separador + nuevoValor
+              }
+              
+              handleChange(campo, nuevoValor)
               setHighlightedField(campo)
               if (highlightTimerRef.current) {
                 clearTimeout(highlightTimerRef.current)
@@ -2605,7 +2924,15 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
               <div className="flex items-center">
                 <GroupIcon className="h-5 w-5 text-gray-500 mr-3" />
                 <div className="text-left">
-                  <h3 className="font-semibold text-gray-900">{groupInfo.title}</h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-semibold text-gray-900">{groupInfo.title}</h3>
+                    {groupKey === 'texto' && hasBalanceGeneral && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-800 border border-green-300">
+                        <CheckCircle className="h-3 w-3" />
+                        Balance General
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-500">{groupInfo.description}</p>
                 </div>
               </div>
@@ -2701,6 +3028,237 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
 
       </div>{/* cierre div countrySelected wrapper */}
         </>
+      )}
+      
+      {/* Modal de Historial de Balances */}
+      {showHistoricalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b flex items-center justify-between bg-gray-50">
+              <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                <Clock className="h-5 w-5 text-blue-600" />
+                Balances Históricos
+              </h3>
+              <button
+                onClick={() => setShowHistoricalModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="p-4 overflow-y-auto flex-1">
+              {/* Balances extraídos del PDF actual */}
+              {historicalBalances.length > 0 && (
+                <div className="mb-6">
+                  <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Extraídos del PDF 
+                    <span className="text-xs text-amber-600 font-normal">(se guardarán automáticamente al guardar el informe)</span>
+                  </h4>
+                  <div className="space-y-3">
+                    {historicalBalances.map((balance, idx) => (
+                      <div key={`hist-${idx}`} className="border rounded-lg p-3 bg-amber-50 border-amber-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium text-amber-800">
+                            Balance {balance.year || balance.fecha_balance}
+                            {idx === 0 && <span className="ml-2 text-xs bg-amber-200 px-1.5 py-0.5 rounded">Último</span>}
+                          </span>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setSelectedBalanceDetail(balance)}
+                              className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                            >
+                              Ver detalle
+                            </button>
+                            <button
+                              onClick={() => addHistoricalToForm(balance)}
+                              className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                            >
+                              Agregar al formulario
+                            </button>
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-600 grid grid-cols-2 gap-1">
+                          {balance.total_activo && <span>Total Activo: {formatBalanceNumber(balance.total_activo)}</span>}
+                          {balance.total_pasivo && <span>Total Pasivo: {formatBalanceNumber(balance.total_pasivo)}</span>}
+                          {balance.patrimonio_neto && <span>Patrimonio Neto: {formatBalanceNumber(balance.patrimonio_neto)}</span>}
+                          {balance.ventas_netas && <span>Ventas Netas: {formatBalanceNumber(balance.ventas_netas)}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Balances guardados en BD */}
+              {loadingBalances ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                  <span className="ml-2 text-gray-600">Cargando historial...</span>
+                </div>
+              ) : savedBalances.length > 0 ? (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    Guardados en historial
+                  </h4>
+                  <div className="space-y-3">
+                    {savedBalances.map((balance) => (
+                      <div key={balance.id} className="border rounded-lg p-3 bg-green-50 border-green-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium text-green-800">
+                            Balance {balance.year || balance.fecha_balance}
+                          </span>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setSelectedBalanceDetail(balance)}
+                              className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                            >
+                              Ver detalle
+                            </button>
+                            <button
+                              onClick={() => addHistoricalToForm(balance)}
+                              className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                            >
+                              Agregar al formulario
+                            </button>
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-600 grid grid-cols-2 gap-1">
+                          {balance.total_activo && <span>Total Activo: {formatBalanceNumber(balance.total_activo)}</span>}
+                          {balance.total_pasivo && <span>Total Pasivo: {formatBalanceNumber(balance.total_pasivo)}</span>}
+                          {balance.patrimonio_neto && <span>Patrimonio Neto: {formatBalanceNumber(balance.patrimonio_neto)}</span>}
+                          {balance.ventas_netas && <span>Ventas Netas: {formatBalanceNumber(balance.ventas_netas)}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : !historicalBalances.length && (
+                <div className="text-center py-8 text-gray-500">
+                  <Clock className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                  <p>No hay balances históricos disponibles</p>
+                  <p className="text-sm mt-1">Sube un PDF con datos comparativos para extraer el historial</p>
+                </div>
+              )}
+            </div>
+            
+            <div className="px-4 py-3 border-t bg-gray-50 flex justify-end">
+              <button
+                onClick={() => setShowHistoricalModal(false)}
+                className="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal de Detalle de Balance */}
+      {selectedBalanceDetail && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b flex items-center justify-between bg-blue-50">
+              <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                <FileText className="h-5 w-5 text-blue-600" />
+                Balance {selectedBalanceDetail.year || selectedBalanceDetail.fecha_balance}
+              </h3>
+              <button
+                onClick={() => setSelectedBalanceDetail(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="p-4 overflow-y-auto flex-1">
+              <div className="space-y-4">
+                {/* Fecha */}
+                <div className="pb-3 border-b">
+                  <span className="text-xs text-gray-500">Fecha del Balance</span>
+                  <p className="font-medium text-gray-800">{selectedBalanceDetail.fecha_balance || `31/12/${selectedBalanceDetail.year}`}</p>
+                </div>
+                
+                {/* ACTIVO */}
+                <div>
+                  <h4 className="text-sm font-semibold text-blue-700 mb-2 uppercase">Activo</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="bg-gray-50 p-2 rounded">
+                      <span className="text-xs text-gray-500">Activo Corriente</span>
+                      <p className="font-medium">{selectedBalanceDetail.activo_corriente ? formatBalanceNumber(selectedBalanceDetail.activo_corriente) : '-'}</p>
+                    </div>
+                    <div className="bg-gray-50 p-2 rounded">
+                      <span className="text-xs text-gray-500">Activo No Corriente</span>
+                      <p className="font-medium">{selectedBalanceDetail.activo_no_corriente ? formatBalanceNumber(selectedBalanceDetail.activo_no_corriente) : '-'}</p>
+                    </div>
+                    <div className="col-span-2 bg-blue-50 p-2 rounded">
+                      <span className="text-xs text-gray-500">Total Activo</span>
+                      <p className="font-semibold text-blue-700">{selectedBalanceDetail.total_activo ? formatBalanceNumber(selectedBalanceDetail.total_activo) : '-'}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* PASIVO */}
+                <div>
+                  <h4 className="text-sm font-semibold text-red-700 mb-2 uppercase">Pasivo</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="bg-gray-50 p-2 rounded">
+                      <span className="text-xs text-gray-500">Pasivo Corriente</span>
+                      <p className="font-medium">{selectedBalanceDetail.pasivo_corriente ? formatBalanceNumber(selectedBalanceDetail.pasivo_corriente) : '-'}</p>
+                    </div>
+                    <div className="bg-gray-50 p-2 rounded">
+                      <span className="text-xs text-gray-500">Pasivo No Corriente</span>
+                      <p className="font-medium">{selectedBalanceDetail.pasivo_no_corriente ? formatBalanceNumber(selectedBalanceDetail.pasivo_no_corriente) : '-'}</p>
+                    </div>
+                    <div className="col-span-2 bg-red-50 p-2 rounded">
+                      <span className="text-xs text-gray-500">Total Pasivo</span>
+                      <p className="font-semibold text-red-700">{selectedBalanceDetail.total_pasivo ? formatBalanceNumber(selectedBalanceDetail.total_pasivo) : '-'}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* PATRIMONIO Y RESULTADOS */}
+                <div>
+                  <h4 className="text-sm font-semibold text-green-700 mb-2 uppercase">Patrimonio y Resultados</h4>
+                  <div className="grid grid-cols-1 gap-2 text-sm">
+                    <div className="bg-green-50 p-2 rounded">
+                      <span className="text-xs text-gray-500">Patrimonio Neto</span>
+                      <p className="font-semibold text-green-700">{selectedBalanceDetail.patrimonio_neto ? formatBalanceNumber(selectedBalanceDetail.patrimonio_neto) : '-'}</p>
+                    </div>
+                    <div className="bg-gray-50 p-2 rounded">
+                      <span className="text-xs text-gray-500">Ventas Netas</span>
+                      <p className="font-medium">{selectedBalanceDetail.ventas_netas ? formatBalanceNumber(selectedBalanceDetail.ventas_netas) : '-'}</p>
+                    </div>
+                    <div className="bg-gray-50 p-2 rounded">
+                      <span className="text-xs text-gray-500">Resultado del Ejercicio</span>
+                      <p className="font-medium">{selectedBalanceDetail.resultado_ejercicio ? formatBalanceNumber(selectedBalanceDetail.resultado_ejercicio) : '-'}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="px-4 py-3 border-t bg-gray-50 flex justify-between">
+              <button
+                onClick={() => {
+                  addHistoricalToForm(selectedBalanceDetail)
+                  setSelectedBalanceDetail(null)
+                }}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Agregar al formulario
+              </button>
+              <button
+                onClick={() => setSelectedBalanceDetail(null)}
+                className="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

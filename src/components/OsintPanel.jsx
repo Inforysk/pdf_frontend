@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { Globe, Shield, Search, Newspaper, Linkedin, AlertTriangle, CheckCircle, XCircle, Loader2, RefreshCw, ChevronDown, ChevronUp, ExternalLink, Plus } from 'lucide-react'
+import ProgressModal from './ui/ProgressModal'
 
 // Pasos de OSINT para el modal de progreso
 const OSINT_STEPS = [
@@ -127,41 +128,16 @@ export default function OsintPanel({ cuit, razonSocial, email, onAddExtraField }
 
   return (
     <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
-      {/* Modal de OSINT en progreso - bloquea toda interacción */}
-      {loading && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 text-center">
-            <div className="mb-6">
-              <div className="relative w-24 h-24 mx-auto">
-                <svg className="w-24 h-24 animate-spin" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="40" fill="none" stroke="#e5e7eb" strokeWidth="8" />
-                  <circle cx="50" cy="50" r="40" fill="none" stroke="#8b5cf6" strokeWidth="8" 
-                    strokeDasharray="251" strokeDashoffset="188" strokeLinecap="round" />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-2xl font-bold text-violet-600">{osintElapsed}s</span>
-                </div>
-              </div>
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Ejecutando OSINT</h3>
-            <p className="text-gray-600 mb-4 min-h-[24px] transition-all duration-300">
-              {currentOsintStep.msg}
-            </p>
-            <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
-              <div 
-                className="bg-violet-600 h-2 rounded-full transition-all duration-1000" 
-                style={{ width: `${Math.min(100, (osintElapsed / 50) * 100)}%` }}
-              />
-            </div>
-            <p className="text-sm text-gray-400">
-              Analizando presencia digital
-            </p>
-            <p className="text-xs text-gray-400 mt-2">
-              No cierre esta ventana
-            </p>
-          </div>
-        </div>
-      )}
+      <ProgressModal
+        isOpen={loading}
+        title="Ejecutando OSINT"
+        message={currentOsintStep.msg}
+        elapsed={osintElapsed}
+        progressMaxSeconds={50}
+        accent="violet"
+        subtitle="Analizando presencia digital"
+        footer="No cierre esta ventana"
+      />
 
       {/* Header — mismo estilo que ValidationPanel */}
       <div className="p-4 flex items-center justify-between">

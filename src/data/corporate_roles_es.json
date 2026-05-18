@@ -1,0 +1,498 @@
+[
+  {
+    "code": "presidente",
+    "sigla": null,
+    "cargo": "Presidente",
+    "definicion": "Máxima autoridad del directorio o consejo de administración.",
+    "categoria": "Societario",
+    "fuente": "Uso societario"
+  },
+  {
+    "code": "vicepresidente",
+    "sigla": null,
+    "cargo": "Vicepresidente",
+    "definicion": "Sustituye al presidente y apoya la conducción del órgano societario.",
+    "categoria": "Societario",
+    "fuente": "Uso societario"
+  },
+  {
+    "code": "director_titular",
+    "sigla": null,
+    "cargo": "Director titular",
+    "definicion": "Miembro con mandato pleno del directorio.",
+    "categoria": "Societario",
+    "fuente": "Uso societario"
+  },
+  {
+    "code": "director_suplente",
+    "sigla": null,
+    "cargo": "Director suplente",
+    "definicion": "Miembro que reemplaza a un director titular ante vacancia o ausencia.",
+    "categoria": "Societario",
+    "fuente": "Uso societario"
+  },
+  {
+    "code": "sindico_titular",
+    "sigla": null,
+    "cargo": "Síndico titular",
+    "definicion": "Responsable de la fiscalización societaria y legal según estatuto.",
+    "categoria": "Societario",
+    "fuente": "Uso societario"
+  },
+  {
+    "code": "sindico_suplente",
+    "sigla": null,
+    "cargo": "Síndico suplente",
+    "definicion": "Reemplazo del síndico titular en funciones de fiscalización.",
+    "categoria": "Societario",
+    "fuente": "Uso societario"
+  },
+  {
+    "code": "apoderado",
+    "sigla": null,
+    "cargo": "Apoderado",
+    "definicion": "Representante con poder para actos jurídicos y administrativos.",
+    "categoria": "Societario",
+    "fuente": "Uso societario"
+  },
+  {
+    "code": "secretario_directorio",
+    "sigla": null,
+    "cargo": "Secretario de directorio",
+    "definicion": "Gestiona actas, documentación y formalidades del órgano de gobierno.",
+    "categoria": "Societario",
+    "fuente": "Uso societario"
+  },
+  {
+    "code": "tesorero",
+    "sigla": null,
+    "cargo": "Tesorero",
+    "definicion": "Administra tesorería, disponibilidades y ejecución financiera diaria.",
+    "categoria": "Societario",
+    "fuente": "Uso societario"
+  },
+  {
+    "code": "gerente_general",
+    "sigla": "GM",
+    "cargo": "General Manager",
+    "definicion": "Responsable general de la gestión operativa y resultados del negocio.",
+    "categoria": "Dirección",
+    "fuente": "Uso corporativo"
+  },
+  {
+    "code": "ca_ea",
+    "sigla": "CA/EA",
+    "cargo": "Chief Architect / Enterprise Architect",
+    "definicion": "Diseña la arquitectura de sistemas para asegurar escalabilidad y disponibilidad.",
+    "categoria": "Tecnología",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cae",
+    "sigla": "CAE",
+    "cargo": "Chief Audit Executive",
+    "definicion": "Lidera auditoría interna, evaluación de riesgos y mejora de controles.",
+    "categoria": "Auditoría",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "caio",
+    "sigla": "CAIO",
+    "cargo": "Chief Artificial Intelligence Officer",
+    "definicion": "Define estrategia de IA para generar valor, eficiencia y nuevos modelos de negocio.",
+    "categoria": "Inteligencia Artificial",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cbdo",
+    "sigla": "CBDO",
+    "cargo": "Chief Business Development Officer",
+    "definicion": "Identifica oportunidades y lidera expansión de negocio sostenible.",
+    "categoria": "Negocio",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cbo_business",
+    "sigla": "CBO",
+    "cargo": "Chief Business Officer",
+    "definicion": "Conduce estrategia de negocio para cumplir misión y crear valor.",
+    "categoria": "Negocio",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cbo_brand",
+    "sigla": "CBO",
+    "cargo": "Chief Brand Officer",
+    "definicion": "Gestiona estrategia de marca, posicionamiento y percepción de calidad.",
+    "categoria": "Marca",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cco_commercial",
+    "sigla": "CCO",
+    "cargo": "Chief Commercial Officer",
+    "definicion": "Lidera ingresos comerciales: ventas, marketing y servicio al cliente.",
+    "categoria": "Comercial",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cco_communications",
+    "sigla": "CCO",
+    "cargo": "Chief Communications Officer",
+    "definicion": "Dirige comunicación interna y externa, medios y reputación corporativa.",
+    "categoria": "Comunicación",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cco_compliance",
+    "sigla": "CCO",
+    "cargo": "Chief Compliance Officer",
+    "definicion": "Asegura cumplimiento normativo y mitigación de riesgos regulatorios.",
+    "categoria": "Compliance",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cco_content",
+    "sigla": "CCO",
+    "cargo": "Chief Content Officer",
+    "definicion": "Diseña y supervisa estrategia de contenidos por canal y audiencia.",
+    "categoria": "Contenido",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cco_creative",
+    "sigla": "CCO",
+    "cargo": "Chief Creative Officer",
+    "definicion": "Define narrativa, identidad creativa y dirección de diseño.",
+    "categoria": "Creatividad",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cco_customer",
+    "sigla": "CCO",
+    "cargo": "Chief Customer Officer",
+    "definicion": "Lidera la experiencia de cliente, fidelización y retención.",
+    "categoria": "Cliente",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cdo_diversity",
+    "sigla": "CDO",
+    "cargo": "Chief Diversity Officer",
+    "definicion": "Impulsa políticas de diversidad e inclusión en toda la organización.",
+    "categoria": "People",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "ceo",
+    "sigla": "CEO",
+    "cargo": "Chief Executive Officer",
+    "definicion": "Máxima responsabilidad ejecutiva y estratégica de la empresa.",
+    "categoria": "Dirección",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cfo",
+    "sigla": "CFO",
+    "cargo": "Chief Financial Officer",
+    "definicion": "Lidera planificación financiera, presupuesto, riesgo y financiación.",
+    "categoria": "Finanzas",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cgo_green",
+    "sigla": "CGO",
+    "cargo": "Chief Green Officer",
+    "definicion": "Conduce estrategia ambiental y sostenibilidad corporativa.",
+    "categoria": "Sostenibilidad",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "chro",
+    "sigla": "CHRO",
+    "cargo": "Chief Human Resources Officer",
+    "definicion": "Lidera recursos humanos, cultura y desarrollo organizacional.",
+    "categoria": "People",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cio",
+    "sigla": "CIO",
+    "cargo": "Chief Information Officer",
+    "definicion": "Gestiona sistemas internos, operaciones IT y acceso a la información.",
+    "categoria": "Tecnología",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cino",
+    "sigla": "CINO",
+    "cargo": "Chief Innovation Officer",
+    "definicion": "Lidera transformación e innovación en procesos, productos y tecnología.",
+    "categoria": "Innovación",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "ciso",
+    "sigla": "CISO",
+    "cargo": "Chief Information Security Officer",
+    "definicion": "Protege activos de información y estrategia de ciberseguridad.",
+    "categoria": "Seguridad",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "clo_learning",
+    "sigla": "CLO",
+    "cargo": "Chief Learning Officer",
+    "definicion": "Conduce estrategia de formación y aprendizaje organizacional.",
+    "categoria": "People",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cmo",
+    "sigla": "CMO",
+    "cargo": "Chief Marketing Officer",
+    "definicion": "Dirige marketing, posicionamiento, crecimiento comercial y propuesta de valor.",
+    "categoria": "Marketing",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "coo",
+    "sigla": "COO",
+    "cargo": "Chief Operating Officer",
+    "definicion": "Responsable de operaciones diarias y ejecución estratégica.",
+    "categoria": "Operaciones",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cpo_product",
+    "sigla": "CPO",
+    "cargo": "Chief Product Officer",
+    "definicion": "Define visión de producto, roadmap y coordinación con UX y desarrollo.",
+    "categoria": "Producto",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cpo_people",
+    "sigla": "CPO",
+    "cargo": "Chief People Officer",
+    "definicion": "Lidera estrategia de talento, cultura y experiencia del empleado.",
+    "categoria": "People",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cso_sustainability",
+    "sigla": "CSO",
+    "cargo": "Chief Sustainability Officer",
+    "definicion": "Conduce objetivos de sostenibilidad y reducción de impacto ambiental.",
+    "categoria": "Sostenibilidad",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cto",
+    "sigla": "CTO",
+    "cargo": "Chief Technology Officer",
+    "definicion": "Lidera tecnología orientada a producto y clientes externos.",
+    "categoria": "Tecnología",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cxo",
+    "sigla": "CXO",
+    "cargo": "Chief Experience Officer",
+    "definicion": "Responsable de experiencia de usuario y propuesta de valor percibida.",
+    "categoria": "Cliente",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "ea_enterprise_architect",
+    "sigla": "EA",
+    "cargo": "Enterprise Architect",
+    "definicion": "Arquitectura empresarial de procesos, sistemas e integración.",
+    "categoria": "Tecnología",
+    "fuente": "Explorer by X"
+  },
+  {
+    "code": "cao_accounting",
+    "sigla": "CAO",
+    "cargo": "Chief Accounting Officer",
+    "definicion": "Supervisa contabilidad, reportes financieros y cumplimiento contable.",
+    "categoria": "Finanzas",
+    "fuente": "Wikipedia"
+  },
+  {
+    "code": "cao_administrative",
+    "sigla": "CAO",
+    "cargo": "Chief Administrative Officer",
+    "definicion": "Coordina administración corporativa y soporte organizacional.",
+    "categoria": "Administración",
+    "fuente": "Wikipedia"
+  },
+  {
+    "code": "canalytics",
+    "sigla": "CAO",
+    "cargo": "Chief Analytics Officer",
+    "definicion": "Lidera analítica avanzada para decisiones de negocio basadas en datos.",
+    "categoria": "Datos",
+    "fuente": "Wikipedia"
+  },
+  {
+    "code": "cdo_data",
+    "sigla": "CDO",
+    "cargo": "Chief Data Officer",
+    "definicion": "Define gobierno de datos, calidad, interoperabilidad y explotación analítica.",
+    "categoria": "Datos",
+    "fuente": "Wikipedia"
+  },
+  {
+    "code": "cdo_digital",
+    "sigla": "CDO",
+    "cargo": "Chief Digital Officer",
+    "definicion": "Lidera transformación digital, canales digitales y nuevos modelos online.",
+    "categoria": "Transformación",
+    "fuente": "Uso corporativo"
+  },
+  {
+    "code": "cgo_growth",
+    "sigla": "CGO",
+    "cargo": "Chief Growth Officer",
+    "definicion": "Responsable de crecimiento integral en ingresos, adquisición y expansión.",
+    "categoria": "Crecimiento",
+    "fuente": "Uso corporativo"
+  },
+  {
+    "code": "cgo_governance",
+    "sigla": "CGO",
+    "cargo": "Chief Governance Officer",
+    "definicion": "Lidera gobierno corporativo, políticas y estructura de control.",
+    "categoria": "Gobernanza",
+    "fuente": "Wikipedia"
+  },
+  {
+    "code": "cko",
+    "sigla": "CKO",
+    "cargo": "Chief Knowledge Officer",
+    "definicion": "Gestiona conocimiento organizacional, aprendizaje y transferencia interna.",
+    "categoria": "Conocimiento",
+    "fuente": "Wikipedia"
+  },
+  {
+    "code": "clo_legal",
+    "sigla": "CLO",
+    "cargo": "Chief Legal Officer",
+    "definicion": "Conduce estrategia legal, contratos y riesgos jurídicos de la compañía.",
+    "categoria": "Legal",
+    "fuente": "Wikipedia"
+  },
+  {
+    "code": "cno",
+    "sigla": "CNO",
+    "cargo": "Chief Networking Officer",
+    "definicion": "Gestiona estrategia de redes, alianzas y ecosistema de contactos.",
+    "categoria": "Relaciones",
+    "fuente": "Wikipedia"
+  },
+  {
+    "code": "cpo_process",
+    "sigla": "CPO",
+    "cargo": "Chief Process Officer",
+    "definicion": "Optimiza y estandariza procesos transversales de la organización.",
+    "categoria": "Operaciones",
+    "fuente": "Wikipedia"
+  },
+  {
+    "code": "cpo_procurement",
+    "sigla": "CPO",
+    "cargo": "Chief Procurement Officer",
+    "definicion": "Lidera compras estratégicas, abastecimiento y relación con proveedores.",
+    "categoria": "Abastecimiento",
+    "fuente": "Wikipedia"
+  },
+  {
+    "code": "cqo",
+    "sigla": "CQO",
+    "cargo": "Chief Quality Officer",
+    "definicion": "Dirige sistema de calidad, mejora continua y estándares operativos.",
+    "categoria": "Calidad",
+    "fuente": "Uso corporativo"
+  },
+  {
+    "code": "cro_risk",
+    "sigla": "CRO",
+    "cargo": "Chief Risk Officer",
+    "definicion": "Gestiona riesgo integral: financiero, operativo, legal y reputacional.",
+    "categoria": "Riesgo",
+    "fuente": "Wikipedia"
+  },
+  {
+    "code": "cro_revenue",
+    "sigla": "CRO",
+    "cargo": "Chief Revenue Officer",
+    "definicion": "Maximiza ingresos unificando ventas, pricing, marketing y éxito de cliente.",
+    "categoria": "Ingresos",
+    "fuente": "Uso corporativo"
+  },
+  {
+    "code": "cso_strategy",
+    "sigla": "CSO",
+    "cargo": "Chief Strategy Officer",
+    "definicion": "Define estrategia corporativa de mediano y largo plazo.",
+    "categoria": "Estrategia",
+    "fuente": "Wikipedia"
+  },
+  {
+    "code": "cso_security",
+    "sigla": "CSO",
+    "cargo": "Chief Security Officer",
+    "definicion": "Responsable de seguridad física y corporativa integral.",
+    "categoria": "Seguridad",
+    "fuente": "Wikipedia"
+  },
+  {
+    "code": "cso_sales",
+    "sigla": "CSO",
+    "cargo": "Chief Sales Officer",
+    "definicion": "Lidera estrategia comercial y desempeño de fuerza de ventas.",
+    "categoria": "Comercial",
+    "fuente": "Uso corporativo"
+  },
+  {
+    "code": "cso_science",
+    "sigla": "CSO",
+    "cargo": "Chief Science Officer",
+    "definicion": "Conduce investigación científica, innovación aplicada y transferencia tecnológica.",
+    "categoria": "Ciencia",
+    "fuente": "Wikipedia"
+  },
+  {
+    "code": "ctransformation",
+    "sigla": "CTrO",
+    "cargo": "Chief Transformation Officer",
+    "definicion": "Lidera programas de transformación organizacional y cambio.",
+    "categoria": "Transformación",
+    "fuente": "Uso corporativo"
+  },
+  {
+    "code": "cv_o",
+    "sigla": "CVO",
+    "cargo": "Chief Visionary Officer",
+    "definicion": "Impulsa visión futura y dirección estratégica de largo alcance.",
+    "categoria": "Estrategia",
+    "fuente": "Wikipedia"
+  },
+  {
+    "code": "managing_director",
+    "sigla": "MD",
+    "cargo": "Managing Director",
+    "definicion": "Dirección general ejecutiva, equivalente en algunos países a CEO.",
+    "categoria": "Dirección",
+    "fuente": "Uso corporativo"
+  },
+  {
+    "code": "board_member",
+    "sigla": null,
+    "cargo": "Miembro de consejo/directorio",
+    "definicion": "Integrante del órgano de gobierno y supervisión estratégica.",
+    "categoria": "Societario",
+    "fuente": "Uso societario"
+  }
+]

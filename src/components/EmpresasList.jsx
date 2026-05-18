@@ -24,7 +24,8 @@ function EmpresasList({ onSelectEmpresa, onSelectFromModal, initialDetailId, onC
       return 'ID'
     }
 
-  const { hasPermission, isAdmin } = useAuth()
+  const { hasPermission, isAdmin, user } = useAuth()
+  const canSeeBalanceGeneralBadge = ['admin', 'analista'].includes((user?.rol || '').toLowerCase())
   const canSeeScoring = isAdmin && hasPermission('ver_scoring')
   const canSeeAfipData = hasPermission('ver_afip')
   const [empresas, setEmpresas] = useState([])
@@ -388,6 +389,7 @@ function EmpresasList({ onSelectEmpresa, onSelectFromModal, initialDetailId, onC
               const rutUruguayValidado = isUruguayRutValidated(empresa)
               const cuitArgentinoValidado = isArgentinaCuitValidated(empresa)
               const afipValidation = getArgentinaAfipValidation(empresa)
+              const hasBalanceGeneral = canSeeBalanceGeneralBadge && Boolean(empresa.has_balance_general)
 
               return (
               <div
@@ -422,6 +424,12 @@ function EmpresasList({ onSelectEmpresa, onSelectFromModal, initialDetailId, onC
                         <div className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                           <CheckCircle2 className="h-3 w-3" />
                           CUIT verificado
+                        </div>
+                      )}
+                      {hasBalanceGeneral && (
+                        <div className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Balance General
                         </div>
                       )}
                       {empresa.actividad_principal && (

@@ -30,6 +30,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
   // Cliente (cliente_admin, cliente_usuario o cliente_presentacion) solo puede solicitar informes, no ver directamente
   const isClientUser = user?.rol === 'usuario' || user?.rol === 'cliente_admin' || user?.rol === 'cliente_usuario' || user?.rol === 'cliente_presentacion'
   const isClienteAdmin = user?.rol === 'cliente_admin' // Solo cliente_admin puede comprar packs
+  const canSeeBalanceGeneralBadge = ['admin', 'analista'].includes((user?.rol || '').toLowerCase())
   const canAccessScoringModule = isAdmin && hasPermission('scoring')
   const canUseAfipFilter = hasPermission('buscar_afip')
   const canSeeAfipData = hasPermission('ver_afip')
@@ -1292,6 +1293,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
               const cuitArgentinoValidado = isArgentinaCuitValidated(empresa)
               const afipValidation = getArgentinaAfipValidation(empresa)
               const nombreLimpio = cleanDisplayRazonSocial(empresa.razon_social)
+              const hasBalanceGeneral = canSeeBalanceGeneralBadge && Boolean(empresa.has_balance_general)
               // Usar codigo_pais guardado o buscar en mapeo
               const paisIso = empresa?.codigo_pais?.toLowerCase() || (pais ? COUNTRY_ISO[pais] : null)
 
@@ -1375,6 +1377,11 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                     {score !== undefined && score !== null && (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
                         <BarChart3 className="h-3 w-3" /> {t('search.hasScore')}
+                      </span>
+                    )}
+                    {hasBalanceGeneral && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
+                        <CheckCircle2 className="h-3 w-3" /> Balance General
                       </span>
                     )}
                   </div>

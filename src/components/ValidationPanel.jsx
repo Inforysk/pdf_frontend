@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { Shield, CheckCircle, AlertTriangle, XCircle, Loader2, RefreshCw, ChevronDown, ChevronUp, ExternalLink, Plus } from 'lucide-react'
+import ProgressModal from './ui/ProgressModal'
 
 // Pasos de validación para el modal de progreso
 const VALIDATION_STEPS = [
@@ -342,41 +343,16 @@ function ValidationPanel({ cuit, tipoId, onApplyField }) {
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-      {/* Modal de validación en progreso - bloquea toda interacción */}
-      {loading && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 text-center">
-            <div className="mb-6">
-              <div className="relative w-24 h-24 mx-auto">
-                <svg className="w-24 h-24 animate-spin" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="40" fill="none" stroke="#e5e7eb" strokeWidth="8" />
-                  <circle cx="50" cy="50" r="40" fill="none" stroke="#6366f1" strokeWidth="8" 
-                    strokeDasharray="251" strokeDashoffset="188" strokeLinecap="round" />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-2xl font-bold text-indigo-600">{validationElapsed}s</span>
-                </div>
-              </div>
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Validando {meta.taxIdLabel}</h3>
-            <p className="text-gray-600 mb-4 min-h-[24px] transition-all duration-300">
-              {currentValidationStep.msg}
-            </p>
-            <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
-              <div 
-                className="bg-indigo-600 h-2 rounded-full transition-all duration-1000" 
-                style={{ width: `${Math.min(100, (validationElapsed / 25) * 100)}%` }}
-              />
-            </div>
-            <p className="text-sm text-gray-400">
-              Consultando fuentes oficiales
-            </p>
-            <p className="text-xs text-gray-400 mt-2">
-              No cierre esta ventana
-            </p>
-          </div>
-        </div>
-      )}
+      <ProgressModal
+        isOpen={loading}
+        title={`Validando ${meta.taxIdLabel}`}
+        message={currentValidationStep.msg}
+        elapsed={validationElapsed}
+        progressMaxSeconds={25}
+        accent="indigo"
+        subtitle="Consultando fuentes oficiales"
+        footer="No cierre esta ventana"
+      />
 
       {/* Header */}
       <div className="p-4 flex items-center justify-between">
