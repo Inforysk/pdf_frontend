@@ -30,11 +30,13 @@ import AdminPaymentsView from './components/admin/AdminPaymentsView'
 import AdminPreciosPaisView from './components/admin/AdminPreciosPaisView'
 import AdminProveedoresView from './components/admin/AdminProveedoresView'
 import AdminProductosView from './components/admin/AdminProductosView'
+import AdminFacturacionSolicitudesView from './components/admin/AdminFacturacionSolicitudesView'
 import ClienteProductosView from './components/admin/ClienteProductosView'
+import UsuariosPedidosView from './components/UsuariosPedidosView'
 import logo from './assets/logo_symbol.png'
 import axios from 'axios'
 import { useAuth } from './contexts/AuthContext'
-import { FileText, List, Upload, Files, CheckCircle2, AlertTriangle, XCircle, Search, History, Menu, X, Shield, LogOut, User, Loader2, BarChart3, ChevronDown, ChevronLeft, LayoutDashboard, Calculator, GitCompare, FilePlus2, ClipboardList, TrendingUp, ArrowLeft, Globe, CreditCard, Package, Bell, Newspaper, UserCheck, Ticket, Webhook } from 'lucide-react'
+import { FileText, List, Upload, Files, CheckCircle2, AlertTriangle, XCircle, Search, History, Menu, X, Shield, LogOut, User, Loader2, BarChart3, ChevronDown, ChevronLeft, LayoutDashboard, Calculator, GitCompare, FilePlus2, ClipboardList, TrendingUp, ArrowLeft, Globe, CreditCard, Package, Bell, Newspaper, UserCheck, Ticket, Webhook, Users2 } from 'lucide-react'
 
 function App() {
   const { t } = useTranslation()
@@ -133,7 +135,9 @@ function App() {
   useEffect(() => {
     if (prevUserRef.current !== user?.id) {
       const userHasDashboard = user?.permisos?.includes('inicio') || user?.rol === 'admin'
-      setCurrentView(userHasDashboard ? 'dashboard' : 'search')
+      // Analista inicia en solicitudes
+      const initialView = user?.rol === 'analista' ? 'solicitudes' : (userHasDashboard ? 'dashboard' : 'search')
+      setCurrentView(initialView)
       setPreviousView(null)
       setOriginView(null)
       setExtractedData(null)
@@ -213,13 +217,19 @@ function App() {
       console.error('[handleIniciarInformeSolicitud] Error en PUT:', err)
     }
     
+    // Determinar el abonado correcto:
+    // Si hay cliente_abono (solicitud creada por analista para un cliente), usar ese
+    // Si no, usar solicitante_abono (usuario que creó la solicitud)
+    const abonadoFinal = solicitud.cliente_abono || solicitud.solicitante_abono || pedidoInfo?.usuario_id_interno || ''
+    console.log('[handleIniciarInformeSolicitud] Abonado final:', abonadoFinal, 'cliente_abono:', solicitud.cliente_abono, 'solicitante_abono:', solicitud.solicitante_abono)
+    
     // Enriquecer solicitud con datos del pedido
     const solicitudEnriquecida = {
       ...solicitud,
-      abonado: pedidoInfo?.usuario_id_interno || solicitud.usuario_id_interno || '',
-      expediente: pedidoInfo?.numero_correlativo || '',
-      referencia: pedidoInfo?.referencia || '',
-      fecha_informe: pedidoInfo?.fecha_informe || new Date().toISOString().split('T')[0]
+      abonado: abonadoFinal,
+      expediente: pedidoInfo?.expediente || '',  // Expediente aleatorio auto-generado
+      referencia: pedidoInfo?.referencia || '',  // Referencia del cliente (manual)
+      fecha_informe: new Date().toISOString().split('T')[0] // Siempre fecha de hoy
     }
     console.log('[handleIniciarInformeSolicitud] Solicitud enriquecida:', solicitudEnriquecida)
     
@@ -487,12 +497,17 @@ function App() {
   // ─── Build sidebar items based on permissions ───
   const sidebarItems = []
   if (canAccessDashboard) sidebarItems.push({ id: 'dashboard', label: t('nav.home'), icon: LayoutDashboard, color: 'violet' })
+  // Solicitudes primero para analista
+  if (user?.rol === 'analista') sidebarItems.push({ id: 'solicitudes', label: t('nav.requests'), icon: ClipboardList, color: 'indigo' })
   sidebarItems.push({ id: 'search', label: t('nav.search'), icon: Search })
+  // Solicitudes después de buscar para admin
+  if (isAdmin) sidebarItems.push({ id: 'solicitudes', label: t('nav.requests'), icon: ClipboardList, color: 'indigo' })
   if (hasPermission('subir')) {
     sidebarItems.push({ id: 'upload', label: t('nav.uploadPdf'), icon: Upload })
     sidebarItems.push({ id: 'bulk', label: t('nav.bulkUpload'), icon: Files, badge: hasBulkResults && currentView !== 'bulk' })
   }
-  if (hasPermission('nuevo_informe')) sidebarItems.push({ id: 'new-blank', label: t('nav.newReport'), icon: FilePlus2 })
+  // Nuevo Informe: solo para usuarios normales, no admin/analista (ellos usan Solicitudes)
+  if (hasPermission('nuevo_informe') && !isAdmin && user?.rol !== 'analista') sidebarItems.push({ id: 'new-blank', label: t('nav.newReport'), icon: FilePlus2 })
   if (hasPermission('editar')) sidebarItems.push({ id: 'list', label: t('nav.records'), icon: List })
   if (canAccessScoring) {
     sidebarItems.push({ id: '_sep_scoring', separator: true, label: t('nav.scoring') })
@@ -500,10 +515,10 @@ function App() {
     sidebarItems.push({ id: 'scoring-dashboard', label: t('nav.scoreDashboard'), icon: BarChart3, color: 'emerald' })
     sidebarItems.push({ id: 'scoring-compare', label: t('nav.compare'), icon: GitCompare, color: 'emerald' })
   }
-  if (hasPermission('solicitudes') || isAdmin) {
+  if (isAdmin || user?.rol === 'analista') {
     sidebarItems.push({ id: '_sep_sistema', separator: true, label: t('nav.system') })
   }
-  if (hasPermission('solicitudes')) sidebarItems.push({ id: 'solicitudes', label: t('nav.requests'), icon: ClipboardList, color: 'indigo' })
+  if (isAdmin || user?.rol === 'analista') sidebarItems.push({ id: 'usuarios-pedidos', label: 'Usuarios Clientes', icon: Users2, color: 'cyan' })
   if (isAdmin) sidebarItems.push({ id: 'creditos', label: t('nav.credits'), icon: CreditCard, color: 'amber' })
   if (isAdmin) sidebarItems.push({ id: 'planes', label: t('nav.plans'), icon: Package, color: 'indigo' })
   if (isAdmin) sidebarItems.push({ id: 'cupones', label: t('nav.coupons'), icon: Ticket, color: 'purple' })
@@ -513,6 +528,7 @@ function App() {
   if (isAdmin) sidebarItems.push({ id: 'pasarelas', label: t('nav.paymentGateways'), icon: Webhook, color: 'purple' })
   if (isAdmin) sidebarItems.push({ id: 'precios-pais', label: t('nav.countryPricing'), icon: Globe, color: 'teal' })
   if (isAdmin) sidebarItems.push({ id: 'proveedores-pricing', label: t('nav.pricingEngine'), icon: Calculator, color: 'cyan' })
+  if (isAdmin || user?.rol === 'analista') sidebarItems.push({ id: 'facturacion-solicitudes', label: 'Fact. Solicitudes', icon: CreditCard, color: 'emerald' })
   if (isAdmin) sidebarItems.push({ id: 'productos-admin', label: t('nav.products'), icon: Package, color: 'violet' })
   if (isAdmin) sidebarItems.push({ id: 'alertas', label: t('nav.alerts'), icon: Bell, color: alertasCount > 0 ? 'amber' : 'blue', alertCount: alertasCount })
   if (isAdmin) sidebarItems.push({ id: 'admin', label: t('nav.admin'), icon: Shield, color: aprobacionesCount > 0 ? 'amber' : 'red', alertCount: aprobacionesCount })
@@ -852,6 +868,10 @@ function App() {
             <ClienteProductosView />
         )}
 
+        {currentView === 'usuarios-pedidos' && (isAdmin || user?.rol === 'analista') && (
+            <UsuariosPedidosView />
+        )}
+
         {currentView === 'creditos' && isAdmin && (
             <CreditosView />
         )}
@@ -888,6 +908,10 @@ function App() {
             <AdminProveedoresView />
         )}
 
+        {currentView === 'facturacion-solicitudes' && (isAdmin || user?.rol === 'analista') && (
+            <AdminFacturacionSolicitudesView />
+        )}
+
         {currentView === 'productos-admin' && isAdmin && (
             <AdminProductosView />
         )}
@@ -919,8 +943,20 @@ function App() {
             <ComparadorEmpresas onBack={() => setCurrentView('search')} />
         )}
 
-        {currentView === 'solicitudes' && hasPermission('solicitudes') && (
-            <SolicitudesView isAdmin={isAdmin} onIniciarInforme={handleIniciarInformeSolicitud} />
+        {currentView === 'solicitudes' && (isAdmin || user?.rol === 'analista') && (
+            <SolicitudesView 
+              isAdmin={isAdmin} 
+              onIniciarInforme={handleIniciarInformeSolicitud}
+              onNuevoInforme={() => {
+                setExtractedData(null)
+                setSelectedEmpresaId(null)
+                setSelectedEmpresaCuit(null)
+                setSelectedEmpresaMode(null)
+                setNewReportCountry(null)
+                setPreviousView('solicitudes')
+                setCurrentView('new-blank')
+              }}
+            />
         )}
 
         {currentView === 'solicitud-informe' && solicitudActiva && (

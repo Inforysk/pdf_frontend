@@ -52,6 +52,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
   const [solicitudEmail, setSolicitudEmail] = useState('')
   const [solicitudNotas, setSolicitudNotas] = useState('')
   const [solicitudPrioridad, setSolicitudPrioridad] = useState('normal')
+  const [solicitudReferencia, setSolicitudReferencia] = useState('')  // Referencia del cliente
   const [enviandoSolicitud, setEnviandoSolicitud] = useState(false)
   const [externalResult, setExternalResult] = useState(null)
   const [externalSearching, setExternalSearching] = useState(false)
@@ -699,6 +700,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
           setSolicitudEmail('')
           setSolicitudNotas('')
           setSolicitudPrioridad('normal')
+          setSolicitudReferencia('')
         } catch {
           toast.error('Error al cargar packs disponibles')
         }
@@ -710,6 +712,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
     setSolicitudEmail('')
     setSolicitudNotas('')
     setSolicitudPrioridad('normal')
+    setSolicitudReferencia('')
   }
 
   // Recargar balance del cliente
@@ -789,7 +792,8 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
         tipo_solicitud: esApi ? 'api' : 'informe',
         tipo_informe: solicitudForm.tipo,  // 'completo', 'reducido', 'historico', etc.
         prepagado: prepagado,
-        usage_id: usageId
+        usage_id: usageId,
+        referencia_cliente: solicitudReferencia || null
       })
       if (res.data.success) {
         setSolicitudResultado({ success: true, message: `Solicitud de ${solicitudForm.label.toLowerCase()} creada correctamente` })
@@ -1429,6 +1433,10 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                           <input type="email" value={solicitudEmail} onChange={e => setSolicitudEmail(e.target.value)} placeholder="tu@empresa.com" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white" />
                         </div>
                         <div>
+                          <label className="text-xs font-medium text-gray-600 mb-1 block">{t('search.referenceOptional') || 'Referencia (opcional)'}</label>
+                          <input type="text" value={solicitudReferencia} onChange={e => setSolicitudReferencia(e.target.value)} placeholder={t('search.referencePlaceholder') || 'Tu referencia interna'} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white" />
+                        </div>
+                        <div>
                           <label className="text-xs font-medium text-gray-600 mb-1 block">{t('search.additionalNotesOptional')}</label>
                           <textarea value={solicitudNotas} onChange={e => setSolicitudNotas(e.target.value)} placeholder={t('search.additionalNotesPlaceholder')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white" rows={2} />
                         </div>
@@ -1830,6 +1838,10 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                             <div>
                               <label className="text-xs font-medium text-gray-600 mb-1 block">{t('search.contactEmailOptional')}</label>
                               <input type="email" value={solicitudEmail} onChange={e => setSolicitudEmail(e.target.value)} placeholder="tu@empresa.com" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white" />
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-gray-600 mb-1 block">{t('search.referenceOptional') || 'Referencia (opcional)'}</label>
+                              <input type="text" value={solicitudReferencia} onChange={e => setSolicitudReferencia(e.target.value)} placeholder={t('search.referencePlaceholder') || 'Tu referencia interna'} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white" />
                             </div>
                             <div>
                               <label className="text-xs font-medium text-gray-600 mb-1 block">{t('search.additionalNotesOptional')}</label>

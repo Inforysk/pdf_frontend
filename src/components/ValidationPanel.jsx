@@ -14,6 +14,16 @@ const VALIDATION_STEPS = [
   { time: 18, msg: 'Procesando información...' },
 ]
 
+// Pasos de consulta BCRA para el modal de progreso
+const BCRA_STEPS = [
+  { time: 0, msg: 'Conectando con BCRA...' },
+  { time: 3, msg: 'Consultando Central de Deudores...' },
+  { time: 7, msg: 'Obteniendo detalle por entidad...' },
+  { time: 12, msg: 'Verificando cheques rechazados...' },
+  { time: 18, msg: 'Procesando información crediticia...' },
+  { time: 25, msg: 'Finalizando consulta...' },
+]
+
 const CONFIANZA_COLORS = {
   confirmado: 'text-green-700 bg-green-50 border-green-200',
   conflicto: 'text-red-700 bg-red-50 border-red-200',
@@ -66,41 +76,44 @@ const formatBcraParaRelacionesBancarias = (bcraData, cheques) => {
   const lines = []
   const fecha = new Date().toLocaleDateString('es-AR')
   
-  lines.push(`<strong>CENTRAL DE DEUDORES BCRA</strong> (Consultado: ${fecha})`)
-  lines.push('')
+  // Título principal con separación
+  lines.push(`<p><strong>CENTRAL DE DEUDORES BCRA</strong> (${fecha})</p>`)
   
-  // Resumen general
-  lines.push(`<strong>Situación General:</strong> ${bcraData.peor_situacion || 1} - ${bcraData.peor_situacion_desc || 'Normal'}`)
-  lines.push(`<strong>Deuda Total:</strong> $${Number(bcraData.monto_total_deuda || 0).toLocaleString('es-AR')}`)
-  lines.push(`<strong>Entidades Informantes:</strong> ${bcraData.cant_entidades || 0}`)
+  // Resumen general en un bloque
+  lines.push('<p>')
+  lines.push(`<strong>Situación General:</strong> ${bcraData.peor_situacion || 1} - ${bcraData.peor_situacion_desc || 'Normal'}<br/>`)
+  lines.push(`<strong>Deuda Total:</strong> $${Number(bcraData.monto_total_deuda || 0).toLocaleString('es-AR')}<br/>`)
+  lines.push(`<strong>Entidades Informantes:</strong> ${bcraData.cant_entidades || 0}<br/>`)
   lines.push(`<strong>Período:</strong> ${bcraData.periodo || '-'}`)
-  lines.push('')
+  lines.push('</p>')
   
   // Detalle por entidad
   if (bcraData.entidades?.length > 0) {
-    lines.push('<strong>Detalle por Entidad:</strong>')
-    bcraData.entidades.forEach(ent => {
+    lines.push('<p><strong>Detalle por Entidad:</strong></p>')
+    const entidadesLines = bcraData.entidades.map(ent => {
       const atraso = ent.dias_atraso > 0 ? ` (${ent.dias_atraso} días atraso)` : ''
-      lines.push(`• ${ent.entidad}: $${Number(ent.monto || 0).toLocaleString('es-AR')} - Sit. ${ent.situacion} (${ent.situacion_desc})${atraso}`)
+      // Sin viñeta para mejor presentación en PDF
+      return `${ent.entidad}: $${Number(ent.monto || 0).toLocaleString('es-AR')} - Sit. ${ent.situacion} (${ent.situacion_desc})${atraso}`
     })
-    lines.push('')
+    lines.push(entidadesLines.map(e => `<p>${e}</p>`).join(''))
   }
   
   // Cheques rechazados
   if (cheques?.tiene_cheques_rechazados) {
-    lines.push('<strong>⚠️ CHEQUES RECHAZADOS:</strong>')
-    lines.push(`Cantidad: ${cheques.total_rechazados || 0}`)
-    lines.push(`Monto Total: $${Number(cheques.monto_total || 0).toLocaleString('es-AR')}`)
+    lines.push('<p><strong>⚠️ CHEQUES RECHAZADOS:</strong></p>')
+    const chequesInfo = []
+    chequesInfo.push(`Cantidad: ${cheques.total_rechazados || 0}`)
+    chequesInfo.push(`Monto Total: $${Number(cheques.monto_total || 0).toLocaleString('es-AR')}`)
     if (cheques.pendientes_pago > 0) {
-      lines.push(`Pendientes de pago: ${cheques.pendientes_pago}`)
+      chequesInfo.push(`Pendientes de pago: ${cheques.pendientes_pago}`)
     }
     if (cheques.en_proceso_judicial > 0) {
-      lines.push(`En proceso judicial: ${cheques.en_proceso_judicial}`)
+      chequesInfo.push(`En proceso judicial: ${cheques.en_proceso_judicial}`)
     }
-    lines.push('')
+    lines.push(`<p>${chequesInfo.join('<br/>')}</p>`)
   }
   
-  return lines.join('<br/>')
+  return lines.join('')
 }
 
 function ValidationPanel({ cuit, tipoId, onApplyField }) {
@@ -115,6 +128,9 @@ function ValidationPanel({ cuit, tipoId, onApplyField }) {
   // Timer para modal de progreso
   const [validationElapsed, setValidationElapsed] = useState(0)
   const validationStartRef = useRef(null)
+  // Timer para modal de progreso BCRA
+  const [bcraElapsed, setBcraElapsed] = useState(0)
+  const bcraStartRef = useRef(null)
   // Modal ARBA para consulta IIBB
   const [showArbaModal, setShowArbaModal] = useState(false)
   const [arbaUrl, setArbaUrl] = useState('')
@@ -160,8 +176,22 @@ function ValidationPanel({ cuit, tipoId, onApplyField }) {
     return () => clearInterval(interval)
   }, [loading])
 
+  // Timer para actualizar tiempo transcurrido durante consulta BCRA
+  useEffect(() => {
+    if (!loadingBcra) {
+      setBcraElapsed(0)
+      return
+    }
+    bcraStartRef.current = Date.now()
+    const interval = setInterval(() => {
+      setBcraElapsed(Math.floor((Date.now() - bcraStartRef.current) / 1000))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [loadingBcra])
+
   // Obtener paso actual del modal de progreso
   const currentValidationStep = VALIDATION_STEPS.filter(s => s.time <= validationElapsed).pop() || VALIDATION_STEPS[0]
+  const currentBcraStep = BCRA_STEPS.filter(s => s.time <= bcraElapsed).pop() || BCRA_STEPS[0]
 
   // Cargar historial ARBA desde la API
   useEffect(() => {
@@ -351,6 +381,17 @@ function ValidationPanel({ cuit, tipoId, onApplyField }) {
         progressMaxSeconds={25}
         accent="indigo"
         subtitle="Consultando fuentes oficiales"
+        footer="No cierre esta ventana"
+      />
+
+      <ProgressModal
+        isOpen={loadingBcra}
+        title="Consultando BCRA"
+        message={currentBcraStep.msg}
+        elapsed={bcraElapsed}
+        progressMaxSeconds={30}
+        accent="amber"
+        subtitle="Central de Deudores del Sistema Financiero"
         footer="No cierre esta ventana"
       />
 

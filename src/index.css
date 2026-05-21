@@ -217,6 +217,21 @@ body {
   cursor: default;
 }
 
+/* Quill sin borde (para integrarse en contenedor padre) */
+.quill-no-border .ql-toolbar {
+  border: none !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  background: #f9fafb;
+}
+
+.quill-no-border .ql-container {
+  border: none !important;
+}
+
+.quill-no-border .ql-editor {
+  min-height: 60px;
+}
+
 .btn-primary {
   @apply px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 
          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2

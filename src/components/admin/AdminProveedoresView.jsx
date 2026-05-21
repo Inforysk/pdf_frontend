@@ -12,6 +12,7 @@ import toast from 'react-hot-toast'
 // ============================================
 const SUBTABS = [
   { key: 'proveedores', label: 'Proveedores Fijos', icon: Building2 },
+  { key: 'precios', label: 'Precios x País', icon: Globe2 },
   { key: 'clientes', label: 'Clientes Asignados', icon: Users },
   { key: 'margenes', label: 'Márgenes', icon: Percent },
   { key: 'simulador', label: 'Simulador', icon: Calculator },
@@ -56,9 +57,231 @@ export default function AdminProveedoresView() {
 
       {/* Content */}
       {activeSubTab === 'proveedores' && <ProveedoresTab />}
+      {activeSubTab === 'precios' && <PreciosPaisTab />}
       {activeSubTab === 'clientes' && <ClientesProveedorTab />}
       {activeSubTab === 'margenes' && <MargenesTab />}
       {activeSubTab === 'simulador' && <SimuladorTab />}
+    </div>
+  )
+}
+
+// ============================================
+// TAB: PRECIOS POR PAÍS
+// ============================================
+const PAISES_LABELS = {
+  AR: 'Argentina', BB: 'Barbados', BR: 'Brasil', BS: 'Bahamas',
+  CA: 'Canadá', CL: 'Chile', CO: 'Colombia', DO: 'Rep. Dominicana',
+  FK: 'Malvinas', GY: 'Guyana', JM: 'Jamaica', MX: 'México',
+  PE: 'Perú', US: 'Estados Unidos', UY: 'Uruguay', VE: 'Venezuela',
+  EC: 'Ecuador', BO: 'Bolivia', PY: 'Paraguay', PA: 'Panamá',
+  CR: 'Costa Rica', GT: 'Guatemala', HN: 'Honduras', NI: 'Nicaragua',
+  SV: 'El Salvador', PR: 'Puerto Rico', CU: 'Cuba', HT: 'Haití',
+}
+
+function PreciosPaisTab() {
+  const [precios, setPrecios] = useState([])
+  const [proveedores, setProveedores] = useState([])
+  const [paises, setPaises] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filtroProveedor, setFiltroProveedor] = useState('')
+  const [filtroPais, setFiltroPais] = useState('')
+  const [editingId, setEditingId] = useState(null)
+  const [editForm, setEditForm] = useState({})
+
+  useEffect(() => { loadData() }, [])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const [preciosRes, provRes] = await Promise.all([
+        axios.get('/api/admin/proveedores/precios-pais'),
+        axios.get('/api/admin/proveedores'),
+      ])
+      if (preciosRes.data.success) {
+        setPrecios(preciosRes.data.precios)
+        setPaises(preciosRes.data.paises || [])
+      }
+      if (provRes.data.success) setProveedores(provRes.data.proveedores)
+    } catch (err) {
+      toast.error('Error al cargar precios')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleEdit = (precio) => {
+    setEditingId(precio.id)
+    setEditForm({
+      precio_normal: precio.precio_normal,
+      precio_urgente: precio.precio_urgente,
+      precio_72hrs: precio.precio_72hrs,
+    })
+  }
+
+  const handleSave = async (precioId) => {
+    try {
+      const res = await axios.put(`/api/admin/proveedores/precios-pais/${precioId}`, editForm)
+      if (res.data.success) {
+        toast.success('Precio actualizado')
+        setEditingId(null)
+        loadData()
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al guardar')
+    }
+  }
+
+  const preciosFiltrados = precios.filter(p => {
+    if (filtroProveedor && p.proveedor_id !== parseInt(filtroProveedor)) return false
+    if (filtroPais && p.codigo_pais !== filtroPais) return false
+    return true
+  })
+
+  // Agrupar por proveedor
+  const porProveedor = preciosFiltrados.reduce((acc, p) => {
+    if (!acc[p.proveedor_codigo]) {
+      acc[p.proveedor_codigo] = { nombre: p.proveedor_nombre, precios: [] }
+    }
+    acc[p.proveedor_codigo].precios.push(p)
+    return acc
+  }, {})
+
+  if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm border p-4">
+      <div className="flex justify-between items-center mb-4">
+        <div>
+          <h4 className="font-medium text-gray-900 flex items-center gap-2">
+            <Globe2 className="h-5 w-5 text-blue-600" />
+            Precios por Proveedor y País
+          </h4>
+          <p className="text-sm text-gray-500">Precios de costo por proveedor, país y prioridad</p>
+        </div>
+        <button onClick={loadData} className="btn-secondary text-sm flex items-center gap-1">
+          <RefreshCw className="h-4 w-4" /> Actualizar
+        </button>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex gap-4 mb-4">
+        <div className="flex-1">
+          <label className="block text-xs font-medium text-gray-700 mb-1">Proveedor</label>
+          <select
+            value={filtroProveedor}
+            onChange={e => setFiltroProveedor(e.target.value)}
+            className="w-full px-3 py-2 border rounded-md text-sm"
+          >
+            <option value="">Todos los proveedores</option>
+            {proveedores.map(p => (
+              <option key={p.id} value={p.id}>{p.codigo} - {p.nombre}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex-1">
+          <label className="block text-xs font-medium text-gray-700 mb-1">País</label>
+          <select
+            value={filtroPais}
+            onChange={e => setFiltroPais(e.target.value)}
+            className="w-full px-3 py-2 border rounded-md text-sm"
+          >
+            <option value="">Todos los países</option>
+            {paises.map(p => (
+              <option key={p} value={p}>{PAISES_LABELS[p] || p} ({p})</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Tabla */}
+      <div className="overflow-x-auto">
+        {Object.entries(porProveedor).map(([codigo, data]) => (
+          <div key={codigo} className="mb-6">
+            <h5 className="font-medium text-gray-800 mb-2 flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-blue-600" />
+              {codigo} - {data.nombre}
+            </h5>
+            <table className="min-w-full divide-y divide-gray-200 border rounded-lg">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">País</th>
+                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500">Normal</th>
+                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500">Urgente</th>
+                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500">72 hrs</th>
+                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500">Moneda</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {data.precios.map(p => (
+                  <tr key={p.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 font-medium">
+                      {PAISES_LABELS[p.codigo_pais] || p.codigo_pais} ({p.codigo_pais})
+                    </td>
+                    {editingId === p.id ? (
+                      <>
+                        <td className="px-4 py-2 text-center">
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editForm.precio_normal}
+                            onChange={e => setEditForm({...editForm, precio_normal: parseFloat(e.target.value)})}
+                            className="w-20 px-2 py-1 border rounded text-center text-sm"
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editForm.precio_urgente}
+                            onChange={e => setEditForm({...editForm, precio_urgente: parseFloat(e.target.value)})}
+                            className="w-20 px-2 py-1 border rounded text-center text-sm"
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editForm.precio_72hrs}
+                            onChange={e => setEditForm({...editForm, precio_72hrs: parseFloat(e.target.value)})}
+                            className="w-20 px-2 py-1 border rounded text-center text-sm"
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-center text-sm">{p.moneda}</td>
+                        <td className="px-4 py-2 text-right">
+                          <button onClick={() => handleSave(p.id)} className="text-green-600 hover:text-green-800 p-1 mr-1">
+                            <Save className="h-4 w-4" />
+                          </button>
+                          <button onClick={() => setEditingId(null)} className="text-gray-600 hover:text-gray-800 p-1">
+                            <X className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-4 py-2 text-center font-mono text-sm">€{parseFloat(p.precio_normal || 0).toFixed(2)}</td>
+                        <td className="px-4 py-2 text-center font-mono text-sm text-orange-600">€{parseFloat(p.precio_urgente || 0).toFixed(2)}</td>
+                        <td className="px-4 py-2 text-center font-mono text-sm text-blue-600">€{parseFloat(p.precio_72hrs || 0).toFixed(2)}</td>
+                        <td className="px-4 py-2 text-center text-sm">{p.moneda}</td>
+                        <td className="px-4 py-2 text-right">
+                          <button onClick={() => handleEdit(p)} className="text-blue-600 hover:text-blue-800 p-1">
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+        {preciosFiltrados.length === 0 && (
+          <div className="text-center py-8 text-gray-500">
+            No hay precios configurados con los filtros seleccionados
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -5,7 +5,8 @@ import {
   FileText, Search, Filter, Download, Plus, Eye, Edit2,
   DollarSign, CheckCircle, Clock, XCircle, AlertCircle,
   ChevronLeft, ChevronRight, Loader2, Calendar, Building2,
-  TrendingUp, RefreshCw, X, BarChart3, Trash2, AlertTriangle
+  TrendingUp, RefreshCw, X, BarChart3, Trash2, AlertTriangle,
+  MoreVertical, Receipt, Check
 } from 'lucide-react'
 
 const ESTADO_CONFIG = {
@@ -13,6 +14,14 @@ const ESTADO_CONFIG = {
   pagada: { label: 'Pagada', icon: CheckCircle, color: 'bg-green-100 text-green-700', badge: 'bg-green-100 text-green-700' },
   vencida: { label: 'Vencida', icon: AlertCircle, color: 'bg-red-100 text-red-700', badge: 'bg-red-100 text-red-700' },
   cancelada: { label: 'Cancelada', icon: XCircle, color: 'bg-gray-100 text-gray-500', badge: 'bg-gray-100 text-gray-500' }
+}
+
+// Estados de pago para facturas a proveedores
+const ESTADO_PAGO_PROV = {
+  pendiente: { label: 'Pendiente', icon: Clock, color: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500' },
+  facturada: { label: 'Facturada', icon: FileText, color: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500' },
+  pagada: { label: 'Pagada', icon: CheckCircle, color: 'bg-green-100 text-green-700', dot: 'bg-green-500' },
+  cancelada: { label: 'Cancelada', icon: XCircle, color: 'bg-gray-100 text-gray-500', dot: 'bg-gray-400' }
 }
 
 export default function AdminFacturacionView() {
@@ -41,6 +50,18 @@ export default function AdminFacturacionView() {
   const [exporting, setExporting] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(null)
   const [deleting, setDeleting] = useState(false)
+
+  // Tab activa: 'clientes' o 'proveedores'
+  const [activeTab, setActiveTab] = useState('clientes')
+  
+  // Facturas a proveedores
+  const [facturasProveedores, setFacturasProveedores] = useState([])
+  const [loadingProveedores, setLoadingProveedores] = useState(false)
+  const [proveedoresStats, setProveedoresStats] = useState({})
+  const [showEstadoMenu, setShowEstadoMenu] = useState(null)
+  const [changingEstado, setChangingEstado] = useState(false)
+  const [showProveedorDetail, setShowProveedorDetail] = useState(null) // factura seleccionada para detalle
+  const [confirmEstadoChange, setConfirmEstadoChange] = useState(null) // { facturaId, nuevoEstado } para confirmación
 
   // Función para descargar PDF con autenticación
   const handleDownloadPdf = async (facturaId) => {
@@ -88,9 +109,82 @@ export default function AdminFacturacionView() {
     }
   }
 
+  // Cargar facturas a proveedores
+  const loadFacturasProveedores = async () => {
+    setLoadingProveedores(true)
+    try {
+      const res = await axios.get('/api/admin/facturas-proveedores/historial')
+      if (res.data.success) {
+        setFacturasProveedores(res.data.facturas || [])
+        setProveedoresStats(res.data.stats || {})
+      }
+    } catch (err) {
+      toast.error('Error cargando facturas a proveedores')
+    }
+    setLoadingProveedores(false)
+  }
+
+  // Solicitar confirmación para cambiar estado de pago
+  const handleCambiarEstadoPago = (facturaId, nuevoEstado) => {
+    setConfirmEstadoChange({ facturaId, nuevoEstado })
+  }
+
+  // Confirmar y ejecutar el cambio de estado
+  const confirmarCambioEstado = async () => {
+    if (!confirmEstadoChange) return
+    
+    const { facturaId, nuevoEstado } = confirmEstadoChange
+    setChangingEstado(true)
+    try {
+      const res = await axios.post(`/api/admin/facturas-proveedores/${facturaId}/change-status`, {
+        estado: nuevoEstado
+      })
+      if (res.data.success) {
+        toast.success(`Estado cambiado a ${ESTADO_PAGO_PROV[nuevoEstado]?.label || nuevoEstado}`)
+        setShowEstadoMenu(null)
+        setConfirmEstadoChange(null)
+        setShowProveedorDetail(null) // Cerrar modal de detalle
+        loadFacturasProveedores()
+      } else {
+        toast.error(res.data.error || 'Error al cambiar estado')
+      }
+    } catch (err) {
+      toast.error('Error al cambiar estado')
+    }
+    setChangingEstado(false)
+  }
+
+  // Descargar PDF de factura a proveedor
+  const handleDownloadPdfProveedor = async (facturaId, numeroFactura, abono) => {
+    try {
+      const response = await axios.get(`/api/admin/facturas-proveedores/${facturaId}/pdf`, {
+        responseType: 'blob'
+      })
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${abono}_${numeroFactura}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      toast.success('PDF descargado')
+    } catch (error) {
+      toast.error('Error al descargar PDF')
+    }
+  }
+
   useEffect(() => {
     loadFacturas()
   }, [page, estadoFilter, empresaFilter, periodoFilter, fechaDesde, fechaHasta])
+
+  // Cargar facturas de proveedores cuando cambia a esa pestaña
+  useEffect(() => {
+    if (activeTab === 'proveedores' && facturasProveedores.length === 0) {
+      loadFacturasProveedores()
+    }
+  }, [activeTab])
 
   const loadFacturas = async () => {
     setLoading(true)
@@ -235,36 +329,79 @@ export default function AdminFacturacionView() {
           </div>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={loadGlobalStats}
-            className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50"
-          >
-            <BarChart3 className="w-4 h-4" />
-            Estadísticas
-          </button>
-          <button
-            onClick={exportCSV}
-            className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50"
-          >
-            <Download className="w-4 h-4" />
-            Exportar CSV
-          </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            <Plus className="w-4 h-4" />
-            Nueva Factura
-          </button>
-          <button
-            onClick={loadFacturas}
-            className="p-2 border rounded-lg hover:bg-gray-50"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
+          {activeTab === 'clientes' && (
+            <>
+              <button
+                onClick={loadGlobalStats}
+                className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                <BarChart3 className="w-4 h-4" />
+                Estadísticas
+              </button>
+              <button
+                onClick={exportCSV}
+                className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                <Download className="w-4 h-4" />
+                Exportar CSV
+              </button>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4" />
+                Nueva Factura
+              </button>
+              <button
+                onClick={loadFacturas}
+                className="p-2 border rounded-lg hover:bg-gray-50"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            </>
+          )}
+          {activeTab === 'proveedores' && (
+            <button
+              onClick={loadFacturasProveedores}
+              disabled={loadingProveedores}
+              className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50"
+            >
+              {loadingProveedores ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              Actualizar
+            </button>
+          )}
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+        <button
+          onClick={() => setActiveTab('clientes')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+            activeTab === 'clientes' 
+              ? 'bg-white text-blue-600 shadow-sm' 
+              : 'text-gray-600 hover:text-gray-800'
+          }`}
+        >
+          <DollarSign className="w-4 h-4" />
+          Facturas a Clientes
+        </button>
+        <button
+          onClick={() => setActiveTab('proveedores')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+            activeTab === 'proveedores' 
+              ? 'bg-white text-blue-600 shadow-sm' 
+              : 'text-gray-600 hover:text-gray-800'
+          }`}
+        >
+          <Receipt className="w-4 h-4" />
+          Facturas a Proveedores
+        </button>
+      </div>
+
+      {/* TAB: Facturas a Clientes */}
+      {activeTab === 'clientes' && (
+        <>
       {/* Stats Cards */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -513,6 +650,287 @@ export default function AdminFacturacionView() {
           </div>
         )}
       </div>
+        </>
+      )}
+
+      {/* TAB: Facturas a Proveedores */}
+      {activeTab === 'proveedores' && (
+        <div className="space-y-4">
+          {/* Stats de estados de pago */}
+          {Object.keys(proveedoresStats).length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {Object.entries(ESTADO_PAGO_PROV).map(([key, cfg]) => {
+                const stat = proveedoresStats[key] || { cantidad: 0, total: 0 }
+                return (
+                  <div key={key} className={`${cfg.color} rounded-xl p-4`}>
+                    <div className="flex items-center gap-2">
+                      <cfg.icon className="h-5 w-5" />
+                      <span className="font-medium">{cfg.label}</span>
+                    </div>
+                    <p className="text-2xl font-bold mt-2">{stat.cantidad || 0}</p>
+                    <p className="text-sm opacity-75">€{(stat.total || 0).toFixed(2)}</p>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Tabla de facturas a proveedores */}
+          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+            {loadingProveedores ? (
+              <div className="p-8 flex justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+              </div>
+            ) : facturasProveedores.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                <Receipt className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                <p>No hay facturas a proveedores generadas</p>
+                <p className="text-sm mt-1">Ve a Facturación de Solicitudes para generar facturas</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Fecha</th>
+                      <th className="px-4 py-3 text-left">N° Factura</th>
+                      <th className="px-4 py-3 text-left">Cliente</th>
+                      <th className="px-4 py-3 text-center">Cant.</th>
+                      <th className="px-4 py-3 text-right">Total EUR</th>
+                      <th className="px-4 py-3 text-center">Estado</th>
+                      <th className="px-4 py-3 text-center">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {facturasProveedores.map(f => {
+                      const estadoKey = f.estado_pago || 'pendiente'
+                      const estadoCfg = ESTADO_PAGO_PROV[estadoKey] || ESTADO_PAGO_PROV.pendiente
+                      return (
+                        <tr key={f.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm">
+                            <div className="flex items-center gap-1 text-gray-600">
+                              <Clock className="h-3 w-3" />
+                              {new Date(f.created_at).toLocaleDateString('es-AR')}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="font-mono font-medium text-blue-600">{f.numero_factura}</span>
+                            <span className={`ml-2 px-1.5 py-0.5 rounded text-xs font-medium ${
+                              f.tipo_documento === 'Remito' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                            }`}>
+                              {f.tipo_documento}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{f.usuario_abono}</span>
+                            {f.usuario_nombre && <span className="text-gray-500 ml-1 text-sm">- {f.usuario_nombre}</span>}
+                          </td>
+                          <td className="px-4 py-3 text-center">{f.cantidad_solicitudes}</td>
+                          <td className="px-4 py-3 text-right font-medium">
+                            €{parseFloat(f.total_eur || 0).toFixed(2)}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${estadoCfg.color}`}>
+                              <estadoCfg.icon className="h-3 w-3" />
+                              {estadoCfg.label}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => setShowProveedorDetail(f)}
+                                className="p-1.5 hover:bg-gray-100 rounded-lg"
+                                title="Ver detalle"
+                              >
+                                <Eye className="w-4 h-4 text-gray-600" />
+                              </button>
+                              {f.tiene_pdf && (
+                                <button
+                                  onClick={() => handleDownloadPdfProveedor(f.id, f.numero_factura, f.usuario_abono)}
+                                  className="p-1.5 hover:bg-blue-50 rounded-lg"
+                                  title="Descargar PDF"
+                                >
+                                  <Download className="w-4 h-4 text-blue-600" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Detalle Factura Proveedor */}
+      {showProveedorDetail && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-auto">
+            <div className="p-6 border-b flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <Receipt className="w-5 h-5 text-blue-600" />
+                  {showProveedorDetail.tipo_documento} #{showProveedorDetail.numero_factura}
+                </h2>
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium mt-2 ${
+                  ESTADO_PAGO_PROV[showProveedorDetail.estado_pago || 'facturada']?.color || 'bg-blue-100 text-blue-700'
+                }`}>
+                  {ESTADO_PAGO_PROV[showProveedorDetail.estado_pago || 'facturada']?.icon && (
+                    <Clock className="w-3 h-3" />
+                  )}
+                  {ESTADO_PAGO_PROV[showProveedorDetail.estado_pago || 'facturada']?.label || 'Facturada'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {showProveedorDetail.tiene_pdf && (
+                  <button
+                    onClick={() => handleDownloadPdfProveedor(showProveedorDetail.id, showProveedorDetail.numero_factura, showProveedorDetail.usuario_abono)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                  >
+                    <Download className="w-4 h-4" />
+                    PDF
+                  </button>
+                )}
+                <button onClick={() => setShowProveedorDetail(null)} className="p-2 hover:bg-gray-100 rounded-lg">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Info del cliente */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-gray-500">Cliente</p>
+                  <p className="font-semibold">{showProveedorDetail.usuario_nombre || '-'}</p>
+                  <p className="font-mono text-sm text-blue-600">{showProveedorDetail.usuario_abono}</p>
+                </div>
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-gray-500">Proveedor</p>
+                  <p className="font-semibold">{showProveedorDetail.proveedor_nombre || showProveedorDetail.proveedor_codigo}</p>
+                </div>
+              </div>
+
+              {/* Detalles */}
+              <div className="border rounded-lg divide-y">
+                <div className="p-4 flex justify-between">
+                  <span className="text-gray-600">Fecha</span>
+                  <span className="font-medium">{new Date(showProveedorDetail.created_at).toLocaleDateString('es-AR')}</span>
+                </div>
+                <div className="p-4 flex justify-between">
+                  <span className="text-gray-600">Periodo</span>
+                  <span className="font-medium">{showProveedorDetail.mes}/{showProveedorDetail.anio}</span>
+                </div>
+                <div className="p-4 flex justify-between">
+                  <span className="text-gray-600">Cantidad solicitudes</span>
+                  <span className="font-medium">{showProveedorDetail.cantidad_solicitudes}</span>
+                </div>
+                {showProveedorDetail.po_number && (
+                  <div className="p-4 flex justify-between">
+                    <span className="text-gray-600">PO Number</span>
+                    <span className="font-medium">{showProveedorDetail.po_number}</span>
+                  </div>
+                )}
+                <div className="p-4 flex justify-between bg-gray-50 font-semibold text-lg">
+                  <span>Total EUR</span>
+                  <span className="text-emerald-600">€{parseFloat(showProveedorDetail.total_eur || 0).toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Fecha de pago si está pagada */}
+              {showProveedorDetail.fecha_pago && (
+                <div className="p-4 bg-green-50 rounded-lg">
+                  <p className="text-xs text-green-600">Fecha de pago</p>
+                  <p className="font-medium text-green-700">{new Date(showProveedorDetail.fecha_pago).toLocaleDateString('es-AR')}</p>
+                </div>
+              )}
+
+              {/* Acciones - Cambiar estado */}
+              <div className="flex gap-2 pt-4 border-t flex-wrap">
+                <span className="text-sm text-gray-500 self-center mr-auto">Cambiar estado:</span>
+                {Object.entries(ESTADO_PAGO_PROV).map(([estado, config]) => (
+                  <button
+                    key={estado}
+                    onClick={() => handleCambiarEstadoPago(showProveedorDetail.id, estado)}
+                    disabled={changingEstado || (showProveedorDetail.estado_pago || 'facturada') === estado}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1 ${
+                      (showProveedorDetail.estado_pago || 'facturada') === estado
+                        ? `${config.color} cursor-default`
+                        : 'border hover:bg-gray-50'
+                    }`}
+                  >
+                    <config.icon className="w-3 h-3" />
+                    {config.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmación de Cambio de Estado */}
+      {confirmEstadoChange && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 bg-amber-100 rounded-full">
+                <AlertTriangle className="w-6 h-6 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Confirmar cambio de estado</h3>
+                <p className="text-sm text-gray-500">Esta acción modificará el estado de la factura</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-gray-50 rounded-lg mb-4">
+              <p className="text-sm text-gray-600">
+                ¿Está seguro que desea cambiar el estado de la factura a{' '}
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                  ESTADO_PAGO_PROV[confirmEstadoChange.nuevoEstado]?.color || 'bg-gray-100'
+                }`}>
+                  {ESTADO_PAGO_PROV[confirmEstadoChange.nuevoEstado]?.label || confirmEstadoChange.nuevoEstado}
+                </span>?
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmEstadoChange(null)}
+                disabled={changingEstado}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarCambioEstado}
+                disabled={changingEstado}
+                className={`px-4 py-2 text-white rounded-lg disabled:opacity-50 flex items-center gap-2 ${
+                  confirmEstadoChange.nuevoEstado === 'pagada' ? 'bg-green-600 hover:bg-green-700' :
+                  confirmEstadoChange.nuevoEstado === 'cancelada' ? 'bg-gray-600 hover:bg-gray-700' :
+                  'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                {changingEstado ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Cambiando...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Confirmar
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Detail Modal */}
       {showDetailModal && detailData && (

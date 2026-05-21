@@ -41,6 +41,7 @@ import DomicilioAutocomplete from './DomicilioAutocomplete'
 import PhoneInput from './PhoneInput'
 import ProgressModal from './ui/ProgressModal'
 import SocietariaStructureEditor from './SocietariaStructureEditor'
+import BancosEditor from './BancosEditor'
 
 // ── Validación de email ──
 function validateEmail(email) {
@@ -304,11 +305,128 @@ const inferDisplayedTaxType = (tipoIdentificacion, taxId) => {
   return 'CUIT'
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// FORMATEO DE NÚMEROS SEGÚN PAÍS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Países que usan formato: punto para miles, coma para decimales (ej: 1.234.567,89)
+const PAISES_FORMATO_EUROPEO = ['AR', 'UY', 'CL', 'BR', 'CR', 'GT', 'CO', 'PE', 'EC', 'PA', 'NI', 'DO', 'SV', 'HN', 'BO', 'PY', 'VE', 'DE', 'ES', 'IT', 'FR']
+// Países que usan formato: coma para miles, punto para decimales (ej: 1,234,567.89)
+const PAISES_FORMATO_ANGLOSAJÓN = ['US', 'MX', 'GB', 'AU', 'CA']
+
+/**
+ * Formatea un número según el país
+ * @param {number|string} value - Valor numérico
+ * @param {string} countryCode - Código de país (AR, UY, US, etc)
+ * @returns {string} Número formateado
+ */
+const formatNumberByCountry = (value, countryCode = 'AR') => {
+  if (value === null || value === undefined || value === '') return ''
+  
+  // Limpiar el valor de cualquier formato previo
+  let numStr = String(value).replace(/[^\d,.-]/g, '')
+  
+  // Si tiene coma como decimal (formato europeo), convertir a punto temporal
+  if (numStr.includes(',') && !numStr.includes('.')) {
+    numStr = numStr.replace(',', '.')
+  } else if (numStr.includes(',') && numStr.includes('.')) {
+    // Determinar cuál es el separador de miles y cuál de decimales
+    const lastComma = numStr.lastIndexOf(',')
+    const lastDot = numStr.lastIndexOf('.')
+    if (lastComma > lastDot) {
+      // La coma es el decimal
+      numStr = numStr.replace(/\./g, '').replace(',', '.')
+    } else {
+      // El punto es el decimal
+      numStr = numStr.replace(/,/g, '')
+    }
+  }
+  
+  const num = parseFloat(numStr)
+  if (isNaN(num)) return value
+  
+  const code = (countryCode || 'AR').toUpperCase()
+  
+  if (PAISES_FORMATO_ANGLOSAJÓN.includes(code)) {
+    // Formato anglosajón: 1,234,567.89
+    return num.toLocaleString('en-US', { 
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2 
+    })
+  } else {
+    // Formato europeo/latinoamericano: 1.234.567,89
+    return num.toLocaleString('de-DE', { 
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2 
+    })
+  }
+}
+
+/**
+ * Parsea un número formateado a valor numérico
+ * @param {string} formattedValue - Valor formateado
+ * @param {string} countryCode - Código de país
+ * @returns {number|string} Valor numérico o string vacío
+ */
+const parseFormattedNumber = (formattedValue, countryCode = 'AR') => {
+  if (!formattedValue || formattedValue === '') return ''
+  
+  let str = String(formattedValue)
+  const code = (countryCode || 'AR').toUpperCase()
+  
+  if (PAISES_FORMATO_ANGLOSAJÓN.includes(code)) {
+    // Quitar comas (separador miles) y mantener punto (decimal)
+    str = str.replace(/,/g, '')
+  } else {
+    // Quitar puntos (separador miles) y convertir coma a punto (decimal)
+    str = str.replace(/\./g, '').replace(',', '.')
+  }
+  
+  const num = parseFloat(str)
+  return isNaN(num) ? '' : num
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INFORMACIÓN DE MONEDA POR PAÍS
+// ═══════════════════════════════════════════════════════════════════════════════
+const PAIS_MONEDA = {
+  AR: { moneda: 'ARS', simbolo: '$', nombre: 'pesos argentinos', pais: 'Argentina' },
+  UY: { moneda: 'UYU', simbolo: '$U', nombre: 'pesos uruguayos', pais: 'Uruguay' },
+  CL: { moneda: 'CLP', simbolo: '$', nombre: 'pesos chilenos', pais: 'Chile' },
+  CO: { moneda: 'COP', simbolo: '$', nombre: 'pesos colombianos', pais: 'Colombia' },
+  MX: { moneda: 'MXN', simbolo: '$', nombre: 'pesos mexicanos', pais: 'México' },
+  PE: { moneda: 'PEN', simbolo: 'S/', nombre: 'soles', pais: 'Perú' },
+  BR: { moneda: 'BRL', simbolo: 'R$', nombre: 'reales', pais: 'Brasil' },
+  EC: { moneda: 'USD', simbolo: '$', nombre: 'dólares', pais: 'Ecuador' },
+  PA: { moneda: 'USD', simbolo: '$', nombre: 'dólares/balboas', pais: 'Panamá' },
+  CR: { moneda: 'CRC', simbolo: '₡', nombre: 'colones', pais: 'Costa Rica' },
+  GT: { moneda: 'GTQ', simbolo: 'Q', nombre: 'quetzales', pais: 'Guatemala' },
+  HN: { moneda: 'HNL', simbolo: 'L', nombre: 'lempiras', pais: 'Honduras' },
+  NI: { moneda: 'NIO', simbolo: 'C$', nombre: 'córdobas', pais: 'Nicaragua' },
+  SV: { moneda: 'USD', simbolo: '$', nombre: 'dólares', pais: 'El Salvador' },
+  DO: { moneda: 'DOP', simbolo: 'RD$', nombre: 'pesos dominicanos', pais: 'Rep. Dominicana' },
+  BO: { moneda: 'BOB', simbolo: 'Bs', nombre: 'bolivianos', pais: 'Bolivia' },
+  PY: { moneda: 'PYG', simbolo: '₲', nombre: 'guaraníes', pais: 'Paraguay' },
+  VE: { moneda: 'VES', simbolo: 'Bs', nombre: 'bolívares', pais: 'Venezuela' },
+  US: { moneda: 'USD', simbolo: '$', nombre: 'dólares', pais: 'Estados Unidos' },
+  DE: { moneda: 'EUR', simbolo: '€', nombre: 'euros', pais: 'Alemania' },
+}
+
+/**
+ * Obtiene información de moneda para un país
+ * @param {string} countryCode - Código de país (AR, UY, etc)
+ * @returns {object} Información de moneda
+ */
+const getMonedaInfo = (countryCode) => {
+  const code = (countryCode || 'AR').toUpperCase()
+  return PAIS_MONEDA[code] || PAIS_MONEDA.AR
+}
+
 const FIELDS = [
   // Informe
   { name: 'abonado', label: 'Abonado', type: 'text', group: 'informe', description: 'Número de abonado Inforysk' },
-  { name: 'expediente', label: 'Expediente', type: 'text', group: 'informe', description: 'Número de expediente' },
-  { name: 'referencia', label: 'Referencia', type: 'text', group: 'informe', description: 'Código de referencia' },
+  { name: 'expediente', label: 'Expediente', type: 'text', group: 'informe', description: 'Auto-generado por el sistema' },
+  { name: 'referencia', label: 'Referencia', type: 'text', group: 'informe', description: 'Referencia del cliente (ingresada por el cliente)' },
   { name: 'fecha_informe', label: 'Fecha del Informe', type: 'date', group: 'informe', description: 'Fecha de emisión del informe' },
   
   // Principal
@@ -322,7 +440,7 @@ const FIELDS = [
   { name: 'fecha_inscripcion_afip', label: 'Fecha Inscripción AFIP', type: 'date', group: 'principal', description: 'Fecha de alta en AFIP' },
   { name: 'duracion_anios', label: 'Duración', type: 'text', group: 'principal', description: 'Plazo de duración de la sociedad (ej: 99 años, Ilimitada)' },
   { name: 'cierre_ejercicio', label: 'Cierre de Ejercicio', type: 'text', group: 'principal', description: 'Fecha de cierre del ejercicio fiscal' },
-  { name: 'capital_social', label: 'Capital Social ($)', type: 'number', group: 'principal', description: 'Capital social en pesos argentinos' },
+  { name: 'capital_social', label: 'Capital Social', type: 'number', group: 'principal', description: 'Capital social', dynamicLabel: true, dynamicDescription: true },
   
   // Contacto - Ahora usa arrays dinámicos para teléfonos y emails
   { name: 'domicilio', label: 'Domicilio', type: 'text', group: 'contacto', description: 'Dirección legal de la empresa', fullWidth: true },
@@ -991,9 +1109,8 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
           if (fromSolicitud.expediente) {
             empresaData.expediente = String(fromSolicitud.expediente)
           }
-          if (fromSolicitud.referencia) {
-            empresaData.referencia = fromSolicitud.referencia
-          }
+          // Referencia: SIEMPRE usar el valor de la solicitud (vacío si no la ingresó el cliente)
+          empresaData.referencia = fromSolicitud.referencia || ''
           if (fromSolicitud.fecha_informe) {
             empresaData.fecha_informe = fromSolicitud.fecha_informe
           }
@@ -1462,7 +1579,15 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
   const handlePreviewPDF = async () => {
     try {
       toast.loading('Generando vista previa...', { id: 'pdf-preview' })
-      const response = await axios.post('/api/preview-pdf', { ...formData, _lang: 'es' }, {
+      // Solo incluir datos de expediente/abonado/referencia cuando viene de solicitud
+      const previewData = { ...formData, _lang: 'es' }
+      if (!fromSolicitud) {
+        // Limpiar datos de encabezado que solo deben aparecer en informes de solicitud
+        previewData.abonado = ''
+        previewData.expediente = ''
+        previewData.referencia = ''
+      }
+      const response = await axios.post('/api/preview-pdf', previewData, {
         responseType: 'blob'
       })
       const blob = new Blob([response.data], { type: 'application/pdf' })
@@ -1482,12 +1607,27 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     return value
   }
 
-  // Obtener label dinámico para campos como CUIT/RUT/RNC
+  // Obtener label dinámico para campos como CUIT/RUT/RNC y Capital Social
   const getDynamicLabel = (field) => {
     if (field.name === 'cuit') {
       return inferDisplayedTaxType(formData.tipo_identificacion, formData.cuit)
     }
+    if (field.name === 'capital_social') {
+      const countryCode = getCountryCodeForFormaLegal() || getDetectedCountry() || 'AR'
+      const monedaInfo = getMonedaInfo(countryCode)
+      return `Capital Social (${monedaInfo.simbolo})`
+    }
     return field.label
+  }
+
+  // Obtener descripción dinámica para campos como Capital Social
+  const getDynamicDescription = (field) => {
+    if (field.name === 'capital_social') {
+      const countryCode = getCountryCodeForFormaLegal() || getDetectedCountry() || 'AR'
+      const monedaInfo = getMonedaInfo(countryCode)
+      return `Capital social en ${monedaInfo.nombre}`
+    }
+    return field.description
   }
 
   // Campos bloqueados por datos AFIP validados
@@ -1515,10 +1655,32 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     return /^\d{12}$/.test(clean)
   }
 
+  // Mapeo de tipo_identificacion a código de país
+  const TIPO_ID_TO_PAIS = {
+    'CUIT': 'AR',
+    'RUT': 'UY',  // También puede ser Chile, pero Uruguay es más común en nuestros datos
+    'RNC': 'DO',
+    'CEDULA JURIDICA': 'CR',
+    'RTN': 'HN',
+    'RUC': 'PE',  // También Ecuador, pero Perú es más común
+    'NIT': 'CO',  // También Guatemala/Bolivia
+    'RFC': 'MX',
+    'VAT': 'DE',  // Europa genérico
+    'TAXPAYER ID': 'US',
+  }
+
   // Obtener el país detectado para el selector de actividades
   const getDetectedCountry = () => {
+    // Primero: detectar por tipo_identificacion guardado
+    const tipoId = (getFieldValue('tipo_identificacion') || '').toUpperCase()
+    if (tipoId && TIPO_ID_TO_PAIS[tipoId]) {
+      return TIPO_ID_TO_PAIS[tipoId]
+    }
+    
+    // Segundo: detectar por longitud del CUIT/RUT
     if (isArgentinaCuit()) return 'AR'
     if (isUruguayRut()) return 'UY'
+    
     return null
   }
 
@@ -1985,8 +2147,11 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     const value = getFieldValue(field.name)
     const isEmpty = !value || value === ''
     const displayLabel = field.dynamicLabel ? getDynamicLabel(field) : field.label
+    const displayDescription = field.dynamicDescription ? getDynamicDescription(field) : field.description
     const locked = isFieldLocked(field.name)
-    const fieldDisabled = !editMode || locked
+    // Campos del pedido: deshabilitados cuando viene de solicitud (expediente es auto-generado, referencia es editable por el cliente)
+    const isPedidoField = ['abonado', 'expediente'].includes(field.name)
+    const fieldDisabled = !editMode || locked || (fromSolicitud && isPedidoField)
 
     return (
       <div
@@ -2061,8 +2226,8 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
           </span>
         </label>
         
-        {field.description && (
-          <p className="text-xs text-gray-500 mb-1">{field.description}{locked && <span className="ml-1 text-blue-500 font-medium">(dato validado por AFIP)</span>}</p>
+        {displayDescription && (
+          <p className="text-xs text-gray-500 mb-1">{displayDescription}{locked && <span className="ml-1 text-blue-500 font-medium">(dato validado por AFIP)</span>}</p>
         )}
         
         {field.name === 'estructura_societaria' ? (
@@ -2070,7 +2235,44 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
             value={value || ''}
             onChange={(content) => handleChange(field.name, content)}
             disabled={fieldDisabled}
+            empresaId={empresaId}
           />
+        ) : field.name === 'relaciones_bancarias_riesgo' ? (
+          <>
+            <BancosEditor
+              value={value || ''}
+              onChange={(content) => handleChange(field.name, content)}
+              disabled={fieldDisabled}
+              paisEmpresa={formData?.pais || (
+                // Detectar país por tipo de identificación si no hay país
+                formData?.tipo_identificacion === 'RUT' ? 'Uruguay' :
+                formData?.tipo_identificacion === 'RNC' ? 'República Dominicana' :
+                formData?.tipo_identificacion === 'RUC' ? 'Perú' :
+                formData?.tipo_identificacion === 'NIT' ? 'Colombia' :
+                formData?.tipo_identificacion === 'RFC' ? 'México' :
+                formData?.tipo_identificacion === 'RTN' ? 'Honduras' :
+                formData?.tipo_identificacion === 'CNPJ' ? 'Brasil' :
+                'Argentina'
+              )}
+            />
+            {/* Editor de texto para ver/editar el contenido final */}
+            <div className="mt-3">
+              <label className="text-xs font-medium text-gray-600 mb-1 block">
+                📄 Texto del campo <span className="text-gray-400 font-normal">(editable — este es el texto que se guardará)</span>
+              </label>
+              <div className={`quill-wrapper ${fieldDisabled ? 'quill-disabled' : ''} ${isEmpty ? 'quill-empty' : ''}`}>
+                <ReactQuill
+                  theme="snow"
+                  value={value || ''}
+                  onChange={(content) => handleChange(field.name, content)}
+                  modules={!fieldDisabled ? quillModules : { toolbar: false }}
+                  formats={quillFormats}
+                  readOnly={fieldDisabled}
+                  placeholder="El texto de los bancos seleccionados y datos BCRA aparecerán aquí..."
+                />
+              </div>
+            </div>
+          </>
         ) : field.type === 'textarea' ? (
           <div className={`quill-wrapper ${fieldDisabled ? 'quill-disabled' : ''} ${isEmpty ? 'quill-empty' : ''}`}>
             <ReactQuill
@@ -2126,6 +2328,36 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
             countryCode={getCountryCodeForFormaLegal() || getDetectedCountry() || ''}
             className={isEmpty ? 'ring-1 ring-amber-300' : ''}
           />
+        ) : field.name === 'capital_social' ? (
+          (() => {
+            const countryCode = getCountryCodeForFormaLegal() || getDetectedCountry() || 'AR'
+            const displayValue = formatNumberByCountry(value, countryCode)
+            const isAnglosaxon = PAISES_FORMATO_ANGLOSAJÓN.includes(countryCode.toUpperCase())
+            const placeholder = isAnglosaxon ? 'Ej: 1,000,000' : 'Ej: 1.000.000'
+            return (
+              <input
+                type="text"
+                value={displayValue}
+                onChange={(e) => {
+                  const rawValue = e.target.value
+                  // Solo permitir dígitos, puntos y comas durante la escritura
+                  const cleaned = rawValue.replace(/[^\d.,]/g, '')
+                  const parsed = parseFormattedNumber(cleaned, countryCode)
+                  handleChange(field.name, parsed === '' ? '' : parsed)
+                }}
+                onBlur={(e) => {
+                  // Al perder el foco, asegurar formato correcto
+                  if (value) {
+                    const formatted = formatNumberByCountry(value, countryCode)
+                    e.target.value = formatted
+                  }
+                }}
+                disabled={fieldDisabled}
+                placeholder={placeholder}
+                className={`field-input ${isEmpty ? 'bg-amber-50 border-amber-200' : ''} ${locked ? 'bg-blue-50 border-blue-200' : ''}`}
+              />
+            )
+          })()
         ) : (
           <>
           <input
@@ -2290,7 +2522,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
   const currentExtractStep = BALANCE_EXTRACT_STEPS.filter(s => s.time <= extractBalanceElapsed).pop() || BALANCE_EXTRACT_STEPS[0]
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full px-4 lg:px-8">
       <ProgressModal
         isOpen={extractingBalance}
         title="Procesando balance PDF"
@@ -2909,7 +3141,13 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
       )}
 
       {/* Form Groups */}
-      {Object.entries(FIELD_GROUPS).map(([groupKey, groupInfo]) => {
+      {Object.entries(FIELD_GROUPS)
+        .filter(([groupKey]) => {
+          // Ocultar grupo 'informe' si no viene de solicitud
+          if (groupKey === 'informe' && !fromSolicitud) return false
+          return true
+        })
+        .map(([groupKey, groupInfo]) => {
         const GroupIcon = groupInfo.icon
         const isExpanded = expandedGroups.includes(groupKey)
         const fields = groupedFields[groupKey] || []
