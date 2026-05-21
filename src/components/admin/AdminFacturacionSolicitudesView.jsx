@@ -409,7 +409,22 @@ export default function AdminFacturacionSolicitudesView() {
         loadData()
       }
     } catch (err) {
-      toast.error('Error al revertir')
+      const errorData = err.response?.data
+      if (errorData?.facturas_asociadas) {
+        toast.error(
+          <div>
+            <strong>{errorData.error}</strong>
+            <br/>
+            <small>{errorData.mensaje}</small>
+            <ul className="mt-1 text-xs">
+              {errorData.facturas_asociadas.slice(0,3).map((f,i) => <li key={i}>• {f}</li>)}
+            </ul>
+          </div>,
+          { duration: 8000 }
+        )
+      } else {
+        toast.error(errorData?.error || 'Error al revertir')
+      }
     } finally {
       setReverting(false)
     }

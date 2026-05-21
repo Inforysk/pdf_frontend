@@ -208,7 +208,7 @@ function App() {
     // Marcar como en_proceso en backend y obtener datos del pedido
     let pedidoInfo = null
     try {
-      const putRes = await axios.put(`/api/solicitudes/${solicitud.id}`, { estado: 'en_proceso' })
+      const putRes = await axios.put(`/api/pedidos-solicitudes/${solicitud.id}`, { estado: 'en_proceso' })
       console.log('[handleIniciarInformeSolicitud] PUT response:', putRes.data)
       if (putRes.data.pedido) {
         pedidoInfo = putRes.data.pedido
@@ -282,7 +282,7 @@ function App() {
     setSelectedEmpresaId(null)
     setSelectedEmpresaCuit(null)
     setRefreshKey(k => k + 1)
-    setCurrentView('solicitudes')
+    setCurrentView('pedidos-solicitudes')
     setPreviousView(null)
   }
 
@@ -290,7 +290,7 @@ function App() {
     setSolicitudActiva(null)
     setSelectedEmpresaId(null)
     setSelectedEmpresaCuit(null)
-    setCurrentView('solicitudes')
+    setCurrentView('pedidos-solicitudes')
     setPreviousView(null)
   }
 
