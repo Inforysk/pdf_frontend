@@ -18,6 +18,7 @@ import ScoringDashboard from './components/ScoringDashboard'
 import ScoreCompare from './components/ScoreCompare'
 import ComparadorEmpresas from './components/ComparadorEmpresas'
 import SolicitudesView from './components/SolicitudesView'
+import PedidosSolicitudesView from './components/PedidosSolicitudesView'
 import AdminDashboard from './components/AdminDashboard'
 import AdminNotifications from './components/AdminNotifications'
 import ClientPortal from './components/portal/ClientPortal'
@@ -135,8 +136,8 @@ function App() {
   useEffect(() => {
     if (prevUserRef.current !== user?.id) {
       const userHasDashboard = user?.permisos?.includes('inicio') || user?.rol === 'admin'
-      // Analista inicia en solicitudes
-      const initialView = user?.rol === 'analista' ? 'solicitudes' : (userHasDashboard ? 'dashboard' : 'search')
+      // Analista inicia en solicitudes (nueva tabla pedidos-solicitudes)
+      const initialView = user?.rol === 'analista' ? 'pedidos-solicitudes' : (userHasDashboard ? 'dashboard' : 'search')
       setCurrentView(initialView)
       setPreviousView(null)
       setOriginView(null)
@@ -252,7 +253,7 @@ function App() {
           setSelectedEmpresaMode('edit')
           setExtractedData(null)
           setNewReportCountry(null)
-          setPreviousView('solicitudes')
+          setPreviousView('pedidos-solicitudes')
           setCurrentView('solicitud-informe')
           return
         } else {
@@ -272,7 +273,7 @@ function App() {
     setSelectedEmpresaCuit(null)
     setSelectedEmpresaMode(null)
     setNewReportCountry(null)
-    setPreviousView('solicitudes')
+    setPreviousView('pedidos-solicitudes')
     setCurrentView('solicitud-informe')
   }
 
@@ -423,6 +424,16 @@ function App() {
       setOriginView(null)
       setListDetailEmpresaId(null)
       setCurrentView('list')
+    } else if (previousView === 'pedidos-solicitudes' || previousView === 'solicitudes') {
+      // Volver a Solicitudes
+      setSelectedEmpresaId(null)
+      setSelectedEmpresaCuit(null)
+      setSelectedEmpresaMode(null)
+      setExtractedData(null)
+      setNewReportCountry(null)
+      setPreviousView(null)
+      setOriginView(null)
+      setCurrentView(previousView)
     } else {
       // Volver a búsqueda por defecto
       handleBackToSearch()
@@ -497,11 +508,15 @@ function App() {
   // ─── Build sidebar items based on permissions ───
   const sidebarItems = []
   if (canAccessDashboard) sidebarItems.push({ id: 'dashboard', label: t('nav.home'), icon: LayoutDashboard, color: 'violet' })
-  // Solicitudes primero para analista
-  if (user?.rol === 'analista') sidebarItems.push({ id: 'solicitudes', label: t('nav.requests'), icon: ClipboardList, color: 'indigo' })
+  // Solicitudes (nueva tabla solicitudes_pedidos)
+  if (user?.rol === 'analista') sidebarItems.push({ id: 'pedidos-solicitudes', label: 'Solicitudes', icon: ClipboardList, color: 'indigo' })
+  // Legacy solicitudes_investigacion - OCULTO
+  // if (user?.rol === 'analista') sidebarItems.push({ id: 'solicitudes', label: 'Solicitudes (Legacy)', icon: ClipboardList, color: 'gray' })
   sidebarItems.push({ id: 'search', label: t('nav.search'), icon: Search })
-  // Solicitudes después de buscar para admin
-  if (isAdmin) sidebarItems.push({ id: 'solicitudes', label: t('nav.requests'), icon: ClipboardList, color: 'indigo' })
+  // Solicitudes (nueva tabla solicitudes_pedidos) para admin
+  if (isAdmin) sidebarItems.push({ id: 'pedidos-solicitudes', label: 'Solicitudes', icon: ClipboardList, color: 'indigo' })
+  // Legacy solicitudes_investigacion - OCULTO
+  // if (isAdmin) sidebarItems.push({ id: 'solicitudes', label: 'Solicitudes (Legacy)', icon: ClipboardList, color: 'gray' })
   if (hasPermission('subir')) {
     sidebarItems.push({ id: 'upload', label: t('nav.uploadPdf'), icon: Upload })
     sidebarItems.push({ id: 'bulk', label: t('nav.bulkUpload'), icon: Files, badge: hasBulkResults && currentView !== 'bulk' })
@@ -954,6 +969,22 @@ function App() {
                 setSelectedEmpresaMode(null)
                 setNewReportCountry(null)
                 setPreviousView('solicitudes')
+                setCurrentView('new-blank')
+              }}
+            />
+        )}
+
+        {currentView === 'pedidos-solicitudes' && (isAdmin || user?.rol === 'analista') && (
+            <PedidosSolicitudesView 
+              isAdmin={isAdmin}
+              onIniciarInforme={handleIniciarInformeSolicitud}
+              onNuevoInforme={() => {
+                setExtractedData(null)
+                setSelectedEmpresaId(null)
+                setSelectedEmpresaCuit(null)
+                setSelectedEmpresaMode(null)
+                setNewReportCountry(null)
+                setPreviousView('pedidos-solicitudes')
                 setCurrentView('new-blank')
               }}
             />
