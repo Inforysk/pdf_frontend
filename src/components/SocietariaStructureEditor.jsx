@@ -222,6 +222,13 @@ const textToSimpleHtml = (text = '') => {
 const extractObservacionesHtml = (html = '') => {
   if (!html) return ''
 
+  // Formato nuevo: todo lo que viene después de </ul>
+  const afterUlMatch = String(html).match(/<\/ul>\s*([\s\S]*)$/i)
+  if (afterUlMatch && afterUlMatch[1] && afterUlMatch[1].trim()) {
+    return afterUlMatch[1].trim()
+  }
+
+  // Formato legacy con marcador explícito
   const match = String(html).match(
     /<p[^>]*>\s*<strong>\s*Observaciones\s*:?\s*<\/strong>\s*<\/p>\s*([\s\S]*)$/i
   )
@@ -396,8 +403,13 @@ const parseInitialValue = (value = '') => {
     return { rows: [{ roleCode: '', customRole: '', personName: '', pais: '', tipoDocumento: '', documento: '', details: '', roleQuery: '' }], notesHtml: '' }
   }
 
-  // Detectar si viene del editor estructurado (tiene el marcador de estructura)
+  // Detectar si viene del editor estructurado:
+  // 1. Tiene el marcador legacy <strong>Estructura societaria</strong>
+  // 2. Tiene el marcador nuevo data-structured="true" en <ul>
+  // 3. Tiene estructura <ul><li><strong>Cargo:</strong>... (formato del editor)
   const fromStructuredEditor = /<strong>\s*Estructura societaria\s*<\/strong>/i.test(value || '')
+    || /data-structured=["']true["']/i.test(value || '')
+    || /<ul[^>]*>\s*<li[^>]*>\s*<strong>[^<]+:<\/strong>/i.test(value || '')
 
   // Si NO viene del editor estructurado, NO parsear automáticamente
   // Dejar todo en observaciones para que el usuario estructure manualmente
@@ -484,7 +496,8 @@ const buildHtmlValue = (rows, notesHtml) => {
   // Sin títulos redundantes - la sección del PDF ya tiene su título
   const notesBlock = hasNotes ? normalizedNotesHtml : ''
 
-  return `<ul>${listItems}</ul>${notesBlock}`
+  // Marcador data-structured para que parseInitialValue lo reconozca
+  return `<ul data-structured="true">${listItems}</ul>${notesBlock}`
 }
 
 export default function SocietariaStructureEditor({ value, onChange, disabled, empresaId }) {
