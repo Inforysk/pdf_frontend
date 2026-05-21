@@ -1336,11 +1336,11 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                                 <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">
                                   {cliente.numero_abono || cliente.id_interno || `#${cliente.id}`}
                                 </span>
-                                <span className="font-medium text-gray-900 truncate">{cliente.nombre_completo}</span>
+                                <span className="font-medium text-gray-900 truncate">
+                                  {cliente.nombre_completo}
+                                  {cliente.proveedor_nombre && <span className="text-gray-500 font-normal"> ({cliente.proveedor_nombre})</span>}
+                                </span>
                               </div>
-                              {cliente.razon_social_cliente && (
-                                <p className="text-xs text-gray-500 truncate mt-0.5">{cliente.razon_social_cliente}</p>
-                              )}
                             </div>
                           </label>
                         ))
