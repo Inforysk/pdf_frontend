@@ -293,11 +293,30 @@ export default function CountrySelectModal({ onSelect, onClose }) {
                   {validationResult.datos.razon_social && (
                     <p><span className="text-gray-500">Razón Social:</span> <strong>{validationResult.datos.razon_social}</strong></p>
                   )}
+                  {validationResult.datos.tipo_societario && (
+                    <p><span className="text-gray-500">Tipo Societario:</span> {validationResult.datos.tipo_societario}</p>
+                  )}
                   {validationResult.datos.actividad_principal && (
                     <p><span className="text-gray-500">Actividad:</span> {validationResult.datos.actividad_principal}</p>
                   )}
-                  {validationResult.datos.domicilio && (
-                    <p><span className="text-gray-500">Domicilio:</span> {validationResult.datos.domicilio}</p>
+                  {validationResult.datos.otras_actividades && validationResult.datos.otras_actividades.length > 0 && (
+                    <div className="text-xs">
+                      <span className="text-gray-500">Otras actividades:</span>
+                      <ul className="list-disc list-inside ml-2 text-gray-600">
+                        {validationResult.datos.otras_actividades.map((act, i) => (
+                          <li key={i}>{act}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {validationResult.datos.domicilio_fiscal && (
+                    <p><span className="text-gray-500">Domicilio Fiscal:</span> {validationResult.datos.domicilio_fiscal}</p>
+                  )}
+                  {validationResult.datos.domicilio_legal && (
+                    <p><span className="text-gray-500">Domicilio Legal:</span> {validationResult.datos.domicilio_legal}</p>
+                  )}
+                  {validationResult.datos.fecha_contrato_social && (
+                    <p><span className="text-gray-500">Fecha Contrato:</span> {validationResult.datos.fecha_contrato_social}</p>
                   )}
                   {validationResult.datos.estado && (
                     <p><span className="text-gray-500">Estado:</span> {validationResult.datos.estado}</p>

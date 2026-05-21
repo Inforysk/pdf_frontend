@@ -443,9 +443,10 @@ const FIELDS = [
   { name: 'capital_social', label: 'Capital Social', type: 'number', group: 'principal', description: 'Capital social', dynamicLabel: true, dynamicDescription: true },
   
   // Contacto - Ahora usa arrays dinámicos para teléfonos y emails
-  { name: 'domicilio', label: 'Domicilio', type: 'text', group: 'contacto', description: 'Dirección legal de la empresa', fullWidth: true },
+  { name: 'domicilio', label: 'Domicilio Fiscal', type: 'text', group: 'contacto', description: 'Dirección fiscal de la empresa', fullWidth: true },
   { name: 'domicilio_lat', label: 'Latitud', type: 'hidden', group: 'contacto' },
   { name: 'domicilio_lng', label: 'Longitud', type: 'hidden', group: 'contacto' },
+  { name: 'domicilio_legal', label: 'Domicilio Legal', type: 'text', group: 'contacto', description: 'Dirección legal/estatutaria de la empresa', fullWidth: true },
   // Los teléfonos y emails se manejan de forma especial en renderContactoBlock
   { name: 'telefonos', label: 'Teléfonos', type: 'phone_array', group: 'contacto', hidden: true },
   { name: 'emails', label: 'Emails', type: 'email_array', group: 'contacto', hidden: true },
@@ -1896,16 +1897,16 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
 
     return (
       <div className="space-y-6">
-        {/* DOMICILIO - Ancho completo */}
+        {/* DOMICILIO FISCAL - Ancho completo */}
         <div className={`transition-all ${highlightedField === 'domicilio' ? 'rounded-md ring-2 ring-green-400 ring-offset-1' : ''}`}>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <MapPin className="h-4 w-4 text-gray-400" />
-              <span className="text-sm font-medium text-gray-700">Domicilio</span>
+              <span className="text-sm font-medium text-gray-700">Domicilio Fiscal</span>
             </div>
           </div>
           <p className="text-xs text-gray-500 mb-2">
-            Dirección legal de la empresa
+            Dirección fiscal de la empresa
             {locked && <span className="ml-1 text-blue-500 font-medium">(dato validado por AFIP)</span>}
           </p>
           <DomicilioAutocomplete
@@ -1928,6 +1929,27 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
               Sin datos
             </p>
           )}
+        </div>
+
+        {/* DOMICILIO LEGAL - Ancho completo */}
+        <div className={`transition-all ${highlightedField === 'domicilio_legal' ? 'rounded-md ring-2 ring-green-400 ring-offset-1' : ''}`}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-gray-400" />
+              <span className="text-sm font-medium text-gray-700">Domicilio Legal</span>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mb-2">
+            Dirección legal/estatutaria de la empresa
+          </p>
+          <input
+            type="text"
+            value={formData.domicilio_legal || ''}
+            onChange={(e) => handleChange('domicilio_legal', e.target.value)}
+            disabled={!editMode}
+            placeholder="Domicilio legal de la empresa..."
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50"
+          />
         </div>
 
         {/* TELÉFONOS Y EMAILS - Grid de 2 columnas */}
@@ -3065,7 +3087,12 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
               // Si append es true, agregar al valor existente
               if (append && formData[campo]) {
                 const valorActual = formData[campo]
-                nuevoValor = valorActual + '\n\n' + nuevoValor
+                // Para actividad_principal, usar ; como separador
+                if (campo === 'actividad_principal') {
+                  nuevoValor = valorActual + '; ' + nuevoValor
+                } else {
+                  nuevoValor = valorActual + '\n\n' + nuevoValor
+                }
               }
               handleChange(campo, nuevoValor)
               setHighlightedField(campo)

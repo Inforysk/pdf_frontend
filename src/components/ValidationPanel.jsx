@@ -969,10 +969,10 @@ function ValidationPanel({ cuit, tipoId, onApplyField }) {
                         </div>
                         {c.campo_db && onApplyField && (
                           <button
-                            onClick={() => onApplyField(c.campo_db, c.valor_afip)}
+                            onClick={() => onApplyField(c.campo_db, c.valor_afip, c.append || false)}
                             className="text-[10px] text-blue-600 hover:text-blue-800 underline ml-2 whitespace-nowrap"
                           >
-                            Aplicar
+                            {c.append ? 'Agregar' : 'Aplicar'}
                           </button>
                         )}
                       </div>
