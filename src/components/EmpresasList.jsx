@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
-import { Building2, Calendar, RefreshCw, Eye, Loader2, Edit2, Download, History, ChevronLeft, ChevronRight, X, ChevronDown, BarChart3, CheckCircle2, Star, Shield, Search, Globe } from 'lucide-react'
+import { Building2, Calendar, RefreshCw, Eye, Loader2, Edit2, Download, History, ChevronLeft, ChevronRight, X, ChevronDown, BarChart3, CheckCircle2, Star, Shield, Search, Globe, TrendingUp } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -430,6 +430,12 @@ function EmpresasList({ onSelectEmpresa, onSelectFromModal, initialDetailId, onC
                         <div className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
                           <CheckCircle2 className="h-3 w-3" />
                           Balance General
+                        </div>
+                      )}
+                      {empresa.cotiza_bolsa && (
+                        <div className="inline-flex items-center gap-1.5 mt-2 ml-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                          <TrendingUp className="h-3 w-3" />
+                          BYMA
                         </div>
                       )}
                       {empresa.actividad_principal && (

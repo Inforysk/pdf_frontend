@@ -14,10 +14,20 @@ const ACCENT_STYLES = {
     timeClass: 'text-violet-600',
     barClass: 'bg-violet-600',
   },
+  purple: {
+    stroke: '#9333ea',
+    timeClass: 'text-purple-600',
+    barClass: 'bg-purple-600',
+  },
   emerald: {
     stroke: '#10b981',
     timeClass: 'text-emerald-600',
     barClass: 'bg-emerald-600',
+  },
+  amber: {
+    stroke: '#d97706',
+    timeClass: 'text-amber-600',
+    barClass: 'bg-amber-600',
   },
 }
 

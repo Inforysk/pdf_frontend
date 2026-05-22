@@ -35,6 +35,7 @@ import {
 import ValidationPanel from './ValidationPanel'
 import OsintPanel from './OsintPanel'
 import BoletinValidationPanel from './BoletinValidationPanel'
+import BYMAValidator from './BYMAValidator'
 import ActividadSelector from './ActividadSelector'
 import FormaLegalSelector from './FormaLegalSelector'
 import DomicilioAutocomplete from './DomicilioAutocomplete'
@@ -3104,6 +3105,17 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
               }, 2000)
               toast.success(`Campo "${campo}" actualizado`)
             } : null}
+          />
+        </div>
+      )}
+
+      {/* BYMA Validator — Solo Argentina (CUIT) - Información Bursátil */}
+      {habilitaValidacionArgentina && mode !== 'view' && (
+        <div className="mb-4 sm:mb-6">
+          <BYMAValidator
+            cuit={formData.cuit}
+            tipoId={tipoIdentificacion}
+            pais={formData.pais}
           />
         </div>
       )}
