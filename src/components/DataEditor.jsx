@@ -30,7 +30,8 @@ import {
   Mail,
   X,
   MapPin,
-  Linkedin
+  Linkedin,
+  Search
 } from 'lucide-react'
 import ValidationPanel from './ValidationPanel'
 import OsintPanel from './OsintPanel'
@@ -738,6 +739,10 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
   const [selectedBalanceDetail, setSelectedBalanceDetail] = useState(null) // Balance seleccionado para ver detalle
   const [extractBalanceElapsed, setExtractBalanceElapsed] = useState(0)
   const extractBalanceStartRef = useRef(null)
+  
+  // ── Búsqueda de Balance Online (CNV/Web) ──
+  const [searchingBalanceOnline, setSearchingBalanceOnline] = useState(false)
+  const [balanceSearchResult, setBalanceSearchResult] = useState(null)
 
   // Timer de extracción para modal de carga bloqueante
   useEffect(() => {
@@ -1471,6 +1476,75 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
       if (balanceFileInputRef.current) {
         balanceFileInputRef.current.value = ''
       }
+    }
+  }
+
+  // ── Búsqueda de Balance Online (CNV/Fuentes Públicas) ──
+  const handleSearchBalanceOnline = async () => {
+    // Necesitamos CUIT y razón social para buscar
+    const cuit = formData.cuit || ''
+    const razonSocial = formData.razon_social || ''
+    const pais = formData.pais || selectedPais || 'Argentina'
+    
+    if (!cuit.trim()) {
+      toast.error('Ingrese el CUIT/identificador para buscar balances')
+      return
+    }
+    
+    if (!razonSocial.trim()) {
+      toast.error('Ingrese la razón social para buscar balances')
+      return
+    }
+    
+    // Mapear país a código
+    const paisCodigo = pais === 'Argentina' ? 'AR' : 
+                       pais === 'Uruguay' ? 'UY' : 
+                       pais === 'Perú' ? 'PE' : 
+                       pais === 'México' ? 'MX' : 
+                       pais === 'República Dominicana' ? 'DO' : 
+                       pais === 'Honduras' ? 'HN' : 'AR'
+    
+    setSearchingBalanceOnline(true)
+    setBalanceSearchResult(null)
+    
+    try {
+      // Primero buscar si hay fuentes disponibles
+      const searchRes = await axios.post('/api/buscar-balance-externo', {
+        cuit: cuit.trim(),
+        razon_social: razonSocial.trim(),
+        pais: paisCodigo,
+        descargar: false  // Solo buscar primero
+      })
+      
+      if (searchRes.data.cotiza_bolsa && searchRes.data.balances_encontrados?.length > 0) {
+        // Empresa cotiza y tiene balances disponibles
+        setBalanceSearchResult(searchRes.data)
+        toast.success(`¡Empresa cotiza en bolsa! ${searchRes.data.balances_encontrados.length} balances disponibles en CNV`, { duration: 5000 })
+        setShowHistoricalModal(true)  // Mostrar modal con resultados
+      } else if (searchRes.data.cotiza_bolsa) {
+        // Cotiza pero no encontramos balances
+        toast(`Empresa cotiza en bolsa (${searchRes.data.ticker}). Ver enlaces a CNV.`, { duration: 5000, icon: 'ℹ️' })
+        setBalanceSearchResult(searchRes.data)
+        setShowHistoricalModal(true)  // Mostrar modal con enlaces
+      } else {
+        // No cotiza en bolsa
+        toast(searchRes.data.mensaje || 'La empresa no cotiza en bolsa. Los balances deben subirse manualmente.', { duration: 5000, icon: 'ℹ️' })
+        setBalanceSearchResult(searchRes.data)
+        setShowHistoricalModal(true)  // Mostrar modal con info
+      }
+      
+    } catch (err) {
+      console.error('Error buscando balance online:', err)
+      toast.error(err.response?.data?.error || 'Error al buscar balances en fuentes externas')
+    } finally {
+      setSearchingBalanceOnline(false)
+    }
+  }
+  
+  // Abrir enlace de balance en CNV
+  const handleOpenCNVLink = (url) => {
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer')
     }
   }
 
@@ -2244,6 +2318,26 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
                     Historial {(historicalBalances.length + savedBalances.length) > 0 && `(${historicalBalances.length + savedBalances.length})`}
                   </button>
                 )}
+                {/* Botón para buscar balance online en CNV/fuentes públicas */}
+                <button
+                  type="button"
+                  onClick={handleSearchBalanceOnline}
+                  disabled={searchingBalanceOnline || !formData.cuit}
+                  title="Buscar balance en fuentes públicas (CNV para empresas que cotizan en bolsa)"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition-colors bg-purple-100 text-purple-700 border border-purple-300 hover:bg-purple-200 disabled:opacity-50"
+                >
+                  {searchingBalanceOnline ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Buscando...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="h-3 w-3" />
+                      Buscar Balance Online
+                    </>
+                  )}
+                </button>
               </>
             )}
           </span>
@@ -3325,6 +3419,87 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
             </div>
             
             <div className="p-4 overflow-y-auto flex-1">
+              {/* Resultados de búsqueda online (CNV) */}
+              {balanceSearchResult && (
+                <div className="mb-6">
+                  <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                    <Search className="h-4 w-4 text-purple-600" />
+                    Búsqueda Online
+                    {balanceSearchResult.cotiza_bolsa && (
+                      <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                        Cotiza en BYMA ({balanceSearchResult.ticker})
+                      </span>
+                    )}
+                  </h4>
+                  
+                  {balanceSearchResult.cotiza_bolsa ? (
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-3">
+                      <p className="text-sm text-purple-800 mb-2">
+                        <strong>{balanceSearchResult.nombre_bolsa || formData.razon_social}</strong> cotiza en bolsa.
+                        {balanceSearchResult.sector && <span className="ml-1">Sector: {balanceSearchResult.sector}</span>}
+                      </p>
+                      
+                      {balanceSearchResult.instrucciones && (
+                        <p className="text-xs text-purple-700 mb-3">
+                          {balanceSearchResult.instrucciones}
+                        </p>
+                      )}
+                      
+                      {/* Enlaces a CNV */}
+                      {balanceSearchResult.enlaces_cnv && (
+                        <div className="space-y-2 mt-3">
+                          <p className="text-xs text-purple-700 font-medium">
+                            📄 Acceder a documentos en CNV:
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              onClick={() => handleOpenCNVLink(balanceSearchResult.enlaces_cnv.ficha_empresa)}
+                              className="text-xs px-3 py-1.5 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 flex items-center gap-1"
+                            >
+                              <Globe className="h-3 w-3" />
+                              Ficha de Empresa
+                            </button>
+                            <button
+                              onClick={() => handleOpenCNVLink(balanceSearchResult.enlaces_cnv.documentos)}
+                              className="text-xs px-3 py-1.5 bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center gap-1"
+                            >
+                              <FileText className="h-3 w-3" />
+                              Estados Financieros
+                            </button>
+                            <button
+                              onClick={() => handleOpenCNVLink(balanceSearchResult.enlaces_cnv.bymadata)}
+                              className="text-xs px-3 py-1.5 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 flex items-center gap-1"
+                            >
+                              <Eye className="h-3 w-3" />
+                              Cotización BYMA
+                            </button>
+                          </div>
+                          <p className="text-xs text-purple-600 mt-2">
+                            💡 Descarga el PDF del balance desde CNV y luego súbelo con "Adjuntar Balance PDF"
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <p className="text-sm text-gray-700">
+                        {balanceSearchResult.mensaje || 'Esta empresa no cotiza en bolsa. Los balances de empresas privadas no están disponibles públicamente.'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Puede subir un PDF del balance manualmente usando el botón "Adjuntar Balance PDF".
+                      </p>
+                    </div>
+                  )}
+                  
+                  <button
+                    onClick={() => setBalanceSearchResult(null)}
+                    className="text-xs text-gray-500 hover:text-gray-700 mt-2"
+                  >
+                    Cerrar resultados de búsqueda
+                  </button>
+                </div>
+              )}
+              
               {/* Balances extraídos del PDF actual */}
               {historicalBalances.length > 0 && (
                 <div className="mb-6">

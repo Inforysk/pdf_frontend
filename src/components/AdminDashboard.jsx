@@ -297,7 +297,14 @@ export default function AdminDashboard() {
     }
   }
 
-  useEffect(() => { loadDashboard() }, [])
+  // Auto-refresh cada 30 segundos para datos en tiempo real
+  useEffect(() => {
+    loadDashboard()
+    const interval = setInterval(() => {
+      loadDashboard()
+    }, 30000) // 30 segundos
+    return () => clearInterval(interval)
+  }, [])
 
   if (loading) {
     return (
@@ -357,25 +364,23 @@ export default function AdminDashboard() {
           active={expandedKpi === 'empresas'}
           onClick={() => toggleKpi('empresas')}
         />
-        <KpiCard icon={ClipboardList} label="Solicitudes" value={kpis.solicitudes_activas} color="amber"
-          description="Pendientes + en proceso"
+        <KpiCard icon={ClipboardList} label="Pendientes" value={kpis.solicitudes_pendientes || 0} color="amber"
+          description="⚡ Tiempo real"
           active={expandedKpi === 'solicitudes'}
           onClick={() => toggleKpi('solicitudes')}
         />
-        <KpiCard icon={FileText} label="Informes del mes" value={kpis.informes_mes} color="green"
-          description="Completados este mes"
+        <KpiCard icon={Activity} label="En Proceso" value={kpis.solicitudes_en_proceso || 0} color="cyan"
+          description="⚡ Tiempo real"
+        />
+        <KpiCard icon={FileText} label="Completadas" value={kpis.solicitudes_completadas_mes || 0} color="green"
+          description="Este mes"
           active={expandedKpi === 'informes'}
           onClick={() => toggleKpi('informes')}
         />
         <KpiCard icon={TrendingUp} label="Score promedio" value={kpis.score_promedio} sub="/ 100" color="purple" />
-        <KpiCard icon={Users} label="Usuarios" value={kpis.usuarios_activos} color="cyan"
-          description="Usuarios activos"
-        />
         <KpiCard
-          icon={Database} label="Precarga" value={kpis.total_solicitudes} color="rose"
-          description="Data disponible para informes"
-          active={expandedKpi === 'precarga'}
-          onClick={() => toggleKpi('precarga')}
+          icon={Database} label="Facturación" value={`€${(kpis.facturacion_mes || 0).toLocaleString()}`} color="rose"
+          description="Este mes"
         />
       </div>
 
@@ -389,19 +394,6 @@ export default function AdminDashboard() {
           valueLabel="empresas"
           onClose={() => setExpandedKpi(null)}
           source="empresas"
-        />
-      )}
-
-      {/* ── Panel expandible: Precarga por país ── */}
-      {expandedKpi === 'precarga' && (data.precarga_por_pais || []).length > 0 && (
-        <DetailPanel
-          data={data.precarga_por_pais}
-          title="Precarga por Origen — Click en un país para descargar"
-          nameKey="pais"
-          valueKey="cantidad"
-          valueLabel="registros"
-          onClose={() => setExpandedKpi(null)}
-          source="precarga"
         />
       )}
 
@@ -621,69 +613,100 @@ export default function AdminDashboard() {
           </div>
         </ChartCard>
 
-        <ChartCard title="Solicitudes por Estado">
+        <ChartCard title="Solicitudes Hoy ⚡">
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={solEstado} layout="vertical" margin={{ left: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                <XAxis type="number" tick={{ fontSize: 12 }} />
-                <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
-                <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="cantidad" name="Cantidad" radius={[0, 6, 6, 0]}>
-                  {solEstado.map((s, i) => (
-                    <Cell key={i} fill={s.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            {(data.solicitudes_hoy || []).length > 0 ? (
+              <div className="space-y-3 pt-2">
+                {['pendiente', 'en_proceso', 'completada'].map(estado => {
+                  const item = (data.solicitudes_hoy || []).find(s => s.estado === estado)
+                  const cantidad = item?.cantidad || 0
+                  const colors = { pendiente: '#f59e0b', en_proceso: '#3b82f6', completada: '#10b981' }
+                  const labels = { pendiente: 'Pendientes', en_proceso: 'En Proceso', completada: 'Completadas' }
+                  const total = (data.solicitudes_hoy || []).reduce((a, b) => a + (b.cantidad || 0), 0) || 1
+                  const pct = (cantidad / total * 100).toFixed(0)
+                  return (
+                    <div key={estado} className="flex items-center gap-3">
+                      <div className="w-24 text-xs font-medium text-gray-600">{labels[estado]}</div>
+                      <div className="flex-1 h-8 bg-gray-100 rounded-lg overflow-hidden relative">
+                        <div 
+                          className="h-full rounded-lg transition-all duration-500"
+                          style={{ width: `${Math.max(pct, 2)}%`, backgroundColor: colors[estado] }}
+                        />
+                        <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-700">
+                          {cantidad}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+                <div className="pt-2 border-t mt-3 flex justify-between text-sm">
+                  <span className="text-gray-500">Total hoy</span>
+                  <span className="font-bold">{(data.solicitudes_hoy || []).reduce((a, b) => a + (b.cantidad || 0), 0)}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+                Sin solicitudes hoy
+              </div>
+            )}
           </div>
         </ChartCard>
       </div>
 
-      {/* ── Fila 2: Precarga por origen + tendencia mensual ── */}
+      {/* ── Fila 2: Top Clientes + Facturación mensual ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        <ChartCard title="Precarga por Origen">
+        <ChartCard title="Top 5 Clientes (Solicitudes)">
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={data.precarga_por_pais || []}
-                  dataKey="cantidad"
-                  nameKey="pais"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius="40%"
-                  outerRadius="75%"
-                  label={({ pais, percent }) => `${pais} ${(percent * 100).toFixed(0)}%`}
-                  labelLine
-                >
-                  {(data.precarga_por_pais || []).map((_, i) => (
-                    <Cell key={i} fill={COLORS_PIE[i % COLORS_PIE.length]} />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
+            {(data.top_clientes || []).length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data.top_clientes} layout="vertical" margin={{ left: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                  <XAxis type="number" tick={{ fontSize: 12 }} />
+                  <YAxis dataKey="cliente" type="category" width={100} tick={{ fontSize: 11 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="solicitudes" name="Solicitudes" fill="#8b5cf6" radius={[0, 6, 6, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+                Sin datos de clientes
+              </div>
+            )}
           </div>
         </ChartCard>
 
-        <ChartCard title="Precarga — últimos 6 meses">
+        <ChartCard title="Facturación — últimos 6 meses">
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data.solicitudes_por_mes || []} margin={{ top: 5, right: 10 }}>
-                <defs>
-                  <linearGradient id="gradSol" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="cantidad" name="Registros" stroke="#3b82f6" fill="url(#gradSol)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
+            {(data.facturacion_por_mes || []).length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data.facturacion_por_mes} margin={{ top: 5, right: 10 }}>
+                  <defs>
+                    <linearGradient id="gradFact" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                  <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `€${v}`} />
+                  <Tooltip content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null
+                    return (
+                      <div className="bg-white rounded-lg shadow-lg border px-3 py-2 text-xs">
+                        <p className="font-medium text-gray-700">{label}</p>
+                        <p className="text-green-600">Facturación: <span className="font-bold">€{payload[0]?.value?.toLocaleString()}</span></p>
+                        <p className="text-gray-500">Solicitudes: {payload[0]?.payload?.solicitudes}</p>
+                      </div>
+                    )
+                  }} />
+                  <Area type="monotone" dataKey="facturacion" name="Facturación" stroke="#10b981" fill="url(#gradFact)" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+                Sin datos de facturación
+              </div>
+            )}
           </div>
         </ChartCard>
       </div>
