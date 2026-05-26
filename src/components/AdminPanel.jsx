@@ -60,7 +60,7 @@ function AdminPanel({ onBack }) {
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="w-full px-4">
       {/* Header */}
       <div className="bg-white rounded-lg shadow-sm border p-4 sm:p-6 mb-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -1681,7 +1681,7 @@ function LogsTab() {
                     </span>
                   </td>
                   <td className="px-4 py-2 text-xs text-gray-500 hidden sm:table-cell">{log.ip_address || '-'}</td>
-                  <td className="px-4 py-2 text-xs text-gray-500 hidden md:table-cell max-w-xs truncate">{log.detalles || '-'}</td>
+                  <td className="px-4 py-2 text-xs text-gray-500 hidden md:table-cell max-w-md truncate" title={log.detalles || '-'}>{log.detalles || '-'}</td>
                 </tr>
               ))}
             </tbody>
