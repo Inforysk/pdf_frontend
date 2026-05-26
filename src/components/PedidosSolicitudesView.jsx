@@ -1210,7 +1210,15 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                     <button
                       onClick={() => {
                         const token = localStorage.getItem('access_token')
-                        window.open(`/api/empresas/${detalle.empresa_id}/pdf?lang=es&token=${token}`, '_blank')
+                        // Pasar expediente, abonado, referencia y fecha de la solicitud específica
+                        const params = new URLSearchParams({ lang: 'es', token })
+                        if (detalle.expediente) params.append('expediente', detalle.expediente)
+                        if (detalle.cliente_abono) params.append('abonado', detalle.cliente_abono)
+                        if (detalle.referencia_cliente) params.append('referencia', detalle.referencia_cliente)
+                        // Usar fecha de completado (updated_at cuando estado=completada) o fecha actual
+                        const fechaCompletado = detalle.updated_at ? new Date(detalle.updated_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+                        params.append('fecha', fechaCompletado)
+                        window.open(`/api/empresas/${detalle.empresa_id}/pdf?${params.toString()}`, '_blank')
                       }}
                       className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
                     >
@@ -1220,7 +1228,13 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                     <button
                       onClick={() => {
                         const token = localStorage.getItem('access_token')
-                        window.open(`/api/empresas/${detalle.empresa_id}/pdf?lang=en&token=${token}`, '_blank')
+                        const params = new URLSearchParams({ lang: 'en', token })
+                        if (detalle.expediente) params.append('expediente', detalle.expediente)
+                        if (detalle.cliente_abono) params.append('abonado', detalle.cliente_abono)
+                        if (detalle.referencia_cliente) params.append('referencia', detalle.referencia_cliente)
+                        const fechaCompletado = detalle.updated_at ? new Date(detalle.updated_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+                        params.append('fecha', fechaCompletado)
+                        window.open(`/api/empresas/${detalle.empresa_id}/pdf?${params.toString()}`, '_blank')
                       }}
                       className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                     >
@@ -1230,7 +1244,13 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                     <button
                       onClick={() => {
                         const token = localStorage.getItem('access_token')
-                        window.open(`/api/empresas/${detalle.empresa_id}/pdf?lang=de&token=${token}`, '_blank')
+                        const params = new URLSearchParams({ lang: 'de', token })
+                        if (detalle.expediente) params.append('expediente', detalle.expediente)
+                        if (detalle.cliente_abono) params.append('abonado', detalle.cliente_abono)
+                        if (detalle.referencia_cliente) params.append('referencia', detalle.referencia_cliente)
+                        const fechaCompletado = detalle.updated_at ? new Date(detalle.updated_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+                        params.append('fecha', fechaCompletado)
+                        window.open(`/api/empresas/${detalle.empresa_id}/pdf?${params.toString()}`, '_blank')
                       }}
                       className="inline-flex items-center gap-2 px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
                     >
