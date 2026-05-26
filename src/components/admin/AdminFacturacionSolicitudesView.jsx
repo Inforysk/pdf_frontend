@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { 
   FileText, Download, Filter, RefreshCw, Loader2, Calendar, Users, 
   Building2, ChevronDown, ChevronRight, Check, Euro, Receipt, FileSpreadsheet,
@@ -38,6 +38,12 @@ export default function AdminFacturacionSolicitudesView() {
   const [usuarios, setUsuarios] = useState([])
   const [expandedCliente, setExpandedCliente] = useState(null)
   const [selectedIds, setSelectedIds] = useState([])
+  
+  // Moneda por cliente (usuario_abono -> 'EUR' | 'USD')
+  const [monedaPorCliente, setMonedaPorCliente] = useState({})
+  
+  // Moneda para el resumen general
+  const [monedaResumen, setMonedaResumen] = useState('EUR')
   const [exporting, setExporting] = useState(false)
   
   // Tab activa: 'solicitudes' o 'historial'
@@ -140,6 +146,15 @@ export default function AdminFacturacionSolicitudesView() {
       if (res.data.success) {
         setData(res.data)
         setSelectedIds([])
+        
+        // Inicializar moneda por cliente usando la moneda_facturacion de cada solicitud
+        const monedas = {}
+        res.data.solicitudes?.forEach(sol => {
+          if (sol.usuario_abono && !monedas[sol.usuario_abono]) {
+            monedas[sol.usuario_abono] = sol.moneda_facturacion || 'EUR'
+          }
+        })
+        setMonedaPorCliente(prev => ({ ...prev, ...monedas }))
       }
     } catch (err) {
       toast.error('Error al cargar datos')
@@ -292,10 +307,16 @@ export default function AdminFacturacionSolicitudesView() {
       return
     }
     
-    // Calcular total
-    const totalEur = data.solicitudes
+    // Obtener la moneda del cliente
+    const monedaCliente = monedaPorCliente[primeraSol.usuario_abono] || primeraSol.moneda_facturacion || 'EUR'
+    
+    // Calcular total en la moneda seleccionada
+    const totalMonto = data.solicitudes
       .filter(s => selectedIds.includes(s.id))
-      .reduce((sum, s) => sum + (s.precio_calculado || 0), 0)
+      .reduce((sum, s) => {
+        const precio = monedaCliente === 'USD' ? (s.precio_usd || 0) : (s.precio_eur || s.precio_calculado || 0)
+        return sum + precio
+      }, 0)
     
     setModalData({
       usuario_abono: primeraSol.usuario_abono,
@@ -303,8 +324,9 @@ export default function AdminFacturacionSolicitudesView() {
       proveedor_codigo: primeraSol.proveedor_codigo,
       proveedor_nombre: primeraSol.proveedor_nombre,
       cantidad: selectedIds.length,
-      total_eur: totalEur,
-      solicitud_ids: selectedIds
+      total_eur: totalMonto,
+      solicitud_ids: selectedIds,
+      moneda: monedaCliente
     })
     setInvoiceNumber('')
     setPoNumber('')
@@ -327,7 +349,8 @@ export default function AdminFacturacionSolicitudesView() {
         invoice_number: invoiceNumber,
         po_number: poNumber,
         mes: filtros.mes,
-        anio: filtros.anio
+        anio: filtros.anio,
+        moneda: modalData.moneda || 'EUR'
       }, { responseType: 'blob' })
       
       // Descargar PDF
@@ -362,6 +385,7 @@ export default function AdminFacturacionSolicitudesView() {
         po_number: poNumber,
         mes: filtros.mes,
         anio: filtros.anio,
+        moneda: modalData.moneda || 'EUR',
         save_to_history: true
       }, { responseType: 'blob' })
 
@@ -464,6 +488,55 @@ export default function AdminFacturacionSolicitudesView() {
     }
     solicitudesPorCliente[key].solicitudes.push(sol)
   })
+
+  // Calcular resumen por cliente basado en la moneda seleccionada
+  const resumenCalculado = useMemo(() => {
+    const resumen = {}
+    data.solicitudes.forEach(sol => {
+      const key = sol.usuario_abono
+      if (!resumen[key]) {
+        resumen[key] = {
+          usuario_abono: sol.usuario_abono,
+          usuario_nombre: sol.usuario_nombre,
+          proveedor_codigo: sol.proveedor_codigo,
+          qty_normal: 0,
+          qty_urgente: 0,
+          qty_72h: 0,
+          total_informes: 0,
+          total_eur: 0,
+          total_usd: 0,
+          tiene_usd: false
+        }
+      }
+      const r = resumen[key]
+      const prio = sol.prioridad || 'normal'
+      if (prio === 'urgente') r.qty_urgente++
+      else if (prio === '72h') r.qty_72h++
+      else r.qty_normal++
+      r.total_informes++
+      r.total_eur += (sol.precio_eur || sol.precio_calculado || 0)
+      r.total_usd += (sol.precio_usd || 0)
+      if (sol.precio_usd && sol.precio_usd > 0) r.tiene_usd = true
+    })
+    return Object.values(resumen)
+  }, [data.solicitudes])
+
+  // Filtrar resumen por moneda
+  const resumenFiltrado = useMemo(() => {
+    if (monedaResumen === 'USD') {
+      // Solo mostrar clientes que tienen precios en USD
+      return resumenCalculado.filter(r => r.tiene_usd)
+    }
+    // EUR: mostrar todos los que NO tienen USD (o mostrar en EUR)
+    return resumenCalculado.filter(r => !r.tiene_usd)
+  }, [resumenCalculado, monedaResumen])
+
+  // Total general según moneda
+  const totalGeneralMonto = useMemo(() => {
+    return resumenFiltrado.reduce((sum, r) => {
+      return sum + (monedaResumen === 'USD' ? r.total_usd : r.total_eur)
+    }, 0)
+  }, [resumenFiltrado, monedaResumen])
 
   return (
     <div className="space-y-4">
@@ -705,7 +778,7 @@ export default function AdminFacturacionSolicitudesView() {
       {activeTab === 'solicitudes' && (
       <>
       {/* Resumen - Acordeón */}
-      {data.resumen.length > 0 && (
+      {resumenCalculado.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
           <button
             onClick={() => setShowResumen(!showResumen)}
@@ -714,16 +787,43 @@ export default function AdminFacturacionSolicitudesView() {
             <h4 className="font-medium text-gray-900 flex items-center gap-2">
               <Euro className="h-4 w-4 text-emerald-600" />
               Resumen por Cliente
-              <span className="text-sm font-normal text-gray-500">({data.resumen.length} clientes)</span>
+              <span className="text-sm font-normal text-gray-500">({resumenFiltrado.length} clientes)</span>
             </h4>
             <div className="flex items-center gap-3">
-              <span className="font-bold text-emerald-700">€{data.total_general_eur.toFixed(2)}</span>
+              <span className="font-bold text-emerald-700">
+                {monedaResumen === 'USD' ? '$' : '€'}{totalGeneralMonto.toFixed(2)}
+              </span>
               {showResumen ? <ChevronDown className="h-5 w-5 text-gray-500" /> : <ChevronRight className="h-5 w-5 text-gray-500" />}
             </div>
           </button>
           
           {showResumen && (
             <div className="p-4 overflow-x-auto">
+              {/* Selector de moneda */}
+              <div className="mb-3 flex items-center gap-2">
+                <span className="text-sm text-gray-600">Moneda:</span>
+                <button
+                  onClick={() => setMonedaResumen('EUR')}
+                  className={`px-3 py-1 text-xs font-medium rounded-l border ${
+                    monedaResumen === 'EUR' 
+                      ? 'bg-blue-500 text-white border-blue-500' 
+                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  € EUR
+                </button>
+                <button
+                  onClick={() => setMonedaResumen('USD')}
+                  className={`px-3 py-1 text-xs font-medium rounded-r border-t border-r border-b ${
+                    monedaResumen === 'USD' 
+                      ? 'bg-green-500 text-white border-green-500' 
+                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  $ USD
+                </button>
+              </div>
+              
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
@@ -734,11 +834,11 @@ export default function AdminFacturacionSolicitudesView() {
                     <th className="px-3 py-2 text-center font-medium text-gray-600">Urgente</th>
                     <th className="px-3 py-2 text-center font-medium text-gray-600">72h</th>
                     <th className="px-3 py-2 text-center font-medium text-gray-600">Total</th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-600">Monto EUR</th>
+                    <th className="px-3 py-2 text-right font-medium text-gray-600">Monto {monedaResumen}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {data.resumen.map((r, i) => (
+                  {resumenFiltrado.map((r, i) => (
                     <tr key={i} className="hover:bg-gray-50">
                       <td className="px-3 py-2 font-mono text-blue-600">{r.usuario_abono}</td>
                       <td className="px-3 py-2">{r.usuario_nombre}</td>
@@ -751,7 +851,9 @@ export default function AdminFacturacionSolicitudesView() {
                       <td className="px-3 py-2 text-center">{r.qty_urgente}</td>
                       <td className="px-3 py-2 text-center">{r.qty_72h}</td>
                       <td className="px-3 py-2 text-center font-medium">{r.total_informes}</td>
-                      <td className="px-3 py-2 text-right font-medium text-emerald-600">€{r.total_eur.toFixed(2)}</td>
+                      <td className="px-3 py-2 text-right font-medium text-emerald-600">
+                        {monedaResumen === 'USD' ? '$' : '€'}{(monedaResumen === 'USD' ? r.total_usd : r.total_eur).toFixed(2)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -759,18 +861,20 @@ export default function AdminFacturacionSolicitudesView() {
                   <tr className="border-t-2 border-emerald-200">
                     <td colSpan={3} className="px-3 py-2 text-right font-bold text-gray-900">SUBTOTALES:</td>
                     <td className="px-3 py-2 text-center font-bold text-gray-700">
-                      {data.resumen.reduce((sum, r) => sum + r.qty_normal, 0)}
+                      {resumenFiltrado.reduce((sum, r) => sum + r.qty_normal, 0)}
                     </td>
                     <td className="px-3 py-2 text-center font-bold text-gray-700">
-                      {data.resumen.reduce((sum, r) => sum + r.qty_urgente, 0)}
+                      {resumenFiltrado.reduce((sum, r) => sum + r.qty_urgente, 0)}
                     </td>
                     <td className="px-3 py-2 text-center font-bold text-gray-700">
-                      {data.resumen.reduce((sum, r) => sum + r.qty_72h, 0)}
+                      {resumenFiltrado.reduce((sum, r) => sum + r.qty_72h, 0)}
                     </td>
                     <td className="px-3 py-2 text-center font-bold text-gray-900">
-                      {data.resumen.reduce((sum, r) => sum + r.total_informes, 0)}
+                      {resumenFiltrado.reduce((sum, r) => sum + r.total_informes, 0)}
                     </td>
-                    <td className="px-3 py-2 text-right font-bold text-emerald-700 text-lg">€{data.total_general_eur.toFixed(2)}</td>
+                    <td className="px-3 py-2 text-right font-bold text-emerald-700 text-lg">
+                      {monedaResumen === 'USD' ? '$' : '€'}{totalGeneralMonto.toFixed(2)}
+                    </td>
                   </tr>
                 </tfoot>
               </table>
@@ -806,7 +910,21 @@ export default function AdminFacturacionSolicitudesView() {
           <div className="space-y-2">
             {Object.entries(solicitudesPorCliente).map(([abono, grupo]) => {
               const isExpanded = expandedCliente === abono
-              const totalGrupo = grupo.solicitudes.reduce((sum, s) => sum + (s.precio_calculado || 0), 0)
+              
+              // Verificar si el cliente tiene precios en USD (al menos una solicitud con precio_usd > 0)
+              const tieneUSD = grupo.solicitudes.some(s => s.precio_usd && s.precio_usd > 0)
+              const tieneEUR = grupo.solicitudes.some(s => (s.precio_eur || s.precio_calculado) > 0)
+              const mostrarSelectorMoneda = tieneUSD && tieneEUR
+              
+              // Obtener la moneda seleccionada para este cliente (solo USD si tiene precios USD)
+              const monedaCliente = mostrarSelectorMoneda ? (monedaPorCliente[abono] || 'EUR') : 'EUR'
+              const simboloMoneda = monedaCliente === 'USD' ? '$' : '€'
+              
+              // Calcular total usando la moneda seleccionada
+              const totalGrupo = grupo.solicitudes.reduce((sum, s) => {
+                const precio = monedaCliente === 'USD' ? (s.precio_usd || 0) : (s.precio_eur || s.precio_calculado || 0)
+                return sum + precio
+              }, 0)
               
               // Calcular estado del grupo
               const solsPendientes = grupo.solicitudes.filter(s => !s.facturado)
@@ -900,7 +1018,22 @@ export default function AdminFacturacionSolicitudesView() {
                         </button>
                       )}
                       <span className="text-sm text-gray-500">{grupo.solicitudes.length} informes</span>
-                      <span className="font-medium text-emerald-600">€{totalGrupo.toFixed(2)}</span>
+                      {/* Selector de moneda - solo si tiene precios en ambas monedas */}
+                      {mostrarSelectorMoneda && (
+                        <select
+                          value={monedaCliente}
+                          onChange={(e) => {
+                            e.stopPropagation()
+                            setMonedaPorCliente(prev => ({ ...prev, [abono]: e.target.value }))
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="px-2 py-1 text-xs border rounded bg-white hover:bg-gray-50 cursor-pointer"
+                        >
+                          <option value="EUR">€ EUR</option>
+                          <option value="USD">$ USD</option>
+                        </select>
+                      )}
+                      <span className="font-medium text-emerald-600">{simboloMoneda}{totalGrupo.toFixed(2)}</span>
                     </div>
                   </div>
 
@@ -921,18 +1054,26 @@ export default function AdminFacturacionSolicitudesView() {
                         </thead>
                         <tbody className="divide-y">
                           {grupo.solicitudes.map(sol => (
-                            <tr key={sol.id} className={`hover:bg-gray-50 ${sol.facturado ? 'bg-green-50' : ''}`}>
+                            <tr key={sol.id} className={`hover:bg-gray-50 ${sol.facturado ? 'bg-green-50' : ''} ${selectedIds.includes(sol.id) ? 'bg-blue-50' : ''}`}>
                               <td className="px-3 py-2">
                                 {!sol.facturado ? (
                                   <button onClick={() => {
-                                    // Solo seleccionar pendientes del mismo cliente
-                                    const solsPendientes = grupo.solicitudes.filter(s => !s.facturado).map(s => s.id)
-                                    const yaSeleccionado = solsPendientes.every(id => selectedIds.includes(id))
-                                    
-                                    if (yaSeleccionado) {
-                                      setSelectedIds([])
+                                    // Toggle selección individual
+                                    if (selectedIds.includes(sol.id)) {
+                                      // Deseleccionar esta solicitud
+                                      setSelectedIds(prev => prev.filter(id => id !== sol.id))
                                     } else {
-                                      setSelectedIds(solsPendientes)
+                                      // Verificar si ya hay seleccionados de otro cliente
+                                      const otroCliente = selectedIds.length > 0 && 
+                                        data.solicitudes.find(s => selectedIds.includes(s.id))?.usuario_abono !== sol.usuario_abono
+                                      
+                                      if (otroCliente) {
+                                        // Limpiar y seleccionar solo este (nuevo cliente)
+                                        setSelectedIds([sol.id])
+                                      } else {
+                                        // Agregar a la selección actual
+                                        setSelectedIds(prev => [...prev, sol.id])
+                                      }
                                     }
                                   }}>
                                     <div className={`w-4 h-4 rounded border flex items-center justify-center ${
@@ -971,7 +1112,9 @@ export default function AdminFacturacionSolicitudesView() {
                                   {sol.prioridad === 'urgente' ? 'Urgente' : sol.prioridad === '72h' ? '72h' : 'Normal'}
                                 </span>
                               </td>
-                              <td className="px-3 py-2 text-right font-medium">€{sol.precio_calculado?.toFixed(2)}</td>
+                              <td className="px-3 py-2 text-right font-medium">
+                                {simboloMoneda}{(monedaCliente === 'USD' ? (sol.precio_usd || 0) : (sol.precio_eur || sol.precio_calculado || 0)).toFixed(2)}
+                              </td>
                               <td className="px-3 py-2 text-center text-xs text-gray-500">{sol.updated_at}</td>
                               <td className="px-3 py-2 text-center">
                                 {sol.facturado ? (
@@ -1165,8 +1308,10 @@ export default function AdminFacturacionSolicitudesView() {
                     </p>
                   </div>
                   <div>
-                    <span className="text-gray-500">Total EUR:</span>
-                    <p className="font-bold text-emerald-600 text-lg">€{modalData.total_eur.toFixed(2)}</p>
+                    <span className="text-gray-500">Total {modalData.moneda || 'EUR'}:</span>
+                    <p className="font-bold text-emerald-600 text-lg">
+                      {modalData.moneda === 'USD' ? '$' : '€'}{modalData.total_eur.toFixed(2)}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1320,7 +1465,9 @@ export default function AdminFacturacionSolicitudesView() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500 text-sm">Total:</span>
-                  <span className="font-bold text-emerald-600">€{modalData.total_eur?.toFixed(2)}</span>
+                  <span className="font-bold text-emerald-600">
+                    {modalData.moneda === 'USD' ? '$' : '€'}{modalData.total_eur?.toFixed(2)}
+                  </span>
                 </div>
               </div>
 

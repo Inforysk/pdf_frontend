@@ -37,7 +37,7 @@ import UsuariosPedidosView from './components/UsuariosPedidosView'
 import logo from './assets/logo_symbol.png'
 import axios from 'axios'
 import { useAuth } from './contexts/AuthContext'
-import { FileText, List, Upload, Files, CheckCircle2, AlertTriangle, XCircle, Search, History, Menu, X, Shield, LogOut, User, Loader2, BarChart3, ChevronDown, ChevronLeft, LayoutDashboard, Calculator, GitCompare, FilePlus2, ClipboardList, TrendingUp, ArrowLeft, Globe, CreditCard, Package, Bell, Newspaper, UserCheck, Ticket, Webhook, Users2 } from 'lucide-react'
+import { FileText, List, Upload, Files, CheckCircle2, AlertTriangle, XCircle, Search, History, Menu, X, Shield, LogOut, User, Loader2, BarChart3, ChevronDown, ChevronLeft, ChevronRight, LayoutDashboard, Calculator, GitCompare, FilePlus2, ClipboardList, TrendingUp, ArrowLeft, Globe, CreditCard, Package, Bell, Newspaper, UserCheck, Ticket, Webhook, Users2, Users, Building2, ScrollText, KeyRound } from 'lucide-react'
 
 function App() {
   const { t } = useTranslation()
@@ -59,6 +59,7 @@ function App() {
   const [hasBulkResults, setHasBulkResults] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [openSubmenu, setOpenSubmenu] = useState(null) // Para submenús desplegables
   const [newReportCountry, setNewReportCountry] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [solicitudActiva, setSolicitudActiva] = useState(null) // Solicitud desde la que se inicia un informe
@@ -546,7 +547,23 @@ function App() {
   if (isAdmin || user?.rol === 'analista') sidebarItems.push({ id: 'facturacion-solicitudes', label: 'Fact. Solicitudes', icon: CreditCard, color: 'emerald' })
   if (isAdmin) sidebarItems.push({ id: 'productos-admin', label: t('nav.products'), icon: Package, color: 'violet' })
   if (isAdmin) sidebarItems.push({ id: 'alertas', label: t('nav.alerts'), icon: Bell, color: alertasCount > 0 ? 'amber' : 'blue', alertCount: alertasCount })
-  if (isAdmin) sidebarItems.push({ id: 'admin', label: t('nav.admin'), icon: Shield, color: aprobacionesCount > 0 ? 'amber' : 'red', alertCount: aprobacionesCount })
+  if (isAdmin) sidebarItems.push({ 
+    id: 'admin', 
+    label: 'Panel Administración', 
+    icon: Shield, 
+    color: aprobacionesCount > 0 ? 'amber' : 'red', 
+    alertCount: aprobacionesCount,
+    children: [
+      { id: 'admin-usuarios', label: 'Usuarios', icon: Users },
+      { id: 'admin-aprobaciones', label: 'Aprobaciones', icon: UserCheck, alertCount: aprobacionesCount },
+      { id: 'admin-packs', label: 'Packs', icon: Package },
+      { id: 'admin-prepago', label: 'Clientes Prepago', icon: Building2 },
+      { id: 'admin-roles', label: 'Roles', icon: Shield },
+      { id: 'admin-auditoria', label: 'Auditoría', icon: ScrollText },
+      { id: 'admin-apikeys', label: 'API Keys', icon: KeyRound },
+      { id: 'admin-webhooks', label: 'Webhooks', icon: Webhook },
+    ]
+  })
   if (isClienteAdmin) sidebarItems.push({ id: 'cliente-admin', label: t('nav.myCompany'), icon: UserCheck, color: aprobacionesEmpresaCount > 0 ? 'amber' : 'blue', alertCount: aprobacionesEmpresaCount })
   if (isClienteAdmin) sidebarItems.push({ id: 'cliente-productos', label: t('nav.myModules'), icon: Package, color: 'violet' })
   sidebarItems.push({ id: '_sep_bo', separator: true, label: t('nav.externalServices') })
@@ -598,7 +615,8 @@ function App() {
               ) : <div key={item.id} className="my-2 border-t border-gray-100" />
             }
             const Icon = item.icon
-            const isActive = currentView === item.id
+            const isActive = currentView === item.id || (item.children && item.children.some(c => currentView === c.id))
+            const isSubmenuOpen = openSubmenu === item.id
             const activeColor = {
               violet: 'bg-violet-50 text-violet-700',
               emerald: 'bg-emerald-50 text-emerald-700',
@@ -614,15 +632,69 @@ function App() {
               amber: 'text-amber-600',
             }[item.color] || 'text-inforysk-navy-900'
 
+            // Item con submenú
+            if (item.children && sidebarOpen) {
+              return (
+                <div key={item.id}>
+                  <button
+                    onClick={() => setOpenSubmenu(isSubmenuOpen ? null : item.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all relative ${
+                      isActive ? `${activeColor} shadow-sm` : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                  >
+                    <Icon className={`h-5 w-5 flex-shrink-0 ${isActive ? activeIcon : item.alertCount > 0 ? 'text-amber-500' : 'text-gray-400'}`} />
+                    <span className="flex-1 text-left">{item.label}</span>
+                    {item.alertCount > 0 && (
+                      <span className="flex items-center justify-center rounded-full text-[10px] text-white font-bold h-4 w-4 bg-amber-500 mr-1">
+                        {item.alertCount > 9 ? '9+' : item.alertCount}
+                      </span>
+                    )}
+                    <ChevronRight className={`h-4 w-4 transition-transform ${isSubmenuOpen ? 'rotate-90' : ''}`} />
+                  </button>
+                  {isSubmenuOpen && (
+                    <div className="ml-4 mt-1 space-y-0.5 border-l-2 border-gray-200 pl-3">
+                      {item.children.map(child => {
+                        const ChildIcon = child.icon
+                        const isChildActive = currentView === child.id
+                        return (
+                          <button
+                            key={child.id}
+                            onClick={() => { setCurrentView(child.id); setMobileMenuOpen(false); }}
+                            className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-sm transition-all relative ${
+                              isChildActive ? 'bg-gray-100 text-gray-900 font-medium' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                            }`}
+                          >
+                            <ChildIcon className={`h-4 w-4 ${isChildActive ? 'text-gray-700' : 'text-gray-400'}`} />
+                            <span>{child.label}</span>
+                            {child.alertCount > 0 && (
+                              <span className="ml-auto flex items-center justify-center rounded-full text-[10px] text-white font-bold h-4 w-4 bg-amber-500">
+                                {child.alertCount > 9 ? '9+' : child.alertCount}
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
+            // Item sin submenú (sidebar abierto o cerrado)
             return (
               <button
                 key={item.id}
                 onClick={() => {
+                  if (item.children && !sidebarOpen) {
+                    // Si tiene children y sidebar cerrado, abrir sidebar y submenu
+                    setSidebarOpen(true);
+                    setOpenSubmenu(item.id);
+                    return;
+                  }
                   if (item.id === 'new-blank') {
                     setExtractedData(null); setSelectedEmpresaId(null); setSelectedEmpresaCuit(null); setSelectedEmpresaMode(null); setNewReportCountry(null); setPreviousView(currentView);
                   }
                   if (item.id === 'search') {
-                    // Limpiar filtros al volver a buscar
                     setRefreshKey(k => k + 1);
                   }
                   setCurrentView(item.id); setMobileMenuOpen(false);
@@ -690,7 +762,8 @@ function App() {
                   return <p key={item.id} className="px-3 pt-4 pb-1 text-[10px] uppercase font-semibold text-gray-400 tracking-wider">{item.label}</p>
                 }
                 const Icon = item.icon
-                const isActive = currentView === item.id
+                const isActive = currentView === item.id || (item.children && item.children.some(c => currentView === c.id))
+                const isSubmenuOpen = openSubmenu === item.id
                 const activeColor = {
                   violet: 'bg-violet-50 text-violet-700',
                   emerald: 'bg-emerald-50 text-emerald-700',
@@ -706,6 +779,54 @@ function App() {
                   amber: 'text-amber-600',
                 }[item.color] || 'text-inforysk-navy-900'
 
+                // Item con submenú (móvil)
+                if (item.children) {
+                  return (
+                    <div key={item.id}>
+                      <button
+                        onClick={() => setOpenSubmenu(isSubmenuOpen ? null : item.id)}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all relative ${
+                          isActive ? activeColor : 'text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        <Icon className={`h-5 w-5 ${isActive ? activeIcon : item.alertCount > 0 ? 'text-amber-500' : 'text-gray-400'}`} />
+                        <span className="flex-1 text-left">{item.label}</span>
+                        {item.alertCount > 0 && (
+                          <span className="flex items-center justify-center rounded-full text-[10px] text-white font-bold h-4 w-4 bg-amber-500 mr-1">
+                            {item.alertCount > 9 ? '9+' : item.alertCount}
+                          </span>
+                        )}
+                        <ChevronRight className={`h-4 w-4 transition-transform ${isSubmenuOpen ? 'rotate-90' : ''}`} />
+                      </button>
+                      {isSubmenuOpen && (
+                        <div className="ml-4 mt-1 space-y-0.5 border-l-2 border-gray-200 pl-3">
+                          {item.children.map(child => {
+                            const ChildIcon = child.icon
+                            const isChildActive = currentView === child.id
+                            return (
+                              <button
+                                key={child.id}
+                                onClick={() => { setCurrentView(child.id); setMobileMenuOpen(false); }}
+                                className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-sm transition-all relative ${
+                                  isChildActive ? 'bg-gray-100 text-gray-900 font-medium' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                                }`}
+                              >
+                                <ChildIcon className={`h-4 w-4 ${isChildActive ? 'text-gray-700' : 'text-gray-400'}`} />
+                                <span>{child.label}</span>
+                                {child.alertCount > 0 && (
+                                  <span className="ml-auto flex items-center justify-center rounded-full text-[10px] text-white font-bold h-4 w-4 bg-amber-500">
+                                    {child.alertCount > 9 ? '9+' : child.alertCount}
+                                  </span>
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                }
+
                 return (
                   <button
                     key={item.id}
@@ -714,7 +835,6 @@ function App() {
                         setExtractedData(null); setSelectedEmpresaId(null); setSelectedEmpresaCuit(null); setSelectedEmpresaMode(null); setNewReportCountry(null); setPreviousView(currentView);
                       }
                       if (item.id === 'search') {
-                        // Limpiar filtros al volver a buscar
                         setRefreshKey(k => k + 1);
                       }
                       setCurrentView(item.id); setMobileMenuOpen(false);
@@ -873,6 +993,32 @@ function App() {
 
         {currentView === 'admin' && isAdmin && (
             <AdminPanel onBack={() => setCurrentView('search')} />
+        )}
+
+        {/* Submenús de Admin - cada uno abre AdminPanel con tab específico */}
+        {currentView === 'admin-usuarios' && isAdmin && (
+            <AdminPanel onBack={() => setCurrentView('search')} defaultTab="usuarios" />
+        )}
+        {currentView === 'admin-aprobaciones' && isAdmin && (
+            <AdminPanel onBack={() => setCurrentView('search')} defaultTab="aprobaciones" />
+        )}
+        {currentView === 'admin-packs' && isAdmin && (
+            <AdminPanel onBack={() => setCurrentView('search')} defaultTab="informes" />
+        )}
+        {currentView === 'admin-prepago' && isAdmin && (
+            <AdminPanel onBack={() => setCurrentView('search')} defaultTab="clientes-prepago" />
+        )}
+        {currentView === 'admin-roles' && isAdmin && (
+            <AdminPanel onBack={() => setCurrentView('search')} defaultTab="roles" />
+        )}
+        {currentView === 'admin-auditoria' && isAdmin && (
+            <AdminPanel onBack={() => setCurrentView('search')} defaultTab="logs" />
+        )}
+        {currentView === 'admin-apikeys' && isAdmin && (
+            <AdminPanel onBack={() => setCurrentView('search')} defaultTab="apikeys" />
+        )}
+        {currentView === 'admin-webhooks' && isAdmin && (
+            <AdminPanel onBack={() => setCurrentView('search')} defaultTab="webhooks" />
         )}
 
         {currentView === 'cliente-admin' && isClienteAdmin && (

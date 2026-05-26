@@ -7,7 +7,7 @@ import {
 import {
   Building2, ClipboardList, TrendingUp, Users, Shield, AlertTriangle,
   FileText, Database, Activity, Loader2, RefreshCcw, ChevronDown, ChevronUp, X,
-  Download, FileJson2, FileSpreadsheet, FileDown, Filter, Calendar
+  Download, FileJson2, FileSpreadsheet, FileDown, Filter, Calendar, CreditCard, Receipt
 } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
@@ -204,6 +204,9 @@ export default function AdminDashboard() {
   
   // Estado de descarga
   const [downloading, setDownloading] = useState(null)
+  
+  // Filtro de período para gráfica de facturación
+  const [periodoFacturacion, setPeriodoFacturacion] = useState(6)
 
   const loadSolicitudesActivas = async (estado = '', prioridad = '') => {
     setLoadingDetail(true)
@@ -285,16 +288,21 @@ export default function AdminDashboard() {
     }
   }
 
-  const loadDashboard = async () => {
+  const loadDashboard = async (periodo = periodoFacturacion) => {
     setLoading(true)
     try {
-      const res = await axios.get('/api/admin/dashboard')
+      const res = await axios.get(`/api/admin/dashboard?periodo_facturacion=${periodo}`)
       if (res.data.success) setData(res.data.data)
     } catch {
       toast.error('Error al cargar dashboard')
     } finally {
       setLoading(false)
     }
+  }
+  
+  const handlePeriodoChange = (nuevoPeriodo) => {
+    setPeriodoFacturacion(nuevoPeriodo)
+    loadDashboard(nuevoPeriodo)
   }
 
   // Auto-refresh cada 30 segundos para datos en tiempo real
@@ -383,6 +391,72 @@ export default function AdminDashboard() {
           description="Este mes"
         />
       </div>
+
+      {/* ── Facturación Global ── */}
+      {(data.facturas_proveedores || data.facturas_clientes) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Facturación a Clientes */}
+          {data.facturas_proveedores && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <CreditCard className="h-4 w-4 text-blue-500" />
+                Facturación a Clientes
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-amber-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-amber-600">{data.facturas_proveedores.pendientes}</div>
+                  <div className="text-xs text-amber-700">Pendientes</div>
+                  <div className="text-xs text-amber-500 mt-0.5">€{data.facturas_proveedores.total_pendiente?.toLocaleString()}</div>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-blue-600">{data.facturas_proveedores.facturadas}</div>
+                  <div className="text-xs text-blue-700">Facturadas</div>
+                  <div className="text-xs text-blue-500 mt-0.5">€{data.facturas_proveedores.total_facturado?.toLocaleString()}</div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-green-600">{data.facturas_proveedores.pagadas}</div>
+                  <div className="text-xs text-green-700">Pagadas</div>
+                  <div className="text-xs text-green-500 mt-0.5">€{data.facturas_proveedores.total_pagado?.toLocaleString()}</div>
+                </div>
+                <div className="bg-emerald-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-emerald-600">€{data.facturas_proveedores.pagado_mes?.toLocaleString()}</div>
+                  <div className="text-xs text-emerald-700">Pagado este mes</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Facturas Clientes Planes */}
+          {data.facturas_clientes && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <Receipt className="h-4 w-4 text-indigo-500" />
+                Facturas Clientes Planes
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-amber-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-amber-600">{data.facturas_clientes.pendientes}</div>
+                  <div className="text-xs text-amber-700">Pendientes</div>
+                  <div className="text-xs text-amber-500 mt-0.5">€{data.facturas_clientes.total_pendiente?.toLocaleString()}</div>
+                </div>
+                <div className="bg-red-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-red-600">{data.facturas_clientes.vencidas}</div>
+                  <div className="text-xs text-red-700">Vencidas</div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-green-600">{data.facturas_clientes.pagadas}</div>
+                  <div className="text-xs text-green-700">Pagadas</div>
+                  <div className="text-xs text-green-500 mt-0.5">€{data.facturas_clientes.total_pagado?.toLocaleString()}</div>
+                </div>
+                <div className="bg-emerald-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-emerald-600">€{data.facturas_clientes.pagado_mes?.toLocaleString()}</div>
+                  <div className="text-xs text-emerald-700">Cobrado este mes</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Panel expandible: Empresas por país ── */}
       {expandedKpi === 'empresas' && (data.empresas_por_pais || []).length > 0 && (
@@ -675,7 +749,30 @@ export default function AdminDashboard() {
           </div>
         </ChartCard>
 
-        <ChartCard title="Facturación — últimos 6 meses">
+        <div className="bg-white rounded-xl border p-4 sm:p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-gray-700">Facturación</h3>
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+              {[
+                { value: 1, label: '1M' },
+                { value: 3, label: '3M' },
+                { value: 6, label: '6M' },
+                { value: 12, label: '1A' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => handlePeriodoChange(opt.value)}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                    periodoFacturacion === opt.value
+                      ? 'bg-white text-green-700 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="h-64">
             {(data.facturacion_por_mes || []).length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -695,7 +792,7 @@ export default function AdminDashboard() {
                       <div className="bg-white rounded-lg shadow-lg border px-3 py-2 text-xs">
                         <p className="font-medium text-gray-700">{label}</p>
                         <p className="text-green-600">Facturación: <span className="font-bold">€{payload[0]?.value?.toLocaleString()}</span></p>
-                        <p className="text-gray-500">Solicitudes: {payload[0]?.payload?.solicitudes}</p>
+                        <p className="text-gray-500">Facturas: {payload[0]?.payload?.facturas}</p>
                       </div>
                     )
                   }} />
@@ -708,7 +805,7 @@ export default function AdminDashboard() {
               </div>
             )}
           </div>
-        </ChartCard>
+        </div>
       </div>
 
       {/* ── Fila 3: Distribución ratings + Radar scoring ── */}

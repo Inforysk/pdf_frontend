@@ -85,6 +85,7 @@ function PreciosPaisTab() {
   const [loading, setLoading] = useState(true)
   const [filtroProveedor, setFiltroProveedor] = useState('')
   const [filtroPais, setFiltroPais] = useState('')
+  const [filtroMoneda, setFiltroMoneda] = useState('')
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({})
 
@@ -134,6 +135,7 @@ function PreciosPaisTab() {
   const preciosFiltrados = precios.filter(p => {
     if (filtroProveedor && p.proveedor_id !== parseInt(filtroProveedor)) return false
     if (filtroPais && p.codigo_pais !== filtroPais) return false
+    if (filtroMoneda && p.moneda !== filtroMoneda) return false
     return true
   })
 
@@ -189,6 +191,18 @@ function PreciosPaisTab() {
             {paises.map(p => (
               <option key={p} value={p}>{PAISES_LABELS[p] || p} ({p})</option>
             ))}
+          </select>
+        </div>
+        <div className="w-32">
+          <label className="block text-xs font-medium text-gray-700 mb-1">Moneda</label>
+          <select
+            value={filtroMoneda}
+            onChange={e => setFiltroMoneda(e.target.value)}
+            className="w-full px-3 py-2 border rounded-md text-sm"
+          >
+            <option value="">Todas</option>
+            <option value="EUR">€ EUR</option>
+            <option value="USD">$ USD</option>
           </select>
         </div>
       </div>
@@ -259,10 +273,22 @@ function PreciosPaisTab() {
                       </>
                     ) : (
                       <>
-                        <td className="px-4 py-2 text-center font-mono text-sm">€{parseFloat(p.precio_normal || 0).toFixed(2)}</td>
-                        <td className="px-4 py-2 text-center font-mono text-sm text-orange-600">€{parseFloat(p.precio_urgente || 0).toFixed(2)}</td>
-                        <td className="px-4 py-2 text-center font-mono text-sm text-blue-600">€{parseFloat(p.precio_72hrs || 0).toFixed(2)}</td>
-                        <td className="px-4 py-2 text-center text-sm">{p.moneda}</td>
+                        <td className="px-4 py-2 text-center font-mono text-sm">
+                          {p.moneda === 'USD' ? '$' : '€'}{parseFloat(p.precio_normal || 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-center font-mono text-sm text-orange-600">
+                          {p.moneda === 'USD' ? '$' : '€'}{parseFloat(p.precio_urgente || 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-center font-mono text-sm text-blue-600">
+                          {p.moneda === 'USD' ? '$' : '€'}{parseFloat(p.precio_72hrs || 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-center text-sm">
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            p.moneda === 'USD' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {p.moneda || 'EUR'}
+                          </span>
+                        </td>
                         <td className="px-4 py-2 text-right">
                           <button onClick={() => handleEdit(p)} className="text-blue-600 hover:text-blue-800 p-1">
                             <Edit2 className="h-4 w-4" />

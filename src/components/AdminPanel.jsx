@@ -24,8 +24,8 @@ const TABS = [
   { key: 'webhooks', label: 'Webhooks', icon: Webhook },
 ]
 
-function AdminPanel({ onBack }) {
-  const [activeTab, setActiveTab] = useState('usuarios')
+function AdminPanel({ onBack, defaultTab = null }) {
+  const [activeTab, setActiveTab] = useState(defaultTab || 'usuarios')
   const [aprobacionesPendientes, setAprobacionesPendientes] = useState(0)
 
   // Cargar contador de aprobaciones pendientes
@@ -35,8 +35,8 @@ function AdminPanel({ onBack }) {
         const res = await axios.get('/api/admin/aprobaciones-count')
         if (res.data.success) {
           setAprobacionesPendientes(res.data.count || 0)
-          // Si hay pendientes, mostrar tab de aprobaciones automáticamente
-          if (res.data.count > 0) {
+          // Si hay pendientes y no hay tab por defecto, mostrar tab de aprobaciones automáticamente
+          if (res.data.count > 0 && !defaultTab) {
             setActiveTab('aprobaciones')
           }
         }
@@ -59,50 +59,69 @@ function AdminPanel({ onBack }) {
       .catch(() => {})
   }
 
+  // Obtener nombre del tab activo para mostrar como título
+  const activeTabInfo = TABS.find(t => t.key === activeTab)
+  const ActiveIcon = activeTabInfo?.icon
+
   return (
     <div className="w-full px-4">
       {/* Header */}
       <div className="bg-white rounded-lg shadow-sm border p-4 sm:p-6 mb-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h2 className="text-lg sm:text-xl font-bold text-gray-900">Panel de Administración</h2>
-            <p className="text-sm text-gray-500">Gestión de usuarios, roles y auditoría</p>
+          <div className="flex items-center gap-3">
+            {defaultTab && ActiveIcon && (
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-inforysk-navy-50 to-inforysk-red-50 flex items-center justify-center">
+                <ActiveIcon className="h-5 w-5 text-inforysk-navy-900" />
+              </div>
+            )}
+            <div>
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900">
+                {defaultTab ? activeTabInfo?.label || 'Panel de Administración' : 'Panel de Administración'}
+              </h2>
+              <p className="text-sm text-gray-500">
+                {defaultTab ? 'Panel de Administración' : 'Gestión de usuarios, roles y auditoría'}
+              </p>
+            </div>
           </div>
-          <button onClick={onBack} className="btn-secondary text-sm">← Volver</button>
+          {!defaultTab && (
+            <button onClick={onBack} className="btn-secondary text-sm">← Volver</button>
+          )}
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 mt-4 bg-gray-100 rounded-lg p-1">
-          {TABS.map(tab => {
-            const Icon = tab.icon
-            const isAprobaciones = tab.key === 'aprobaciones'
-            const showBadge = isAprobaciones && aprobacionesPendientes > 0
-            return (
-              <button
-                key={tab.key}
-                onClick={() => handleTabChange(tab.key)}
-                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all relative ${
-                  activeTab === tab.key
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : showBadge 
-                      ? 'text-red-600 hover:text-red-700 bg-red-50'
-                      : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <Icon className={`h-4 w-4 ${showBadge && activeTab !== tab.key ? 'animate-pulse' : ''}`} />
-                <span className="hidden sm:inline">{tab.label}</span>
-                {showBadge && (
-                  <span className="absolute -top-1 -right-1 sm:relative sm:top-0 sm:right-0 sm:ml-1 min-w-5 h-5 px-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                    {aprobacionesPendientes > 9 ? '9+' : aprobacionesPendientes}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
+        {/* Tabs - solo si no viene con defaultTab */}
+        {!defaultTab && (
+          <div className="flex gap-1 mt-4 bg-gray-100 rounded-lg p-1">
+            {TABS.map(tab => {
+              const Icon = tab.icon
+              const isAprobaciones = tab.key === 'aprobaciones'
+              const showBadge = isAprobaciones && aprobacionesPendientes > 0
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => handleTabChange(tab.key)}
+                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all relative ${
+                    activeTab === tab.key
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : showBadge 
+                        ? 'text-red-600 hover:text-red-700 bg-red-50'
+                        : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Icon className={`h-4 w-4 ${showBadge && activeTab !== tab.key ? 'animate-pulse' : ''}`} />
+                  <span className="hidden sm:inline">{tab.label}</span>
+                  {showBadge && (
+                    <span className="absolute -top-1 -right-1 sm:relative sm:top-0 sm:right-0 sm:ml-1 min-w-5 h-5 px-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                      {aprobacionesPendientes > 9 ? '9+' : aprobacionesPendientes}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {/* Alerta de pendientes */}
-        {aprobacionesPendientes > 0 && activeTab !== 'aprobaciones' && (
+        {aprobacionesPendientes > 0 && activeTab !== 'aprobaciones' && !defaultTab && (
           <div 
             onClick={() => handleTabChange('aprobaciones')}
             className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3 cursor-pointer hover:bg-amber-100 transition-colors"
@@ -144,6 +163,14 @@ function UsersTab() {
   const [showForm, setShowForm] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
   const [resetPasswordUser, setResetPasswordUser] = useState(null)
+  
+  // Filtros y paginación
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterRol, setFilterRol] = useState('')
+  const [filterFechaDesde, setFilterFechaDesde] = useState('')
+  const [filterFechaHasta, setFilterFechaHasta] = useState('')
+  const [currentPage, setCurrentPage] = useState(0)
+  const ITEMS_PER_PAGE = 5
 
   useEffect(() => { loadData() }, [])
 
@@ -161,6 +188,48 @@ function UsersTab() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Filtrar usuarios
+  const filteredUsers = users.filter(user => {
+    // Búsqueda por nombre, username o email
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase()
+      const matchName = user.nombre_completo?.toLowerCase().includes(search)
+      const matchUsername = user.username?.toLowerCase().includes(search)
+      const matchEmail = user.email?.toLowerCase().includes(search)
+      if (!matchName && !matchUsername && !matchEmail) return false
+    }
+    // Filtro por rol
+    if (filterRol && user.rol !== filterRol) return false
+    // Filtro por fecha desde
+    if (filterFechaDesde && user.created_at) {
+      const userDate = new Date(user.created_at).setHours(0,0,0,0)
+      const fromDate = new Date(filterFechaDesde).setHours(0,0,0,0)
+      if (userDate < fromDate) return false
+    }
+    // Filtro por fecha hasta
+    if (filterFechaHasta && user.created_at) {
+      const userDate = new Date(user.created_at).setHours(23,59,59,999)
+      const toDate = new Date(filterFechaHasta).setHours(23,59,59,999)
+      if (userDate > toDate) return false
+    }
+    return true
+  })
+
+  // Paginación
+  const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE)
+  const paginatedUsers = filteredUsers.slice(currentPage * ITEMS_PER_PAGE, (currentPage + 1) * ITEMS_PER_PAGE)
+
+  // Reset página cuando cambian filtros
+  useEffect(() => { setCurrentPage(0) }, [searchTerm, filterRol, filterFechaDesde, filterFechaHasta])
+
+  const clearFilters = () => {
+    setSearchTerm('')
+    setFilterRol('')
+    setFilterFechaDesde('')
+    setFilterFechaHasta('')
+    setCurrentPage(0)
   }
 
   const handleToggleActive = async (user) => {
@@ -192,10 +261,88 @@ function UsersTab() {
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>
 
+  // Obtener roles únicos de los usuarios
+  const uniqueRoles = [...new Set(users.map(u => u.rol))].filter(Boolean).sort()
+
   return (
     <div className="space-y-4">
+      {/* Barra de búsqueda y filtros */}
+      <div className="bg-white rounded-lg border p-4 space-y-3">
+        <div className="flex flex-col lg:flex-row gap-3">
+          {/* Búsqueda */}
+          <div className="flex-1">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Buscar por nombre, usuario o email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <svg className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+          </div>
+          
+          {/* Filtro por rol */}
+          <div className="w-full lg:w-48">
+            <select
+              value={filterRol}
+              onChange={(e) => setFilterRol(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Todos los roles</option>
+              {uniqueRoles.map(rol => (
+                <option key={rol} value={rol}>{rol}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Fecha desde */}
+          <div className="w-full lg:w-40">
+            <input
+              type="date"
+              value={filterFechaDesde}
+              onChange={(e) => setFilterFechaDesde(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Desde"
+              title="Fecha registro desde"
+            />
+          </div>
+
+          {/* Fecha hasta */}
+          <div className="w-full lg:w-40">
+            <input
+              type="date"
+              value={filterFechaHasta}
+              onChange={(e) => setFilterFechaHasta(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Hasta"
+              title="Fecha registro hasta"
+            />
+          </div>
+
+          {/* Limpiar filtros */}
+          {(searchTerm || filterRol || filterFechaDesde || filterFechaHasta) && (
+            <button
+              onClick={clearFilters}
+              className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg flex items-center gap-1"
+            >
+              <X className="h-4 w-4" /> Limpiar
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Header con conteo y acciones */}
       <div className="flex justify-between items-center">
-        <span className="text-sm text-gray-500">{users.length} usuarios</span>
+        <span className="text-sm text-gray-500">
+          {filteredUsers.length === users.length 
+            ? `${users.length} usuarios` 
+            : `${filteredUsers.length} de ${users.length} usuarios`
+          }
+        </span>
         <div className="flex gap-2">
           <button onClick={loadData} className="btn-secondary text-sm flex items-center gap-1"><RefreshCw className="h-4 w-4" /></button>
           <button onClick={() => { setEditingUser(null); setShowForm(true) }} className="btn-primary text-sm flex items-center gap-1">
@@ -204,33 +351,42 @@ function UsersTab() {
         </div>
       </div>
 
-      {/* Lista de usuarios */}
+      {/* Lista de usuarios paginada */}
       <div className="space-y-2">
-        {users.map(user => (
-          <div key={user.id} className={`bg-white rounded-lg border p-4 ${!user.activo ? 'opacity-60' : ''}`}>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${
-                  user.rol === 'admin' ? 'bg-red-500' : user.rol === 'analista' ? 'bg-blue-500' : 'bg-gray-500'
-                }`}>
-                  {user.username[0]?.toUpperCase()}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-gray-900">{user.nombre_completo || user.username}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      user.rol === 'admin' ? 'bg-red-100 text-red-700' :
-                      user.rol === 'analista' ? 'bg-blue-100 text-blue-700' :
-                      'bg-gray-100 text-gray-700'
-                    }`}>{user.rol}</span>
-                    {user.bloqueado && <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs">BLOQUEADO</span>}
-                    {!user.activo && <span className="px-2 py-0.5 bg-gray-200 text-gray-600 rounded-full text-xs">INACTIVO</span>}
-                    {user.must_change_password && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs">Debe cambiar pwd</span>}
+        {paginatedUsers.length === 0 ? (
+          <div className="bg-white rounded-lg border p-8 text-center text-gray-500">
+            {searchTerm || filterRol || filterFechaDesde || filterFechaHasta 
+              ? 'No se encontraron usuarios con los filtros aplicados'
+              : 'No hay usuarios registrados'
+            }
+          </div>
+        ) : (
+          paginatedUsers.map(user => (
+            <div key={user.id} className={`bg-white rounded-lg border p-4 ${!user.activo ? 'opacity-60' : ''}`}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                    user.rol === 'admin' ? 'bg-red-500' : user.rol === 'analista' ? 'bg-blue-500' : 'bg-gray-500'
+                  }`}>
+                    {user.username[0]?.toUpperCase()}
                   </div>
-                  <p className="text-xs text-gray-500 truncate">@{user.username} · {user.email || 'Sin email'}</p>
-                  <p className="text-xs text-gray-400">
-                    Último login: {user.last_login ? new Date(user.last_login).toLocaleString('es-AR') : 'Nunca'}
-                  </p>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-gray-900">{user.nombre_completo || user.username}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        user.rol === 'admin' ? 'bg-red-100 text-red-700' :
+                        user.rol === 'analista' ? 'bg-blue-100 text-blue-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>{user.rol}</span>
+                      {user.bloqueado && <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs">BLOQUEADO</span>}
+                      {!user.activo && <span className="px-2 py-0.5 bg-gray-200 text-gray-600 rounded-full text-xs">INACTIVO</span>}
+                      {user.must_change_password && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs">Debe cambiar pwd</span>}
+                    </div>
+                    <p className="text-xs text-gray-500 truncate">@{user.username} · {user.email || 'Sin email'}</p>
+                    <p className="text-xs text-gray-400">
+                      Registro: {user.created_at ? new Date(user.created_at).toLocaleDateString('es-AR') : '-'} · 
+                      Último login: {user.last_login ? new Date(user.last_login).toLocaleString('es-AR') : 'Nunca'}
+                    </p>
                 </div>
               </div>
 
@@ -252,8 +408,49 @@ function UsersTab() {
               </div>
             </div>
           </div>
-        ))}
+        ))
+        )}
       </div>
+
+      {/* Paginación */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between bg-white rounded-lg border px-4 py-3">
+          <div className="text-sm text-gray-500">
+            Mostrando {currentPage * ITEMS_PER_PAGE + 1}-{Math.min((currentPage + 1) * ITEMS_PER_PAGE, filteredUsers.length)} de {filteredUsers.length}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+              disabled={currentPage === 0}
+              className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              ← Anterior
+            </button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: totalPages }, (_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentPage(i)}
+                  className={`w-8 h-8 text-sm rounded-lg ${
+                    currentPage === i 
+                      ? 'bg-blue-600 text-white' 
+                      : 'hover:bg-gray-100'
+                  }`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={currentPage >= totalPages - 1}
+              className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              Siguiente →
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Modal de crear/editar usuario */}
       {showForm && (
@@ -1620,14 +1817,49 @@ function LogsTab() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(0)
-  const LIMIT = 50
+  const LIMIT = 20
 
-  useEffect(() => { loadLogs() }, [page])
+  // Filtros
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterUsuario, setFilterUsuario] = useState('')
+  const [filterAccion, setFilterAccion] = useState('')
+  const [filterFechaDesde, setFilterFechaDesde] = useState('')
+  const [filterFechaHasta, setFilterFechaHasta] = useState('')
+  const [usuarios, setUsuarios] = useState([])
+  const [acciones, setAcciones] = useState([])
+
+  // Cargar lista de usuarios y acciones únicas para los filtros
+  useEffect(() => {
+    const loadFilters = async () => {
+      try {
+        const res = await axios.get('/api/admin/logs/filters')
+        if (res.data.success) {
+          setUsuarios(res.data.usuarios || [])
+          setAcciones(res.data.acciones || [])
+        }
+      } catch (err) {
+        console.error('Error cargando filtros:', err)
+      }
+    }
+    loadFilters()
+  }, [])
+
+  useEffect(() => { loadLogs() }, [page, filterUsuario, filterAccion, filterFechaDesde, filterFechaHasta, searchTerm])
 
   const loadLogs = async () => {
     setLoading(true)
     try {
-      const res = await axios.get(`/api/admin/logs?limit=${LIMIT}&offset=${page * LIMIT}`)
+      const params = new URLSearchParams({
+        limit: LIMIT,
+        offset: page * LIMIT,
+      })
+      if (filterUsuario) params.append('usuario', filterUsuario)
+      if (filterAccion) params.append('accion', filterAccion)
+      if (filterFechaDesde) params.append('fecha_desde', filterFechaDesde)
+      if (filterFechaHasta) params.append('fecha_hasta', filterFechaHasta)
+      if (searchTerm) params.append('buscar', searchTerm)
+
+      const res = await axios.get(`/api/admin/logs?${params.toString()}`)
       if (res.data.success) {
         setLogs(res.data.logs)
         setTotal(res.data.total)
@@ -1635,6 +1867,20 @@ function LogsTab() {
     } catch { toast.error('Error al cargar logs') }
     finally { setLoading(false) }
   }
+
+  // Reset página cuando cambian filtros
+  useEffect(() => { setPage(0) }, [filterUsuario, filterAccion, filterFechaDesde, filterFechaHasta, searchTerm])
+
+  const clearFilters = () => {
+    setSearchTerm('')
+    setFilterUsuario('')
+    setFilterAccion('')
+    setFilterFechaDesde('')
+    setFilterFechaHasta('')
+    setPage(0)
+  }
+
+  const hasFilters = searchTerm || filterUsuario || filterAccion || filterFechaDesde || filterFechaHasta
 
   const getActionColor = (accion) => {
     if (accion === 'login') return 'bg-green-100 text-green-700'
@@ -1647,13 +1893,96 @@ function LogsTab() {
     return 'bg-gray-100 text-gray-700'
   }
 
-  if (loading && logs.length === 0) return <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>
+  const totalPages = Math.ceil(total / LIMIT)
 
   return (
     <div className="space-y-3">
+      {/* Filtros */}
+      <div className="bg-white rounded-lg border p-4 space-y-3">
+        <div className="flex flex-col lg:flex-row gap-3">
+          {/* Búsqueda */}
+          <div className="flex-1">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Buscar en detalles..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <svg className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+          </div>
+          
+          {/* Filtro por usuario */}
+          <div className="w-full lg:w-44">
+            <select
+              value={filterUsuario}
+              onChange={(e) => setFilterUsuario(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Todos los usuarios</option>
+              {usuarios.map(u => (
+                <option key={u} value={u}>{u}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro por acción */}
+          <div className="w-full lg:w-56">
+            <select
+              value={filterAccion}
+              onChange={(e) => setFilterAccion(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Todas las acciones</option>
+              {acciones.map(a => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Fecha desde */}
+          <div className="w-full lg:w-40">
+            <input
+              type="date"
+              value={filterFechaDesde}
+              onChange={(e) => setFilterFechaDesde(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              title="Desde"
+            />
+          </div>
+
+          {/* Fecha hasta */}
+          <div className="w-full lg:w-40">
+            <input
+              type="date"
+              value={filterFechaHasta}
+              onChange={(e) => setFilterFechaHasta(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              title="Hasta"
+            />
+          </div>
+
+          {/* Limpiar filtros */}
+          {hasFilters && (
+            <button
+              onClick={clearFilters}
+              className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg flex items-center gap-1"
+            >
+              <X className="h-4 w-4" /> Limpiar
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="flex justify-between items-center">
-        <span className="text-sm text-gray-500">{total} registros totales</span>
-        <button onClick={loadLogs} className="btn-secondary text-sm flex items-center gap-1"><RefreshCw className="h-4 w-4" /></button>
+        <span className="text-sm text-gray-500">{total} registros {hasFilters ? 'encontrados' : 'totales'}</span>
+        <button onClick={loadLogs} disabled={loading} className="btn-secondary text-sm flex items-center gap-1">
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       <div className="bg-white rounded-lg border overflow-hidden">
@@ -1669,46 +1998,89 @@ function LogsTab() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {logs.map(log => (
-                <tr key={log.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap">
-                    {log.created_at ? new Date(log.created_at).toLocaleString('es-AR') : '-'}
+              {loading && logs.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" />
                   </td>
-                  <td className="px-4 py-2 font-medium">{log.username || '-'}</td>
-                  <td className="px-4 py-2">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getActionColor(log.accion)}`}>
-                      {log.accion}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-xs text-gray-500 hidden sm:table-cell">{log.ip_address || '-'}</td>
-                  <td className="px-4 py-2 text-xs text-gray-500 hidden md:table-cell max-w-md truncate" title={log.detalles || '-'}>{log.detalles || '-'}</td>
                 </tr>
-              ))}
+              ) : logs.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                    {hasFilters ? 'No se encontraron registros con los filtros aplicados' : 'No hay registros'}
+                  </td>
+                </tr>
+              ) : (
+                logs.map(log => (
+                  <tr key={log.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap">
+                      {log.created_at ? new Date(log.created_at).toLocaleString('es-AR') : '-'}
+                    </td>
+                    <td className="px-4 py-2 font-medium">{log.username || '-'}</td>
+                    <td className="px-4 py-2">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getActionColor(log.accion)}`}>
+                        {log.accion}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-xs text-gray-500 hidden sm:table-cell">{log.ip_address || '-'}</td>
+                    <td className="px-4 py-2 text-xs text-gray-500 hidden md:table-cell max-w-md truncate" title={log.detalles || '-'}>{log.detalles || '-'}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Paginación */}
-      {total > LIMIT && (
-        <div className="flex justify-center gap-2">
-          <button
-            onClick={() => setPage(p => Math.max(0, p - 1))}
-            disabled={page === 0}
-            className="btn-secondary text-sm disabled:opacity-50"
-          >
-            ← Anterior
-          </button>
-          <span className="px-4 py-2 text-sm text-gray-600">
-            Página {page + 1} de {Math.ceil(total / LIMIT)}
-          </span>
-          <button
-            onClick={() => setPage(p => p + 1)}
-            disabled={(page + 1) * LIMIT >= total}
-            className="btn-secondary text-sm disabled:opacity-50"
-          >
-            Siguiente →
-          </button>
+      {/* Paginación mejorada */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between bg-white rounded-lg border px-4 py-3">
+          <div className="text-sm text-gray-500">
+            Mostrando {page * LIMIT + 1}-{Math.min((page + 1) * LIMIT, total)} de {total}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              ← Anterior
+            </button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum
+                if (totalPages <= 5) {
+                  pageNum = i
+                } else if (page < 3) {
+                  pageNum = i
+                } else if (page > totalPages - 4) {
+                  pageNum = totalPages - 5 + i
+                } else {
+                  pageNum = page - 2 + i
+                }
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setPage(pageNum)}
+                    className={`w-8 h-8 text-sm rounded-lg ${
+                      page === pageNum 
+                        ? 'bg-blue-600 text-white' 
+                        : 'hover:bg-gray-100'
+                    }`}
+                  >
+                    {pageNum + 1}
+                  </button>
+                )
+              })}
+            </div>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              Siguiente →
+            </button>
+          </div>
         </div>
       )}
     </div>
