@@ -24,7 +24,7 @@ const COUNTRY_ISO = {
   'México': 'mx', 'Costa Rica': 'cr', 'Guatemala': 'gt', 'España': 'es',
   'Ecuador': 'ec', 'Paraguay': 'py', 'Bolivia': 'bo', 'Venezuela': 've',
   'Panamá': 'pa', 'El Salvador': 'sv', 'Nicaragua': 'ni', 'Saint Lucia': 'lc',
-  'Brasil': 'br', 'Estados Unidos': 'us', 'Alemania': 'de'
+  'Estados Unidos': 'us', 'Alemania': 'de'
 }
 
 const PAISES_DISPONIBLES = ['Argentina', 'Uruguay', 'Chile', 'Colombia', 'Perú', 'Rep. Dominicana', 'Honduras', 'México', 'Costa Rica', 'Guatemala', 'España', 'Saint Lucia', 'Brasil', 'Estados Unidos', 'Alemania']
