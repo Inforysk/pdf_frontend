@@ -277,8 +277,10 @@ function App() {
         const res = await axios.get(`/api/search?q=${encodeURIComponent(solicitud.razon_social)}&limit=5`)
         
         if (res.data.success && res.data.empresas?.length > 0) {
-          // Buscar coincidencia exacta por razón social
-          const exactMatch = res.data.empresas.find(e => 
+          // Buscar coincidencia exacta SOLO en fuente empresas.
+          // /api/search también devuelve "solicitud" (legacy) y esos IDs no son de tabla empresas.
+          const exactMatch = res.data.empresas.find(e =>
+            e.source === 'empresa' &&
             e.razon_social?.toLowerCase() === solicitud.razon_social?.toLowerCase()
           )
           if (exactMatch) {
