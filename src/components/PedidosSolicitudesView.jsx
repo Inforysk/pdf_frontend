@@ -13,9 +13,8 @@ const ESTADO_CONFIG = {
 }
 
 const PRIORIDAD_CONFIG = {
-  baja: { label: 'Baja', color: 'text-gray-500' },
   normal: { label: 'Normal', color: 'text-blue-600' },
-  alta: { label: 'Alta', color: 'text-orange-600' },
+  '72h': { label: '72 Horas', color: 'text-orange-600' },
   urgente: { label: 'Urgente', color: 'text-red-600 font-bold' },
 }
 
@@ -24,10 +23,19 @@ const COUNTRY_ISO = {
   'Colombia': 'co', 'Perú': 'pe', 'Rep. Dominicana': 'do', 'Honduras': 'hn',
   'México': 'mx', 'Costa Rica': 'cr', 'Guatemala': 'gt', 'España': 'es',
   'Ecuador': 'ec', 'Paraguay': 'py', 'Bolivia': 'bo', 'Venezuela': 've',
-  'Panamá': 'pa', 'El Salvador': 'sv', 'Nicaragua': 'ni'
+  'Panamá': 'pa', 'El Salvador': 'sv', 'Nicaragua': 'ni', 'Saint Lucia': 'lc',
+  'Brasil': 'br', 'Estados Unidos': 'us', 'Alemania': 'de'
 }
 
-const PAISES_DISPONIBLES = ['Argentina', 'Uruguay', 'Chile', 'Colombia', 'Perú', 'Rep. Dominicana', 'Honduras', 'México', 'Costa Rica', 'Guatemala', 'España']
+const PAISES_DISPONIBLES = ['Argentina', 'Uruguay', 'Chile', 'Colombia', 'Perú', 'Rep. Dominicana', 'Honduras', 'México', 'Costa Rica', 'Guatemala', 'España', 'Saint Lucia', 'Brasil', 'Estados Unidos', 'Alemania']
+
+// Mapeo de país a tipo de identificación fiscal
+const PAIS_TIPO_ID = {
+  'Argentina': 'CUIT', 'Uruguay': 'RUT', 'Chile': 'RUT', 'Colombia': 'NIT',
+  'Perú': 'RUC', 'Rep. Dominicana': 'RNC', 'Honduras': 'RTN', 'México': 'RFC',
+  'Costa Rica': 'CEDULA JURIDICA', 'Guatemala': 'NIT', 'España': 'CIF',
+  'Saint Lucia': 'ID', 'Brasil': 'CNPJ', 'Estados Unidos': 'EIN', 'Alemania': 'ID'
+}
 
 const PER_PAGE = 5
 
@@ -64,7 +72,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null)
   const [clienteSearch, setClienteSearch] = useState('')
   const [empresaSearch, setEmpresaSearch] = useState('')
-  const [empresaData, setEmpresaData] = useState({ razon_social: '', cuit: '', pais: 'Argentina' })
+  const [empresaData, setEmpresaData] = useState({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT' })
   const [empresaExistente, setEmpresaExistente] = useState(false) // true si viene de BD (no editable)
   const [searchingEmpresa, setSearchingEmpresa] = useState(false)
   const [empresasEncontradas, setEmpresasEncontradas] = useState([])
@@ -99,11 +107,16 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
   }
 
   const inferPaisDisplay = (sol) => {
+    // Primero usar el país guardado si existe
+    if (sol.pais && sol.pais !== 'Argentina') return sol.pais
+    
     const tipo = (sol.tipo_identificacion || '').toUpperCase()
+    // Si es tipo ID genérico, usar el país guardado o 'Internacional'
+    if (tipo === 'ID') return sol.pais || 'Internacional'
     if (tipo === 'RNC') return 'Rep. Dominicana'
     if (tipo === 'RUC') return 'Perú'
     if (tipo === 'RUT') return 'Uruguay'
-    if (tipo === 'CUIT') return 'Argentina'
+    if (tipo === 'CUIT') return sol.pais || 'Argentina'
     if (tipo === 'NIT') return 'Colombia'
     if (tipo === 'RTN') return 'Honduras'
     if (tipo === 'CEDULA JURIDICA') return 'Costa Rica'
@@ -111,7 +124,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     const digits = (sol.cuit || '').replace(/\D/g, '')
     if (digits.length === 12) return 'Uruguay'
     if (digits.length === 9) return 'Rep. Dominicana'
-    return 'Argentina'
+    return sol.pais || 'Argentina'
   }
 
   // Key para forzar recargas
@@ -332,10 +345,12 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
         setEmpresasEncontradas(resultados)
       } else {
         // No encontrada, permitir crear nueva (campos editables)
+        const paisNuevo = modalCountryFilter !== 'all' ? modalCountryFilter : 'Argentina'
         setEmpresaData({
           razon_social: searchValue.trim(),
           cuit: '',
-          pais: modalCountryFilter !== 'all' ? modalCountryFilter : 'Argentina'
+          pais: paisNuevo,
+          tipo_identificacion: PAIS_TIPO_ID[paisNuevo] || 'ID'
         })
         setEmpresaExistente(false)
       }
@@ -371,7 +386,8 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     setEmpresaData({
       razon_social: emp.razon_social || '',
       cuit: emp.cuit || '',
-      pais: emp.pais || 'Argentina'
+      pais: emp.pais || 'Argentina',
+      tipo_identificacion: emp.tipo_identificacion || PAIS_TIPO_ID[emp.pais] || 'ID'
     })
     setEmpresaExistente(true) // Viene de BD, no editable
     setEmpresasEncontradas([])
@@ -401,6 +417,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
         cuit: empresaData.cuit || '',
         razon_social: empresaData.razon_social,
         pais: empresaData.pais || 'Argentina',
+        tipo_identificacion: empresaData.tipo_identificacion || PAIS_TIPO_ID[empresaData.pais] || 'ID',
         tipo_informe: 'completo',
         prioridad: prioridadSeleccionada,
         notas: `Solicitud creada por analista para cliente: ${clienteSeleccionado.numero_abono || clienteSeleccionado.id} - ${clienteSeleccionado.nombre_completo}`,
@@ -427,7 +444,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     setClienteSeleccionado(null)
     setClienteSearch('')
     setEmpresaSearch('')
-    setEmpresaData({ razon_social: '', cuit: '', pais: 'Argentina' })
+    setEmpresaData({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT' })
     setEmpresaExistente(false)
     setEmpresasEncontradas([])
     setModalSearchType('all')
@@ -774,13 +791,11 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                         <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
                           sol.prioridad === 'urgente'
                             ? 'bg-red-100 text-red-700 border border-red-200'
-                            : sol.prioridad === 'alta'
+                            : sol.prioridad === '72h'
                               ? 'bg-orange-100 text-orange-700 border border-orange-200'
-                              : sol.prioridad === 'baja'
-                                ? 'bg-gray-100 text-gray-600 border border-gray-200'
-                                : 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'bg-blue-50 text-blue-700 border border-blue-200'
                         }`}>
-                          {sol.prioridad === 'urgente' ? '🔴 Urgente' : sol.prioridad === 'alta' ? '🟠 Alta' : sol.prioridad === 'baja' ? '⚪ Baja' : '🔵 Normal'}
+                          {sol.prioridad === 'urgente' ? '🔴 Urgente' : sol.prioridad === '72h' ? '🟠 72 Horas' : '🔵 Normal'}
                         </span>
                       </td>
                       {/* Solicitado por */}
@@ -1034,7 +1049,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                 {detalle.prioridad && detalle.prioridad !== 'normal' && (
                   <span className={`text-xs px-2 py-0.5 rounded-full ${
                     detalle.prioridad === 'urgente' ? 'bg-red-100 text-red-700' :
-                    detalle.prioridad === 'alta' ? 'bg-orange-100 text-orange-700' :
+                    detalle.prioridad === '72h' ? 'bg-orange-100 text-orange-700' :
                     'bg-gray-100 text-gray-600'
                   }`}>
                     {PRIORIDAD_CONFIG[detalle.prioridad]?.label || detalle.prioridad}
@@ -1080,11 +1095,10 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                   <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Prioridad</p>
                   <p className={`font-medium ${
                     detalle.prioridad === 'urgente' ? 'text-red-600' :
-                    detalle.prioridad === 'alta' ? 'text-orange-600' :
-                    detalle.prioridad === 'baja' ? 'text-gray-500' :
+                    detalle.prioridad === '72h' ? 'text-orange-600' :
                     'text-blue-600'
                   }`}>
-                    {detalle.prioridad === 'urgente' ? '🔴 Urgente' : detalle.prioridad === 'alta' ? '🟠 Alta' : detalle.prioridad === 'baja' ? '⚪ Baja' : '🔵 Normal'}
+                    {detalle.prioridad === 'urgente' ? '🔴 Urgente' : detalle.prioridad === '72h' ? '🟠 72 Horas' : '🔵 Normal'}
                   </p>
                 </div>
                 <div>
@@ -1623,8 +1637,8 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                             className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm mt-1"
                           >
                             <option value="normal">Normal</option>
-                            <option value="urgente">Urgente</option>
                             <option value="72h">72 Horas</option>
+                            <option value="urgente">Urgente</option>
                           </select>
                         </div>
                       </div>

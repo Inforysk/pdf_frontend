@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { Upload, FileText, Loader2, AlertCircle, AlertTriangle, Info, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Upload, FileText, Loader2, AlertCircle, AlertTriangle, Info, ToggleLeft, ToggleRight, Globe } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 
@@ -10,6 +10,10 @@ function PDFUploader({ onDataExtracted }) {
   const [duplicateWarning, setDuplicateWarning] = useState(null)
   const [pendingData, setPendingData] = useState(null)
   const [skipIdValidation, setSkipIdValidation] = useState(false)
+  // Estado para selección de país cuando no hay ID fiscal
+  const [countrySelection, setCountrySelection] = useState(null)
+  const [selectedCountry, setSelectedCountry] = useState('')
+  const [pendingFile, setPendingFile] = useState(null)
 
   const onDrop = useCallback(async (acceptedFiles) => {
     const file = acceptedFiles[0]
@@ -25,6 +29,8 @@ function PDFUploader({ onDataExtracted }) {
     setError(null)
     setDuplicateWarning(null)
     setPendingData(null)
+    setCountrySelection(null)
+    setPendingFile(file) // Guardar archivo para posible reenvío
 
     const formData = new FormData()
     formData.append('file', file)
@@ -45,6 +51,30 @@ function PDFUploader({ onDataExtracted }) {
       }
 
       if (response.data.success) {
+        // Verificar si necesita selección de país (sin ID fiscal)
+        if (response.data.needs_country_selection) {
+          // Cargar países desde el endpoint dedicado
+          let paisesLista = []
+          try {
+            const paisesRes = await axios.get('/api/paises')
+            if (paisesRes.data.success) {
+              paisesLista = paisesRes.data.paises || []
+            }
+          } catch (e) {
+            console.error('Error cargando países:', e)
+          }
+          
+          setCountrySelection({
+            message: response.data.message,
+            paises: paisesLista,
+            data: response.data.data,
+            filename: response.data.filename,
+            idInfo: response.data.id_info
+          })
+          toast('Se requiere seleccionar país del informe', { icon: '🌍' })
+          return
+        }
+        
         // Verificar si el CUIT ya existe
         if (response.data.cuit_exists && response.data.existing_empresa) {
           setDuplicateWarning({
@@ -86,6 +116,51 @@ function PDFUploader({ onDataExtracted }) {
   const handleCancel = () => {
     setDuplicateWarning(null)
     setPendingData(null)
+  }
+
+  // Manejar selección de país y reenviar
+  const handleCountrySelect = async () => {
+    if (!selectedCountry || !pendingFile) {
+      toast.error('Selecciona un país')
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    const formData = new FormData()
+    formData.append('file', pendingFile)
+    formData.append('skip_id_validation', 'true')
+    formData.append('pais_codigo', selectedCountry)
+
+    try {
+      const response = await axios.post('/api/extract', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        validateStatus: (status) => status < 500
+      })
+
+      if (response.data.success && !response.data.needs_country_selection) {
+        toast.success('PDF procesado correctamente')
+        onDataExtracted(response.data.data, response.data.filename, response.data.sinopsis_info)
+        setCountrySelection(null)
+        setSelectedCountry('')
+        setPendingFile(null)
+      } else {
+        setError(response.data.error || 'Error al procesar el PDF')
+        toast.error('Error al procesar')
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error de conexión')
+      toast.error('Error al procesar el PDF')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCancelCountrySelection = () => {
+    setCountrySelection(null)
+    setSelectedCountry('')
+    setPendingFile(null)
   }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -270,6 +345,78 @@ function PDFUploader({ onDataExtracted }) {
                 {duplicateWarning.changes?.length > 0 
                   ? 'Si continúas, se creará una nueva versión del registro con los cambios detectados.'
                   : 'El documento no tiene cambios respecto al registro existente.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de selección de país cuando no hay ID fiscal */}
+      {countrySelection && (
+        <div className="mt-4 p-4 bg-blue-50 border border-blue-300 rounded-lg">
+          <div className="flex items-start">
+            <Globe className="h-6 w-6 text-blue-500 mr-3 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-blue-800">
+                Selección de País Requerida
+              </p>
+              <p className="text-sm text-blue-700 mt-1">
+                {countrySelection.message}
+              </p>
+              
+              {/* Info del documento */}
+              {countrySelection.data?.razon_social && (
+                <div className="mt-3 p-3 bg-white rounded border border-blue-200">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Empresa detectada:</p>
+                  <p className="font-medium text-gray-900">{countrySelection.data.razon_social}</p>
+                  {countrySelection.idInfo?.id_encontrado && (
+                    <p className="text-sm text-gray-600 mt-1">
+                      ID encontrado: <span className="font-mono">{countrySelection.idInfo.id_encontrado}</span>
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Selector de país */}
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Selecciona el país del informe:
+                </label>
+                <select
+                  value={selectedCountry}
+                  onChange={(e) => setSelectedCountry(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">-- Seleccionar país --</option>
+                  {countrySelection.paises.map((pais) => (
+                    <option key={pais.codigo} value={pais.codigo}>
+                      {pais.nombre} ({pais.tipo_identificacion || 'ID'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-3 mt-4">
+                <button
+                  onClick={handleCountrySelect}
+                  disabled={!selectedCountry || loading}
+                  className={`px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors ${
+                    selectedCountry && !loading
+                      ? 'bg-blue-600 hover:bg-blue-700'
+                      : 'bg-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  {loading ? 'Procesando...' : 'Continuar con país seleccionado'}
+                </button>
+                <button
+                  onClick={handleCancelCountrySelection}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+              <p className="text-xs text-blue-600 mt-2">
+                El país seleccionado determinará el tipo de identificación fiscal y la configuración de precios.
               </p>
             </div>
           </div>

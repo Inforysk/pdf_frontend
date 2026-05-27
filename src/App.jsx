@@ -239,6 +239,19 @@ function App() {
     const cuit = (solicitud.cuit || '').replace(/\D/g, '')
     console.log('[handleIniciarInformeSolicitud] CUIT limpio:', cuit, 'Original:', solicitud.cuit)
     
+    // Función auxiliar para abrir empresa existente
+    const abrirEmpresaExistente = (empresaId, empresaCuit) => {
+      setSolicitudActiva(solicitudEnriquecida)
+      setSelectedEmpresaId(empresaId)
+      setSelectedEmpresaCuit(empresaCuit || '')
+      setSelectedEmpresaMode('edit')
+      setExtractedData(null)
+      setNewReportCountry(null)
+      setPreviousView('pedidos-solicitudes')
+      setCurrentView('solicitud-informe')
+    }
+    
+    // 1. Buscar por CUIT si existe
     if (cuit) {
       try {
         console.log('[handleIniciarInformeSolicitud] Buscando empresa por CUIT...')
@@ -246,23 +259,37 @@ function App() {
         console.log('[handleIniciarInformeSolicitud] Respuesta:', res.data)
         
         if (res.data.success && res.data.empresa) {
-          console.log('[handleIniciarInformeSolicitud] ¡Empresa encontrada! ID:', res.data.empresa.id)
-          // Ya existe una empresa con este CUIT - abrir en modo edición
-          setSolicitudActiva(solicitudEnriquecida) // Mantener referencia con datos del pedido
-          setSelectedEmpresaId(res.data.empresa.id)
-          setSelectedEmpresaCuit(cuit)
-          setSelectedEmpresaMode('edit')
-          setExtractedData(null)
-          setNewReportCountry(null)
-          setPreviousView('pedidos-solicitudes')
-          setCurrentView('solicitud-informe')
+          console.log('[handleIniciarInformeSolicitud] ¡Empresa encontrada por CUIT! ID:', res.data.empresa.id)
+          abrirEmpresaExistente(res.data.empresa.id, cuit)
           return
         } else {
-          console.log('[handleIniciarInformeSolicitud] Empresa NO encontrada, success:', res.data.success)
+          console.log('[handleIniciarInformeSolicitud] Empresa NO encontrada por CUIT')
         }
       } catch (err) {
-        console.error('[handleIniciarInformeSolicitud] Error buscando empresa:', err)
-        // Si falla la búsqueda, continuar con flujo normal
+        console.error('[handleIniciarInformeSolicitud] Error buscando empresa por CUIT:', err)
+      }
+    }
+    
+    // 2. Si no hay CUIT o no se encontró, buscar por razón social exacta
+    if (solicitud.razon_social) {
+      try {
+        console.log('[handleIniciarInformeSolicitud] Buscando empresa por razón social:', solicitud.razon_social)
+        const res = await axios.get(`/api/search?q=${encodeURIComponent(solicitud.razon_social)}&limit=5`)
+        
+        if (res.data.success && res.data.empresas?.length > 0) {
+          // Buscar coincidencia exacta por razón social
+          const exactMatch = res.data.empresas.find(e => 
+            e.razon_social?.toLowerCase() === solicitud.razon_social?.toLowerCase()
+          )
+          if (exactMatch) {
+            console.log('[handleIniciarInformeSolicitud] ¡Empresa encontrada por razón social! ID:', exactMatch.id)
+            abrirEmpresaExistente(exactMatch.id, exactMatch.cuit)
+            return
+          }
+        }
+        console.log('[handleIniciarInformeSolicitud] Empresa NO encontrada por razón social')
+      } catch (err) {
+        console.error('[handleIniciarInformeSolicitud] Error buscando empresa por razón social:', err)
       }
     }
     

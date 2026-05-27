@@ -24,10 +24,11 @@ const COUNTRY_ISO = {
   'Colombia': 'co', 'Perú': 'pe', 'Rep. Dominicana': 'do', 'Honduras': 'hn',
   'México': 'mx', 'Costa Rica': 'cr', 'Guatemala': 'gt', 'España': 'es',
   'Ecuador': 'ec', 'Paraguay': 'py', 'Bolivia': 'bo', 'Venezuela': 've',
-  'Panamá': 'pa', 'El Salvador': 'sv', 'Nicaragua': 'ni'
+  'Panamá': 'pa', 'El Salvador': 'sv', 'Nicaragua': 'ni', 'Saint Lucia': 'lc',
+  'Brasil': 'br', 'Estados Unidos': 'us', 'Alemania': 'de'
 }
 
-const PAISES_DISPONIBLES = ['Argentina', 'Uruguay', 'Chile', 'Colombia', 'Perú', 'Rep. Dominicana', 'Honduras', 'México', 'Costa Rica', 'Guatemala', 'España']
+const PAISES_DISPONIBLES = ['Argentina', 'Uruguay', 'Chile', 'Colombia', 'Perú', 'Rep. Dominicana', 'Honduras', 'México', 'Costa Rica', 'Guatemala', 'España', 'Saint Lucia', 'Brasil', 'Estados Unidos', 'Alemania']
 
 const PER_PAGE = 5
 
@@ -99,11 +100,16 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
   }
 
   const inferPaisDisplay = (sol) => {
+    // Primero usar el país guardado si existe
+    if (sol.pais && sol.pais !== 'Argentina') return sol.pais
+    
     const tipo = (sol.tipo_identificacion || '').toUpperCase()
+    // Si es tipo ID genérico, usar el país guardado o 'Internacional'
+    if (tipo === 'ID') return sol.pais || 'Internacional'
     if (tipo === 'RNC') return 'Rep. Dominicana'
     if (tipo === 'RUC') return 'Perú'
     if (tipo === 'RUT') return 'Uruguay'
-    if (tipo === 'CUIT') return 'Argentina'
+    if (tipo === 'CUIT') return sol.pais || 'Argentina'
     if (tipo === 'NIT') return 'Colombia'
     if (tipo === 'RTN') return 'Honduras'
     if (tipo === 'CEDULA JURIDICA') return 'Costa Rica'
@@ -111,7 +117,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
     const digits = (sol.cuit || '').replace(/\D/g, '')
     if (digits.length === 12) return 'Uruguay'
     if (digits.length === 9) return 'Rep. Dominicana'
-    return 'Argentina'
+    return sol.pais || 'Argentina'
   }
 
   // Key para forzar recargas

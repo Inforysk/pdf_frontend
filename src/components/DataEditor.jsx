@@ -768,19 +768,48 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
           setPaisesDisponibles(res.data.paises)
           // Si viene de solicitud, auto-seleccionar país y pre-llenar datos
           if (fromSolicitud) {
-            const cuitDigits = (fromSolicitud.cuit || '').replace(/\D/g, '')
-            let codigoPais = 'AR' // default
-            if (cuitDigits.length === 12) codigoPais = 'UY'
-            else if (cuitDigits.length === 9 || cuitDigits.length === 10) codigoPais = 'CO'
-            const paisMatch = res.data.paises.find(p => p.codigo_pais === codigoPais)
+            // Buscar país: primero por nombre de país, luego por tipo de identificación
+            let paisMatch = null
+            
+            // 1. Si tiene país explícito en la solicitud, buscarlo
+            if (fromSolicitud.pais) {
+              paisMatch = res.data.paises.find(p => 
+                p.nombre_pais === fromSolicitud.pais || 
+                p.nombre_pais?.toLowerCase() === fromSolicitud.pais?.toLowerCase()
+              )
+            }
+            
+            // 2. Si no encontró por nombre, inferir por tipo de identificación
+            if (!paisMatch && fromSolicitud.tipo_identificacion) {
+              const tipoMap = {
+                'CUIT': 'AR', 'RUT': 'UY', 'RNC': 'DO', 'NIT': 'CO',
+                'RTN': 'HN', 'CEDULA JURIDICA': 'CR', 'RUC': 'PE',
+                'RFC': 'MX', 'ID': null // ID genérico no tiene país por defecto
+              }
+              const codigoInferido = tipoMap[fromSolicitud.tipo_identificacion?.toUpperCase()]
+              if (codigoInferido) {
+                paisMatch = res.data.paises.find(p => p.codigo_pais === codigoInferido)
+              }
+            }
+            
+            // 3. Fallback: inferir por longitud de CUIT (legado)
+            if (!paisMatch) {
+              const cuitDigits = (fromSolicitud.cuit || '').replace(/\D/g, '')
+              let codigoPais = 'AR' // default
+              if (cuitDigits.length === 12) codigoPais = 'UY'
+              else if (cuitDigits.length === 9 || cuitDigits.length === 10) codigoPais = 'CO'
+              paisMatch = res.data.paises.find(p => p.codigo_pais === codigoPais)
+            }
+            
             if (paisMatch) {
               setSelectedPais(paisMatch)
               setFormData(normalizeForEditor({
-                tipo_identificacion: paisMatch.tipo_id_fiscal || 'CUIT',
+                tipo_identificacion: fromSolicitud.tipo_identificacion || paisMatch.tipo_id_fiscal || 'ID',
                 cuit: fromSolicitud.cuit || '',
                 razon_social: fromSolicitud.razon_social || '',
                 domicilio: fromSolicitud.domicilio || '',
                 actividad_principal: fromSolicitud.actividad_principal || '',
+                pais: fromSolicitud.pais || paisMatch.nombre_pais || '',
                 // Datos del pedido (correlativo, referencia, etc.)
                 abonado: fromSolicitud.abonado ? String(fromSolicitud.abonado) : '',
                 expediente: fromSolicitud.expediente ? String(fromSolicitud.expediente) : '',
