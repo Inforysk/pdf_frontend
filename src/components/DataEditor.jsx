@@ -1620,6 +1620,10 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
         dataToSave.pais = selectedPais.nombre_pais
         dataToSave.codigo_pais = selectedPais.codigo_pais
       }
+      // Enviar empresa_id si existe para actualización por ID (evita duplicados si cambia CUIT)
+      if (empresaId) {
+        dataToSave.empresa_id = empresaId
+      }
       const response = await axios.post('/api/save', dataToSave)
       
       if (response.data.success) {
@@ -2277,7 +2281,10 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     const locked = isFieldLocked(field.name)
     // Campos del pedido: deshabilitados cuando viene de solicitud (expediente es auto-generado, referencia es editable por el cliente)
     const isPedidoField = ['abonado', 'expediente'].includes(field.name)
-    const fieldDisabled = !editMode || locked || (fromSolicitud && isPedidoField)
+    // Campo CUIT/ID: bloqueado si la empresa ya tiene identificador guardado y el usuario no es admin
+    const originalCuit = originalDataRef.current?.cuit
+    const isCuitLocked = field.name === 'cuit' && originalCuit && !isAdmin
+    const fieldDisabled = !editMode || locked || (fromSolicitud && isPedidoField) || isCuitLocked
 
     return (
       <div
@@ -2288,6 +2295,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
           <span className="flex items-center gap-2">
             {displayLabel}
             {field.required && <span className="text-red-500 ml-1">*</span>}
+            {isCuitLocked && <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded">(Solo admin puede modificar)</span>}
             {field.type === 'textarea' && (
               <button
                 type="button"
