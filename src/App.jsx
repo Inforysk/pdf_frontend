@@ -66,6 +66,7 @@ function App() {
   const [alertasCount, setAlertasCount] = useState(0) // Contador de alertas no leídas
   const [aprobacionesCount, setAprobacionesCount] = useState(0) // Contador de aprobaciones pendientes (admin)
   const [aprobacionesEmpresaCount, setAprobacionesEmpresaCount] = useState(0) // Contador para cliente_admin
+  const [boAlertasCount, setBoAlertasCount] = useState(0) // Contador de alertas críticas BO (quiebra/concurso/liquidación)
   const [showRegister, setShowRegister] = useState(false) // Mostrar página de registro
   const prevUserRef = useRef(user?.id)
 
@@ -130,6 +131,70 @@ function App() {
     }
     fetchAprobacionesEmpresa()
     const interval = setInterval(fetchAprobacionesEmpresa, 30000)
+    return () => clearInterval(interval)
+  }, [user])
+
+  // Fetch contador de alertas críticas del Boletín Oficial
+  useEffect(() => {
+    if (!user || !['admin', 'analista'].includes(user.rol)) {
+      setBoAlertasCount(0)
+      return
+    }
+    
+    // Usar caché de localStorage para evitar llamadas frecuentes
+    const cacheKey = 'bo_alertas_cache'
+    const getCachedData = () => {
+      try {
+        const cached = localStorage.getItem(cacheKey)
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached)
+          // Caché válido por 60 segundos
+          if (Date.now() - timestamp < 60000) return data
+        }
+      } catch { /* ignore */ }
+      return null
+    }
+    
+    const fetchBoAlertas = async () => {
+      // Verificar caché primero
+      const cached = getCachedData()
+      if (cached) {
+        processAlertas(cached)
+        return
+      }
+      
+      try {
+        const res = await axios.get('/api/v1/boletin-oficial/alertas?limite=100')
+        if (res.data.success) {
+          const alertas = res.data.data?.alertas || []
+          // Guardar en caché
+          localStorage.setItem(cacheKey, JSON.stringify({ data: alertas, timestamp: Date.now() }))
+          processAlertas(alertas)
+        }
+      } catch (err) {
+        // Ignorar silenciosamente errores de rate limit
+        if (err.response?.status !== 429) {
+          console.error('Error fetching BO alertas count:', err)
+        }
+      }
+    }
+    
+    const processAlertas = (alertas) => {
+      const cuitsActuales = alertas.map(a => a.cuit).sort().join(',')
+      const cuitsVistos = localStorage.getItem('bo_alertas_vistas') || ''
+      
+      if (cuitsActuales !== cuitsVistos) {
+        const vistosSet = new Set(cuitsVistos.split(',').filter(Boolean))
+        const nuevos = alertas.filter(a => !vistosSet.has(a.cuit)).length
+        setBoAlertasCount(nuevos)
+      } else {
+        setBoAlertasCount(0)
+      }
+    }
+    
+    fetchBoAlertas()
+    // Refrescar cada 5 minutos
+    const interval = setInterval(fetchBoAlertas, 300000)
     return () => clearInterval(interval)
   }, [user])
 
@@ -596,7 +661,7 @@ function App() {
   if (isClienteAdmin) sidebarItems.push({ id: 'cliente-admin', label: t('nav.myCompany'), icon: UserCheck, color: aprobacionesEmpresaCount > 0 ? 'amber' : 'blue', alertCount: aprobacionesEmpresaCount })
   if (isClienteAdmin) sidebarItems.push({ id: 'cliente-productos', label: t('nav.myModules'), icon: Package, color: 'violet' })
   sidebarItems.push({ id: '_sep_bo', separator: true, label: t('nav.externalServices') })
-  sidebarItems.push({ id: 'boletin-oficial', label: t('nav.officialGazette'), icon: Newspaper, color: 'indigo' })
+  sidebarItems.push({ id: 'boletin-oficial', label: t('nav.officialGazette'), icon: Newspaper, color: boAlertasCount > 0 ? 'red' : 'indigo', alertCount: boAlertasCount })
 
   const currentLabel = sidebarItems.find(i => i.id === currentView)?.label || 'Inforysk'
 
@@ -1274,11 +1339,12 @@ function ScoringSelector({ onSelect }) {
   const COUNTRY_ISO = {
     'Argentina': 'ar', 'Uruguay': 'uy', 'Colombia': 'co', 'Peru': 'pe',
     'Rep. Dominicana': 'do', 'Honduras': 'hn', 'Mexico': 'mx', 'Costa Rica': 'cr',
+    'Jamaica': 'jm', 'Saint Lucia': 'lc', 'Barbados': 'bb', 'Bahamas': 'bs', 'Trinidad y Tobago': 'tt',
     'Union Europea': 'eu', 'Internacional': null,
   }
   const TIPO_TO_PAIS = {
     CUIT: 'Argentina', RUT: 'Uruguay', NIT: 'Colombia', RUC: 'Peru',
-    RNC: 'Rep. Dominicana', RTN: 'Honduras', RFC: 'Mexico',
+    RNC: 'Rep. Dominicana', RTN: 'Honduras', RFC: 'Mexico', TRN: 'Jamaica',
     'CEDULA JURIDICA': 'Costa Rica', VAT: 'Union Europea',
   }
 

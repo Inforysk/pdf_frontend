@@ -13,6 +13,7 @@ const COUNTRY_ISO = {
   'Argentina': 'ar', 'Uruguay': 'uy', 'Brasil': 'br', 'Chile': 'cl',
   'Peru': 'pe', 'Colombia': 'co', 'Mexico': 'mx', 'Rep. Dominicana': 'do',
   'Honduras': 'hn', 'Costa Rica': 'cr', 'Guatemala': 'gt', 'Alemania': 'de',
+  'Jamaica': 'jm', 'Saint Lucia': 'lc', 'Barbados': 'bb', 'Bahamas': 'bs', 'Trinidad y Tobago': 'tt',
 }
 
 const ESTADO_CONFIG = {

@@ -714,6 +714,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
   // ── Modal "Otro país" ──
   const [showOtrosPaisesModal, setShowOtrosPaisesModal] = useState(false)
   const [otrosPaises, setOtrosPaises] = useState([])
+  const [configuredPaises, setConfiguredPaises] = useState([])
   const [loadingOtros, setLoadingOtros] = useState(false)
   const [otrosSearch, setOtrosSearch] = useState('')
   const [addingCountry, setAddingCountry] = useState(null)
@@ -1063,13 +1064,70 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     setOtrosSearch('')
     setLoadingOtros(true)
     try {
-      const res = await axios.get('/api/countries/available')
-      setOtrosPaises(res.data.paises || [])
+      const [availableRes, configuredRes] = await Promise.allSettled([
+        axios.get('/api/countries/available'),
+        axios.get('/api/countries/configured')
+      ])
+
+      if (availableRes.status === 'fulfilled') {
+        setOtrosPaises(availableRes.value?.data?.paises || [])
+      } else {
+        setOtrosPaises([])
+      }
+
+      if (configuredRes.status === 'fulfilled') {
+        setConfiguredPaises(configuredRes.value?.data?.paises || [])
+      } else {
+        setConfiguredPaises([])
+      }
     } catch (err) {
       toast.error('Error al cargar países disponibles')
       setOtrosPaises([])
+      setConfiguredPaises([])
     } finally {
       setLoadingOtros(false)
+    }
+  }
+
+  const selectCountryByCode = async (countryCode, fallbackCountry = null) => {
+    const code = (countryCode || '').toUpperCase()
+    if (!code) return false
+
+    try {
+      const patRes = await axios.get('/api/country-patterns')
+      const countryList = patRes?.data?.paises || []
+
+      if (countryList.length > 0) {
+        setPaisesDisponibles(countryList)
+      }
+
+      const selected = countryList.find(p => p.codigo_pais === code)
+
+      if (selected) {
+        setSelectedPais(selected)
+        setFormData(normalizeForEditor({
+          tipo_identificacion: selected.tipo_id_fiscal || 'ID',
+        }))
+      } else if (fallbackCountry) {
+        // Fallback defensivo: si no vino en country-patterns, usar datos del endpoint de configurados
+        setSelectedPais({
+          codigo_pais: code,
+          nombre_pais: fallbackCountry.nombre,
+          tipo_id_fiscal: fallbackCountry.tipo_id_fiscal || 'ID',
+          bandera: fallbackCountry.bandera || null,
+        })
+        setFormData(normalizeForEditor({
+          tipo_identificacion: fallbackCountry.tipo_id_fiscal || 'ID',
+        }))
+      } else {
+        return false
+      }
+
+      setEditMode(true)
+      setShowOtrosPaisesModal(false)
+      return true
+    } catch (err) {
+      return false
     }
   }
 
@@ -1079,27 +1137,30 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
       const res = await axios.post('/api/countries/add', { codigo: pais.codigo })
       if (res.data.success) {
         toast.success(`${pais.nombre} agregado. Validación pendiente de configuración.`)
-        // Refrescar países disponibles
-        const patRes = await axios.get('/api/country-patterns')
-        if (patRes.data.paises) {
-          setPaisesDisponibles(patRes.data.paises)
-          // Auto-seleccionar el nuevo país
-          const nuevoPais = patRes.data.paises.find(p => p.codigo_pais === pais.codigo)
-          if (nuevoPais) {
-            setSelectedPais(nuevoPais)
-            setFormData(normalizeForEditor({
-              tipo_identificacion: nuevoPais.tipo_id_fiscal || 'ID',
-            }))
-            setEditMode(true)
-            // Acordeones cerrados por defecto
-          }
+        const selected = await selectCountryByCode(pais.codigo)
+        if (!selected) {
+          toast.error('El país fue agregado, pero no se pudo seleccionar automáticamente')
         }
-        setShowOtrosPaisesModal(false)
       } else {
         toast.error(res.data.error || 'Error al agregar país')
       }
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error al agregar país')
+    } finally {
+      setAddingCountry(null)
+    }
+  }
+
+  const handleUseConfiguredPais = async (pais) => {
+    const opKey = `use:${pais.codigo}`
+    setAddingCountry(opKey)
+    try {
+      const selected = await selectCountryByCode(pais.codigo, pais)
+      if (selected) {
+        toast.success(`${pais.nombre} seleccionado`)
+      } else {
+        toast.error('No se pudo seleccionar el país configurado')
+      }
     } finally {
       setAddingCountry(null)
     }
@@ -1776,6 +1837,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     'RFC': 'MX',
     'VAT': 'DE',  // Europa genérico
     'TAXPAYER ID': 'US',
+    'TRN': 'JM',  // Jamaica Tax Registration Number
   }
 
   // Obtener el país detectado para el selector de actividades
@@ -2674,6 +2736,14 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
   const habilitaOsint = !!(formData.cuit && formData.razon_social)
   const hasBalanceGeneral = (savedBalances?.length || 0) > 0 || (historicalBalances?.length || 0) > 0
   const currentExtractStep = BALANCE_EXTRACT_STEPS.filter(s => s.time <= extractBalanceElapsed).pop() || BALANCE_EXTRACT_STEPS[0]
+  const otrosSearchNorm = (otrosSearch || '').trim().toLowerCase()
+  const filteredOtrosPaises = otrosPaises.filter(
+    p => !otrosSearchNorm || p.nombre.toLowerCase().includes(otrosSearchNorm) || p.codigo.toLowerCase().includes(otrosSearchNorm)
+  )
+  const filteredConfiguredPaises = configuredPaises.filter(
+    p => !otrosSearchNorm || p.nombre.toLowerCase().includes(otrosSearchNorm) || p.codigo.toLowerCase().includes(otrosSearchNorm)
+  )
+  const showConfiguredHint = !!otrosSearchNorm && filteredOtrosPaises.length === 0 && filteredConfiguredPaises.length > 0
 
   return (
     <div className="w-full px-4 lg:px-8">
@@ -3165,40 +3235,87 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
                 <div className="flex items-center justify-center py-8 text-gray-500">
                   <Loader2 className="h-5 w-5 animate-spin mr-2" /> Cargando países...
                 </div>
-              ) : otrosPaises.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  No hay más países disponibles para agregar
-                </div>
               ) : (
-                <div className="space-y-1">
-                  {otrosPaises
-                    .filter(p => !otrosSearch || p.nombre.toLowerCase().includes(otrosSearch.toLowerCase()))
-                    .map(p => (
-                    <button
-                      key={p.codigo}
-                      type="button"
-                      onClick={() => handleAddOtroPais(p)}
-                      disabled={addingCountry === p.codigo}
-                      className="w-full px-4 py-3 flex items-center gap-3 hover:bg-purple-50 transition-colors text-left rounded-xl disabled:opacity-50"
-                    >
-                      <span className="text-xl">{p.bandera}</span>
-                      <span className="flex-1">
-                        <span className="font-medium text-gray-800">{p.nombre}</span>
-                        <span className="text-gray-400 text-xs ml-2">{p.codigo}</span>
-                      </span>
-                      {addingCountry === p.codigo ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-purple-600" />
+                <div className="space-y-3">
+                  {showConfiguredHint && (
+                    <div className="mx-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <span>Este país ya está configurado. Puedes seleccionarlo desde la sección <strong>Ya configurados</strong>.</span>
+                    </div>
+                  )}
+
+                  <div>
+                    <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Disponibles para agregar</p>
+                    <div className="space-y-1">
+                      {filteredOtrosPaises.length === 0 ? (
+                        <div className="text-center py-4 text-sm text-gray-500">
+                          No hay países disponibles para agregar con ese filtro
+                        </div>
                       ) : (
-                        <span className="text-xs text-purple-600 bg-purple-100 px-2 py-0.5 rounded">Agregar</span>
+                        filteredOtrosPaises.map(p => (
+                          <button
+                            key={p.codigo}
+                            type="button"
+                            onClick={() => handleAddOtroPais(p)}
+                            disabled={addingCountry === p.codigo}
+                            className="w-full px-4 py-3 flex items-center gap-3 hover:bg-purple-50 transition-colors text-left rounded-xl disabled:opacity-50"
+                          >
+                            <span className="text-xl">{p.bandera}</span>
+                            <span className="flex-1">
+                              <span className="font-medium text-gray-800">{p.nombre}</span>
+                              <span className="text-gray-400 text-xs ml-2">{p.codigo}</span>
+                            </span>
+                            {addingCountry === p.codigo ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-purple-600" />
+                            ) : (
+                              <span className="text-xs text-purple-600 bg-purple-100 px-2 py-0.5 rounded">Agregar</span>
+                            )}
+                          </button>
+                        ))
                       )}
-                    </button>
-                  ))}
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-2">
+                    <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Ya configurados</p>
+                    <div className="space-y-1">
+                      {filteredConfiguredPaises.length === 0 ? (
+                        <div className="text-center py-4 text-sm text-gray-500">
+                          No hay países configurados con ese filtro
+                        </div>
+                      ) : (
+                        filteredConfiguredPaises.map(p => {
+                          const opKey = `use:${p.codigo}`
+                          return (
+                            <button
+                              key={`configured-${p.codigo}`}
+                              type="button"
+                              onClick={() => handleUseConfiguredPais(p)}
+                              disabled={addingCountry === opKey}
+                              className="w-full px-4 py-3 flex items-center gap-3 hover:bg-blue-50 transition-colors text-left rounded-xl disabled:opacity-50"
+                            >
+                              <span className="text-xl">{p.bandera}</span>
+                              <span className="flex-1">
+                                <span className="font-medium text-gray-800">{p.nombre}</span>
+                                <span className="text-gray-400 text-xs ml-2">{p.codigo}</span>
+                              </span>
+                              {addingCountry === opKey ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                              ) : (
+                                <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded">Usar</span>
+                              )}
+                            </button>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
             <div className="p-3 border-t bg-gray-50 rounded-b-2xl">
               <p className="text-xs text-gray-500 text-center">
-                ⚠️ Los países agregados quedan pendientes de configuración por el administrador
+                ⚠️ Si un país no aparece en "Agregar", puede que ya esté configurado en el sistema.
               </p>
             </div>
           </div>

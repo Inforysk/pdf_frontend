@@ -13,6 +13,7 @@ const COUNTRY_ISO = {
   'Mexico': 'mx', 'México': 'mx', 'Costa Rica': 'cr', 'Alemania': 'de', 'España': 'es',
   'Ecuador': 'ec', 'Paraguay': 'py', 'Bolivia': 'bo', 'Venezuela': 've',
   'Panama': 'pa', 'Panamá': 'pa', 'Guatemala': 'gt', 'El Salvador': 'sv', 'Nicaragua': 'ni',
+  'Jamaica': 'jm', 'Saint Lucia': 'lc', 'Barbados': 'bb', 'Bahamas': 'bs', 'Trinidad y Tobago': 'tt',
   'Union Europea': 'eu', 'Internacional': null, 'Desconocido': null,
 }
 

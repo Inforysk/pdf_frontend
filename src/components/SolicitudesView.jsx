@@ -21,14 +21,15 @@ const PRIORIDAD_CONFIG = {
 
 const COUNTRY_ISO = {
   'Argentina': 'ar', 'Uruguay': 'uy', 'Brasil': 'br', 'Chile': 'cl',
-  'Colombia': 'co', 'Perú': 'pe', 'Rep. Dominicana': 'do', 'Honduras': 'hn',
-  'México': 'mx', 'Costa Rica': 'cr', 'Guatemala': 'gt', 'España': 'es',
+  'Colombia': 'co', 'Perú': 'pe', 'Peru': 'pe', 'Rep. Dominicana': 'do', 'Honduras': 'hn',
+  'México': 'mx', 'Mexico': 'mx', 'Costa Rica': 'cr', 'Guatemala': 'gt', 'España': 'es',
   'Ecuador': 'ec', 'Paraguay': 'py', 'Bolivia': 'bo', 'Venezuela': 've',
-  'Panamá': 'pa', 'El Salvador': 'sv', 'Nicaragua': 'ni', 'Saint Lucia': 'lc',
-  'Estados Unidos': 'us', 'Alemania': 'de'
+  'Panamá': 'pa', 'Panama': 'pa', 'El Salvador': 'sv', 'Nicaragua': 'ni', 'Saint Lucia': 'lc',
+  'Jamaica': 'jm', 'Barbados': 'bb', 'Bahamas': 'bs', 'Trinidad y Tobago': 'tt',
+  'Estados Unidos': 'us', 'Alemania': 'de', 'Union Europea': 'eu', 'Unión Europea': 'eu'
 }
 
-const PAISES_DISPONIBLES = ['Argentina', 'Uruguay', 'Chile', 'Colombia', 'Perú', 'Rep. Dominicana', 'Honduras', 'México', 'Costa Rica', 'Guatemala', 'España', 'Saint Lucia', 'Brasil', 'Estados Unidos', 'Alemania']
+const PAISES_DISPONIBLES = ['Argentina', 'Uruguay', 'Chile', 'Colombia', 'Perú', 'Rep. Dominicana', 'Honduras', 'México', 'Costa Rica', 'Guatemala', 'España', 'Saint Lucia', 'Jamaica', 'Brasil', 'Estados Unidos', 'Alemania']
 
 const PER_PAGE = 5
 
@@ -74,6 +75,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
   const [modalSearchType, setModalSearchType] = useState('all') // 'all', 'cuit', 'nombre'
   const [modalCountryFilter, setModalCountryFilter] = useState('all')
   const [modalCountryOpen, setModalCountryOpen] = useState(false)
+  const [paisesEmpresas, setPaisesEmpresas] = useState([]) // Países disponibles en empresas
   const countryDropdownRef = useRef(null)
 
   // Dropdown de acciones y modales
@@ -308,36 +310,54 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
     setLoadingClientes(false)
   }
 
+  // Cargar países disponibles de empresas
+  const loadPaisesEmpresas = async () => {
+    try {
+      const res = await axios.get('/api/empresas/paises')
+      if (res.data.success && res.data.paises) {
+        setPaisesEmpresas(res.data.paises)
+      }
+    } catch {
+      // Fallback a lista principal si falla
+      setPaisesEmpresas(['Argentina', 'Uruguay', 'Perú', 'Rep. Dominicana', 'Honduras', 'México', 'Colombia', 'Costa Rica', 'Guatemala', 'Jamaica', 'Saint Lucia'])
+    }
+  }
+
   // Buscar empresa por CUIT o razón social
   const buscarEmpresa = async (searchValue = empresaSearch) => {
-    if (!searchValue.trim()) return
+    // Permitir búsqueda solo por país (sin texto)
+    const hasText = searchValue && searchValue.trim().length >= 2
+    const hasCountry = modalCountryFilter !== 'all'
+    
+    if (!hasText && !hasCountry) return
+    
     setSearchingEmpresa(true)
     setEmpresasEncontradas([])
-    setEmpresaData({ razon_social: '', cuit: '', pais: 'Argentina' })
+    setEmpresaData({ razon_social: '', cuit: '', pais: modalCountryFilter !== 'all' ? modalCountryFilter : 'Argentina' })
     setEmpresaExistente(false)
     try {
       // Buscar en nuestra BD con filtros
       const params = { 
-        q: searchValue.trim(), 
-        limit: 15,
+        q: hasText ? searchValue.trim() : '*', // Usar * para buscar solo por país
+        limit: 50,
         pais: modalCountryFilter !== 'all' ? modalCountryFilter : undefined
       }
       const res = await axios.get('/api/search', { params })
       let resultados = res.data.empresas || []
       
       // Filtrar por tipo de búsqueda en frontend si es necesario
-      if (modalSearchType === 'cuit') {
+      if (hasText && modalSearchType === 'cuit') {
         const digits = searchValue.replace(/\D/g, '')
         resultados = resultados.filter(e => (e.cuit || '').replace(/\D/g, '').includes(digits))
-      } else if (modalSearchType === 'nombre') {
+      } else if (hasText && modalSearchType === 'nombre') {
         const term = searchValue.toLowerCase()
         resultados = resultados.filter(e => (e.razon_social || '').toLowerCase().includes(term))
       }
       
       if (resultados.length > 0) {
         setEmpresasEncontradas(resultados)
-      } else {
-        // No encontrada, permitir crear nueva (campos editables)
+      } else if (hasText) {
+        // No encontrada y hay texto, permitir crear nueva (campos editables)
         setEmpresaData({
           razon_social: searchValue.trim(),
           cuit: '',
@@ -351,10 +371,14 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
     setSearchingEmpresa(false)
   }
   
-  // Efecto para buscar al escribir (debounced)
+  // Efecto para buscar al escribir (debounced) o cambiar filtro de país
   const searchTimerModalRef = useRef(null)
   useEffect(() => {
-    if (modalStep !== 2 || !empresaSearch.trim()) return
+    if (modalStep !== 2) return
+    const hasText = empresaSearch && empresaSearch.trim().length >= 2
+    const hasCountry = modalCountryFilter !== 'all'
+    if (!hasText && !hasCountry) return
+    
     clearTimeout(searchTimerModalRef.current)
     searchTimerModalRef.current = setTimeout(() => {
       buscarEmpresa()
@@ -446,6 +470,8 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
   const openNuevaSolicitudModal = () => {
     resetModal()
     loadClientes()
+    // Cargar países disponibles de empresas
+    loadPaisesEmpresas()
     setShowNuevaSolicitud(true)
   }
 
@@ -1460,7 +1486,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                           {modalCountryFilter !== 'all' ? modalCountryFilter : 'Por Países'}
                           {modalCountryFilter !== 'all' ? (
                             <span
-                              onClick={(e) => { e.stopPropagation(); setModalCountryFilter('all'); setModalCountryOpen(false) }}
+                              onClick={(e) => { e.stopPropagation(); setModalCountryFilter('all'); setModalCountryOpen(false); setEmpresasEncontradas([]) }}
                               className="ml-0.5 p-0.5 rounded hover:bg-red-700 transition-colors cursor-pointer"
                             >
                               <X className="h-3 w-3" />
@@ -1472,7 +1498,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                         {modalCountryOpen && (
                           <div className="absolute z-50 mt-1 w-52 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
                             <div className="max-h-56 overflow-y-auto">
-                              {PAISES_DISPONIBLES.map(pais => {
+                              {(paisesEmpresas.length > 0 ? paisesEmpresas : PAISES_DISPONIBLES).map(pais => {
                                 const code = COUNTRY_ISO[pais]
                                 return (
                                   <button
@@ -1515,29 +1541,37 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
 
                   {/* Resultados de búsqueda */}
                   {empresasEncontradas.length > 0 && (
-                    <div className="border border-gray-200 rounded-xl mb-4 max-h-48 overflow-y-auto">
-                      {empresasEncontradas.map((emp, idx) => {
-                        const empPais = emp.pais || 'Argentina'
-                        const code = COUNTRY_ISO[empPais]
-                        return (
-                          <button
-                            key={idx}
-                            onClick={() => seleccionarEmpresa(emp)}
-                            className="w-full text-left p-3 border-b border-gray-100 last:border-0 hover:bg-gray-50 flex items-center gap-3"
-                          >
-                            {code && (
-                              <img src={`https://flagcdn.com/24x18/${code}.png`} alt="" className="w-6 h-4 rounded-sm object-cover flex-shrink-0" />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-gray-900 text-sm truncate">{emp.razon_social}</p>
-                              <p className="text-xs text-gray-500">{emp.cuit} • {empPais}</p>
-                            </div>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${emp.source === 'empresa' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                              {emp.source === 'empresa' ? 'Empresa' : 'Solicitud'}
-                            </span>
-                          </button>
-                        )
-                      })}
+                    <div className="mb-4">
+                      {empresasEncontradas.length >= 50 && (
+                        <p className="text-xs text-amber-600 mb-2 flex items-center gap-1">
+                          <span className="inline-block w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
+                          Mostrando primeras 50 empresas. Usa el buscador para filtrar.
+                        </p>
+                      )}
+                      <div className="border border-gray-200 rounded-xl max-h-64 overflow-y-auto">
+                        {empresasEncontradas.map((emp, idx) => {
+                          const empPais = emp.pais || 'Argentina'
+                          const code = COUNTRY_ISO[empPais]
+                          return (
+                            <button
+                              key={idx}
+                              onClick={() => seleccionarEmpresa(emp)}
+                              className="w-full text-left p-3 border-b border-gray-100 last:border-0 hover:bg-gray-50 flex items-center gap-3"
+                            >
+                              {code && (
+                                <img src={`https://flagcdn.com/24x18/${code}.png`} alt="" className="w-6 h-4 rounded-sm object-cover flex-shrink-0" />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-gray-900 text-sm truncate">{emp.razon_social}</p>
+                                <p className="text-xs text-gray-500">{emp.cuit} • {empPais}</p>
+                              </div>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${emp.source === 'empresa' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                {emp.source === 'empresa' ? 'Empresa' : 'Solicitud'}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
                     </div>
                   )}
 
