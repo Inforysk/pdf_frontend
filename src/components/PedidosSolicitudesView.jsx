@@ -20,12 +20,14 @@ const PRIORIDAD_CONFIG = {
 
 const COUNTRY_ISO = {
   'Argentina': 'ar', 'Uruguay': 'uy', 'Brasil': 'br', 'Chile': 'cl',
-  'Colombia': 'co', 'Perú': 'pe', 'Peru': 'pe', 'Rep. Dominicana': 'do', 'Honduras': 'hn',
-  'México': 'mx', 'Mexico': 'mx', 'Costa Rica': 'cr', 'Guatemala': 'gt', 'España': 'es',
+  'Colombia': 'co', 'Perú': 'pe', 'Peru': 'pe', 
+  'Rep. Dominicana': 'do', 'República Dominicana': 'do', 'Republica Dominicana': 'do',
+  'Honduras': 'hn', 'México': 'mx', 'Mexico': 'mx', 'Costa Rica': 'cr', 'Guatemala': 'gt', 'España': 'es',
   'Ecuador': 'ec', 'Paraguay': 'py', 'Bolivia': 'bo', 'Venezuela': 've',
   'Panamá': 'pa', 'Panama': 'pa', 'El Salvador': 'sv', 'Nicaragua': 'ni', 'Saint Lucia': 'lc',
   'Jamaica': 'jm', 'Barbados': 'bb', 'Bahamas': 'bs', 'Trinidad y Tobago': 'tt',
-  'Estados Unidos': 'us', 'Alemania': 'de', 'Union Europea': 'eu', 'Unión Europea': 'eu'
+  'Estados Unidos': 'us', 'Alemania': 'de', 'Union Europea': 'eu', 'Unión Europea': 'eu',
+  'Desconocido': null, 'Internacional': null
 }
 
 const PAISES_DISPONIBLES = ['Argentina', 'Uruguay', 'Chile', 'Colombia', 'Perú', 'Rep. Dominicana', 'Honduras', 'México', 'Costa Rica', 'Guatemala', 'España', 'Saint Lucia', 'Jamaica', 'Brasil', 'Estados Unidos', 'Alemania']
@@ -226,7 +228,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     try {
       // Si es continuar, llamar a onIniciarInforme directamente
       if (modalAccion === 'continuar') {
-        if (onIniciarInforme) onIniciarInforme(solicitudAccion)
+        if (onIniciarInforme) await onIniciarInforme({ ...solicitudAccion, solicitud_source: 'pedidos-solicitudes' })
         setModalAccion(null)
         setSolicitudAccion(null)
         setMotivoAccion('')
@@ -777,6 +779,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                   const EstadoIcon = estadoCfg.icon
                   const pais = inferPaisDisplay(sol)
                   const esApi = sol.tipo_solicitud === 'api' || (sol.notas || '').toLowerCase().includes('solicitar api')
+                  const puedeCompletar = Boolean(sol.empresa_id || sol.empresa_modelo_id)
 
                   const formatFecha = (fecha) => {
                     if (!fecha) return '-'
@@ -944,13 +947,15 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                                         <span>Continuar Informe</span>
                                       </button>
                                     )}
-                                    <button
-                                      onClick={() => { setSolicitudAccion(sol); setModalAccion('completar'); setActionDropdownId(null) }}
-                                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-green-50"
-                                    >
-                                      <Check className="h-4 w-4 text-green-500" />
-                                      <span>Completar</span>
-                                    </button>
+                                    {puedeCompletar && (
+                                      <button
+                                        onClick={() => { setSolicitudAccion(sol); setModalAccion('completar'); setActionDropdownId(null) }}
+                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-green-50"
+                                      >
+                                        <Check className="h-4 w-4 text-green-500" />
+                                        <span>Completar</span>
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() => { setSolicitudAccion(sol); setModalAccion('devolver'); setActionDropdownId(null) }}
                                       className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-orange-50"
@@ -1253,7 +1258,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                         const params = new URLSearchParams({ lang: 'es', token })
                         if (detalle.expediente) params.append('expediente', detalle.expediente)
                         if (detalle.cliente_abono) params.append('abonado', detalle.cliente_abono)
-                        if (detalle.referencia_cliente) params.append('referencia', detalle.referencia_cliente)
+                        params.append('referencia', detalle.referencia_cliente || '')
                         // Usar fecha de completado (updated_at cuando estado=completada) o fecha actual
                         const fechaCompletado = detalle.updated_at ? new Date(detalle.updated_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
                         params.append('fecha', fechaCompletado)
@@ -1270,7 +1275,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                         const params = new URLSearchParams({ lang: 'en', token })
                         if (detalle.expediente) params.append('expediente', detalle.expediente)
                         if (detalle.cliente_abono) params.append('abonado', detalle.cliente_abono)
-                        if (detalle.referencia_cliente) params.append('referencia', detalle.referencia_cliente)
+                        params.append('referencia', detalle.referencia_cliente || '')
                         const fechaCompletado = detalle.updated_at ? new Date(detalle.updated_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
                         params.append('fecha', fechaCompletado)
                         window.open(`/api/empresas/${detalle.empresa_id}/pdf?${params.toString()}`, '_blank')
@@ -1286,7 +1291,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                         const params = new URLSearchParams({ lang: 'de', token })
                         if (detalle.expediente) params.append('expediente', detalle.expediente)
                         if (detalle.cliente_abono) params.append('abonado', detalle.cliente_abono)
-                        if (detalle.referencia_cliente) params.append('referencia', detalle.referencia_cliente)
+                        params.append('referencia', detalle.referencia_cliente || '')
                         const fechaCompletado = detalle.updated_at ? new Date(detalle.updated_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
                         params.append('fecha', fechaCompletado)
                         window.open(`/api/empresas/${detalle.empresa_id}/pdf?${params.toString()}`, '_blank')

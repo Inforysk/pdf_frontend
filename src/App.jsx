@@ -68,6 +68,7 @@ function App() {
   const [aprobacionesEmpresaCount, setAprobacionesEmpresaCount] = useState(0) // Contador para cliente_admin
   const [boAlertasCount, setBoAlertasCount] = useState(0) // Contador de alertas críticas BO (quiebra/concurso/liquidación)
   const [showRegister, setShowRegister] = useState(false) // Mostrar página de registro
+  const [loadingSolicitudView, setLoadingSolicitudView] = useState(false)
   const prevUserRef = useRef(user?.id)
 
   // Fetch contador de alertas para admin
@@ -271,105 +272,100 @@ function App() {
   }
 
   const handleIniciarInformeSolicitud = async (solicitud) => {
-    // Marcar como en_proceso en backend y obtener datos del pedido
-    let pedidoInfo = null
+    setLoadingSolicitudView(true)
     try {
-      const putRes = await axios.put(`/api/pedidos-solicitudes/${solicitud.id}`, { estado: 'en_proceso' })
-      console.log('[handleIniciarInformeSolicitud] PUT response:', putRes.data)
-      if (putRes.data.pedido) {
-        pedidoInfo = putRes.data.pedido
-        console.log('[handleIniciarInformeSolicitud] Pedido info:', pedidoInfo)
+      // Marcar como en_proceso en backend y obtener datos del pedido
+      let pedidoInfo = null
+      try {
+        const putRes = await axios.put(`/api/pedidos-solicitudes/${solicitud.id}`, { estado: 'en_proceso' })
+        console.log('[handleIniciarInformeSolicitud] PUT response:', putRes.data)
+        if (putRes.data.pedido) {
+          pedidoInfo = putRes.data.pedido
+          console.log('[handleIniciarInformeSolicitud] Pedido info:', pedidoInfo)
+        }
+      } catch (err) {
+        console.error('[handleIniciarInformeSolicitud] Error en PUT:', err)
       }
-    } catch (err) {
-      console.error('[handleIniciarInformeSolicitud] Error en PUT:', err)
-    }
-    
-    // Determinar el abonado correcto:
-    // Si hay cliente_abono (solicitud creada por analista para un cliente), usar ese
-    // Si no, usar solicitante_abono (usuario que creó la solicitud)
-    const abonadoFinal = solicitud.cliente_abono || solicitud.solicitante_abono || pedidoInfo?.usuario_id_interno || ''
-    console.log('[handleIniciarInformeSolicitud] Abonado final:', abonadoFinal, 'cliente_abono:', solicitud.cliente_abono, 'solicitante_abono:', solicitud.solicitante_abono)
-    
-    // Enriquecer solicitud con datos del pedido
-    const solicitudEnriquecida = {
-      ...solicitud,
-      abonado: abonadoFinal,
-      expediente: pedidoInfo?.expediente || '',  // Expediente aleatorio auto-generado
-      referencia: pedidoInfo?.referencia || '',  // Referencia del cliente (manual)
-      fecha_informe: new Date().toISOString().split('T')[0] // Siempre fecha de hoy
-    }
-    console.log('[handleIniciarInformeSolicitud] Solicitud enriquecida:', solicitudEnriquecida)
-    
-    // Buscar si ya existe una empresa con este CUIT en la tabla empresas
-    const cuit = (solicitud.cuit || '').replace(/\D/g, '')
-    console.log('[handleIniciarInformeSolicitud] CUIT limpio:', cuit, 'Original:', solicitud.cuit)
-    
-    // Función auxiliar para abrir empresa existente
-    const abrirEmpresaExistente = (empresaId, empresaCuit) => {
+      
+      const abonadoFinal = solicitud.cliente_abono || solicitud.solicitante_abono || pedidoInfo?.usuario_id_interno || ''
+      console.log('[handleIniciarInformeSolicitud] Abonado final:', abonadoFinal, 'cliente_abono:', solicitud.cliente_abono, 'solicitante_abono:', solicitud.solicitante_abono)
+      
+      const solicitudEnriquecida = {
+        ...solicitud,
+        solicitud_source: solicitud.solicitud_source || 'pedidos-solicitudes',
+        abonado: abonadoFinal,
+        expediente: pedidoInfo?.expediente || '',
+        referencia: pedidoInfo?.referencia || '',
+        fecha_informe: new Date().toISOString().split('T')[0]
+      }
+      console.log('[handleIniciarInformeSolicitud] Solicitud enriquecida:', solicitudEnriquecida)
+      
+      const cuit = (solicitud.cuit || '').replace(/\D/g, '')
+      console.log('[handleIniciarInformeSolicitud] CUIT limpio:', cuit, 'Original:', solicitud.cuit)
+      
+      const abrirEmpresaExistente = (empresaId, empresaCuit) => {
+        setSolicitudActiva(solicitudEnriquecida)
+        setSelectedEmpresaId(empresaId)
+        setSelectedEmpresaCuit(empresaCuit || '')
+        setSelectedEmpresaMode('edit')
+        setExtractedData(null)
+        setNewReportCountry(null)
+        setPreviousView('pedidos-solicitudes')
+        setCurrentView('solicitud-informe')
+      }
+      
+      if (cuit) {
+        try {
+          console.log('[handleIniciarInformeSolicitud] Buscando empresa por CUIT...')
+          const res = await axios.get(`/api/empresas/por-cuit/${cuit}`)
+          console.log('[handleIniciarInformeSolicitud] Respuesta:', res.data)
+          
+          if (res.data.success && res.data.empresa) {
+            console.log('[handleIniciarInformeSolicitud] ¡Empresa encontrada por CUIT! ID:', res.data.empresa.id)
+            abrirEmpresaExistente(res.data.empresa.id, cuit)
+            return
+          } else {
+            console.log('[handleIniciarInformeSolicitud] Empresa NO encontrada por CUIT')
+          }
+        } catch (err) {
+          console.error('[handleIniciarInformeSolicitud] Error buscando empresa por CUIT:', err)
+        }
+      }
+      
+      if (solicitud.razon_social) {
+        try {
+          console.log('[handleIniciarInformeSolicitud] Buscando empresa por razón social:', solicitud.razon_social)
+          const res = await axios.get(`/api/search?q=${encodeURIComponent(solicitud.razon_social)}&limit=5`)
+          
+          if (res.data.success && res.data.empresas?.length > 0) {
+            const exactMatch = res.data.empresas.find(e =>
+              e.source === 'empresa' &&
+              e.razon_social?.toLowerCase() === solicitud.razon_social?.toLowerCase()
+            )
+            if (exactMatch) {
+              console.log('[handleIniciarInformeSolicitud] ¡Empresa encontrada por razón social! ID:', exactMatch.id)
+              abrirEmpresaExistente(exactMatch.id, exactMatch.cuit)
+              return
+            }
+          }
+          console.log('[handleIniciarInformeSolicitud] Empresa NO encontrada por razón social')
+        } catch (err) {
+          console.error('[handleIniciarInformeSolicitud] Error buscando empresa por razón social:', err)
+        }
+      }
+      
+      console.log('[handleIniciarInformeSolicitud] Creando nueva empresa desde solicitud')
       setSolicitudActiva(solicitudEnriquecida)
-      setSelectedEmpresaId(empresaId)
-      setSelectedEmpresaCuit(empresaCuit || '')
-      setSelectedEmpresaMode('edit')
       setExtractedData(null)
+      setSelectedEmpresaId(null)
+      setSelectedEmpresaCuit(null)
+      setSelectedEmpresaMode(null)
       setNewReportCountry(null)
       setPreviousView('pedidos-solicitudes')
       setCurrentView('solicitud-informe')
+    } finally {
+      setLoadingSolicitudView(false)
     }
-    
-    // 1. Buscar por CUIT si existe
-    if (cuit) {
-      try {
-        console.log('[handleIniciarInformeSolicitud] Buscando empresa por CUIT...')
-        const res = await axios.get(`/api/empresas/por-cuit/${cuit}`)
-        console.log('[handleIniciarInformeSolicitud] Respuesta:', res.data)
-        
-        if (res.data.success && res.data.empresa) {
-          console.log('[handleIniciarInformeSolicitud] ¡Empresa encontrada por CUIT! ID:', res.data.empresa.id)
-          abrirEmpresaExistente(res.data.empresa.id, cuit)
-          return
-        } else {
-          console.log('[handleIniciarInformeSolicitud] Empresa NO encontrada por CUIT')
-        }
-      } catch (err) {
-        console.error('[handleIniciarInformeSolicitud] Error buscando empresa por CUIT:', err)
-      }
-    }
-    
-    // 2. Si no hay CUIT o no se encontró, buscar por razón social exacta
-    if (solicitud.razon_social) {
-      try {
-        console.log('[handleIniciarInformeSolicitud] Buscando empresa por razón social:', solicitud.razon_social)
-        const res = await axios.get(`/api/search?q=${encodeURIComponent(solicitud.razon_social)}&limit=5`)
-        
-        if (res.data.success && res.data.empresas?.length > 0) {
-          // Buscar coincidencia exacta SOLO en fuente empresas.
-          // /api/search también devuelve "solicitud" (legacy) y esos IDs no son de tabla empresas.
-          const exactMatch = res.data.empresas.find(e =>
-            e.source === 'empresa' &&
-            e.razon_social?.toLowerCase() === solicitud.razon_social?.toLowerCase()
-          )
-          if (exactMatch) {
-            console.log('[handleIniciarInformeSolicitud] ¡Empresa encontrada por razón social! ID:', exactMatch.id)
-            abrirEmpresaExistente(exactMatch.id, exactMatch.cuit)
-            return
-          }
-        }
-        console.log('[handleIniciarInformeSolicitud] Empresa NO encontrada por razón social')
-      } catch (err) {
-        console.error('[handleIniciarInformeSolicitud] Error buscando empresa por razón social:', err)
-      }
-    }
-    
-    console.log('[handleIniciarInformeSolicitud] Creando nueva empresa desde solicitud')
-    // No existe empresa - crear nueva desde datos de solicitud
-    setSolicitudActiva(solicitudEnriquecida)
-    setExtractedData(null)
-    setSelectedEmpresaId(null)
-    setSelectedEmpresaCuit(null)
-    setSelectedEmpresaMode(null)
-    setNewReportCountry(null)
-    setPreviousView('pedidos-solicitudes')
-    setCurrentView('solicitud-informe')
   }
 
   const handleSolicitudInformeComplete = () => {
@@ -468,6 +464,7 @@ function App() {
       return
     }
     setListDetailEmpresaId(empresaId) // Guardar para reabrir modal al volver
+
     setSelectedEmpresaId(empresaId)
     setSelectedEmpresaCuit(cuit)
     setSelectedEmpresaMode(mode)
@@ -1256,6 +1253,27 @@ function App() {
 
         {currentView === 'boletin-oficial' && (
             <BoletinOficialView />
+        )}
+
+        {loadingSolicitudView && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 backdrop-blur-sm">
+            <div className="mx-4 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-base font-semibold text-slate-900">Cargando vista para continuar informe</h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Estamos preparando la solicitud, buscando si ya existe un informe y abriendo el editor.
+                  </p>
+                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full w-1/2 animate-pulse rounded-full bg-blue-600" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
         </main>
       </div>

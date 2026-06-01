@@ -1685,6 +1685,12 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
       if (empresaId) {
         dataToSave.empresa_id = empresaId
       }
+      if (fromSolicitud?.id) {
+        dataToSave.solicitud_id = fromSolicitud.id
+      }
+      if (fromSolicitud?.solicitud_source) {
+        dataToSave.solicitud_source = fromSolicitud.solicitud_source
+      }
       const response = await axios.post('/api/save', dataToSave)
       
       if (response.data.success) {
