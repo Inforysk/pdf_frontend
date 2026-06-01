@@ -24,7 +24,7 @@ export default function AdminProductosView() {
   const [activeSubTab, setActiveSubTab] = useState('productos')
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 px-1 sm:px-0">
       {/* Header */}
       <div className="bg-white rounded-lg shadow-sm border p-4">
         <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -36,24 +36,26 @@ export default function AdminProductosView() {
         </p>
 
         {/* Sub-tabs */}
-        <div className="flex gap-1 mt-4 bg-gray-100 rounded-lg p-1">
+        <div className="mt-4 bg-gray-100 rounded-lg p-1">
+          <div className="grid grid-cols-2 gap-1">
           {SUBTABS.map(tab => {
             const Icon = tab.icon
             return (
               <button
                 key={tab.key}
                 onClick={() => setActiveSubTab(tab.key)}
-                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${
+                className={`min-h-11 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all min-w-0 ${
                   activeSubTab === tab.key
                     ? 'bg-white text-blue-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 <Icon className="h-4 w-4" />
-                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="truncate text-xs sm:text-sm">{tab.label}</span>
               </button>
             )
           })}
+          </div>
         </div>
       </div>
 
@@ -116,7 +118,7 @@ function ProductosTab() {
 
   return (
     <div className="bg-white rounded-lg shadow-sm border p-4">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
         <div>
           <h4 className="font-medium text-gray-900">Productos/Módulos Disponibles</h4>
           <p className="text-sm text-gray-500">{productos.length} productos configurados</p>
@@ -405,7 +407,7 @@ function ConfigPlanTab() {
 
   return (
     <div className="bg-white rounded-lg shadow-sm border p-4">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
         <div>
           <h4 className="font-medium text-gray-900">Configuración de Productos por Plan</h4>
           <p className="text-sm text-gray-500">Define qué productos y límites incluye cada plan</p>
@@ -413,7 +415,7 @@ function ConfigPlanTab() {
         <select
           value={selectedPlan || ''}
           onChange={e => setSelectedPlan(parseInt(e.target.value))}
-          className="px-3 py-2 border rounded-md text-sm font-medium"
+          className="w-full sm:w-auto px-3 py-2 border rounded-md text-sm font-medium"
         >
           {planes.map(plan => (
             <option key={plan.id} value={plan.id}>
@@ -425,12 +427,12 @@ function ConfigPlanTab() {
 
       {planActual && (
         <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="min-w-0">
               <span className="font-medium text-blue-900">{planActual.nombre}</span>
               <span className="text-blue-600 ml-2">${planActual.precio_mensual}/mes</span>
             </div>
-            <span className="text-sm text-blue-700">
+            <span className="text-sm text-blue-700 whitespace-nowrap">
               {planActual.creditos_mes} créditos base
             </span>
           </div>
@@ -484,44 +486,48 @@ function ProductoConfigRow({ producto, config, IconComponent, onSave, saving }) 
   return (
     <div className={`border rounded-lg ${localConfig.incluido ? 'border-green-200 bg-green-50/30' : 'border-gray-200'}`}>
       <div 
-        className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50"
+        className="p-3 cursor-pointer hover:bg-gray-50"
         onClick={() => setExpanded(!expanded)}
       >
-        <div className="flex items-center gap-3">
-          {expanded ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
-          <div className={`w-8 h-8 rounded flex items-center justify-center ${
-            producto.categoria === 'informes' ? 'bg-blue-100 text-blue-600' :
-            producto.categoria === 'api' ? 'bg-purple-100 text-purple-600' :
-            producto.categoria === 'monitoreo' ? 'bg-green-100 text-green-600' :
-            producto.categoria === 'alertas' ? 'bg-amber-100 text-amber-600' :
-            'bg-gray-100 text-gray-600'
-          }`}>
-            <IconComponent className="h-4 w-4" />
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="pt-0.5 shrink-0">
+              {expanded ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+            </div>
+            <div className={`w-9 h-9 rounded flex items-center justify-center shrink-0 ${
+              producto.categoria === 'informes' ? 'bg-blue-100 text-blue-600' :
+              producto.categoria === 'api' ? 'bg-purple-100 text-purple-600' :
+              producto.categoria === 'monitoreo' ? 'bg-green-100 text-green-600' :
+              producto.categoria === 'alertas' ? 'bg-amber-100 text-amber-600' :
+              'bg-gray-100 text-gray-600'
+            }`}>
+              <IconComponent className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-medium text-sm text-gray-900 break-words">{producto.nombre}</p>
+              <p className="text-xs text-gray-500 break-all mt-0.5">({producto.codigo})</p>
+            </div>
           </div>
-          <div>
-            <span className="font-medium text-sm">{producto.nombre}</span>
-            <span className="text-xs text-gray-500 ml-2">({producto.codigo})</span>
+          <div className="flex items-center justify-between sm:justify-end gap-3 pl-7 sm:pl-0">
+            {localConfig.incluido ? (
+              <span className="flex items-center gap-1 text-sm text-green-600 min-w-0">
+                <Check className="h-4 w-4 shrink-0" />
+                <span className="truncate">{localConfig.limite_mensual ? `${localConfig.limite_mensual}/${producto.unidad}` : 'Ilimitado'}</span>
+              </span>
+            ) : (
+              <span className="text-sm text-gray-400">No incluido</span>
+            )}
+            {dirty && (
+              <span className="w-2 h-2 bg-amber-500 rounded-full shrink-0" title="Sin guardar"></span>
+            )}
           </div>
-        </div>
-        <div className="flex items-center gap-4">
-          {localConfig.incluido ? (
-            <span className="flex items-center gap-1 text-sm text-green-600">
-              <Check className="h-4 w-4" />
-              {localConfig.limite_mensual ? `${localConfig.limite_mensual}/${producto.unidad}` : 'Ilimitado'}
-            </span>
-          ) : (
-            <span className="text-sm text-gray-400">No incluido</span>
-          )}
-          {dirty && (
-            <span className="w-2 h-2 bg-amber-500 rounded-full" title="Sin guardar"></span>
-          )}
         </div>
       </div>
       
       {expanded && (
         <div className="px-4 pb-4 pt-2 border-t bg-white">
-          <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
-            <div className="flex items-center gap-2">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="flex items-center gap-2 lg:pt-6">
               <input
                 type="checkbox"
                 id={`inc-${producto.id}`}
@@ -581,7 +587,7 @@ function ProductoConfigRow({ producto, config, IconComponent, onSave, saving }) 
               <button
                 onClick={handleSave}
                 disabled={!dirty || saving}
-                className={`px-3 py-1 rounded text-sm font-medium ${
+                className={`w-full lg:w-auto px-3 py-2 rounded text-sm font-medium inline-flex items-center justify-center ${
                   dirty ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-100 text-gray-400'
                 }`}
               >

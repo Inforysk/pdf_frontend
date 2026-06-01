@@ -109,7 +109,7 @@ export default function AdminCouponsView() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-1 sm:px-0">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -119,17 +119,17 @@ export default function AdminCouponsView() {
           </h1>
           <p className="text-gray-500 text-sm mt-1">Crear, asignar y rastrear cupones de descuento</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="grid grid-cols-[44px_minmax(0,1fr)] sm:flex sm:flex-wrap items-center gap-2 w-full sm:w-auto">
           <button
             onClick={loadCoupons}
-            className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
+            className="h-11 w-11 inline-flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded-xl border border-gray-200 sm:border-transparent"
             title="Refrescar"
           >
             <RefreshCw className="h-5 w-5" />
           </button>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors"
+            className="w-full sm:w-auto h-11 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors"
           >
             <Plus className="h-4 w-4" />
             Nuevo cupón
@@ -138,7 +138,7 @@ export default function AdminCouponsView() {
       </div>
 
       {/* Métricas */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard label="Total cupones" value={totalCoupons} icon={Ticket} color="purple" />
         <MetricCard label="Activos" value={activeCoupons} icon={CheckCircle} color="green" />
         <MetricCard label="Usos totales" value={totalUses} icon={Users} color="blue" />
@@ -164,8 +164,28 @@ export default function AdminCouponsView() {
 
       {/* Lista de cupones */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
+        <div className="md:hidden divide-y divide-gray-100">
+          {filteredCoupons.map((coupon) => (
+            <CouponMobileCard
+              key={coupon.id}
+              coupon={coupon}
+              onCopy={copyCode}
+              onToggle={toggleActive}
+              onDelete={deleteCoupon}
+              onEdit={() => setEditingCoupon(coupon)}
+              onAssign={() => setShowAssignModal(coupon)}
+              onViewUsage={() => setShowUsageModal(coupon)}
+            />
+          ))}
+          {filteredCoupons.length === 0 && (
+            <div className="py-12 text-center text-gray-400 text-sm px-4">
+              {search ? 'No se encontraron cupones' : 'No hay cupones creados'}
+            </div>
+          )}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
+          <table className="min-w-[980px] w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Código</th>
@@ -241,15 +261,138 @@ function MetricCard({ label, value, icon: Icon, color }) {
     amber: 'bg-amber-50 text-amber-600'
   }
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
-      <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${colorMap[color]}`}>
-          <Icon className="h-5 w-5" />
+    <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4 min-w-0">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 ${colorMap[color]}`}>
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-lg sm:text-2xl font-bold text-gray-900 leading-none">{value}</p>
+          <p className="text-[11px] sm:text-xs text-gray-500 mt-1 leading-tight">{label}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CouponMobileCard({ coupon, onCopy, onToggle, onDelete, onEdit, onAssign, onViewUsage }) {
+  const typeConfig = TYPE_CONFIG[coupon.type] || TYPE_CONFIG.percentage
+  const appliesConfig = APPLIES_CONFIG[coupon.applies_to] || APPLIES_CONFIG.all
+  const TypeIcon = typeConfig.icon
+  const isExpired = coupon.valid_to && new Date(coupon.valid_to) < new Date()
+  const isExhausted = coupon.max_uses && coupon.used_count >= coupon.max_uses
+
+  return (
+    <div className="p-3 space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <code className="font-mono font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded text-[12px] leading-none break-all">
+              {coupon.code}
+            </code>
+            <button onClick={() => onCopy(coupon.code)} className="inline-flex items-center justify-center h-7 w-7 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
+              <Copy className="h-3.5 w-3.5" />
+            </button>
+            {coupon.is_public && (
+              <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded whitespace-nowrap">PÚBLICO</span>
+            )}
+          </div>
+          {coupon.description && (
+            <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">{coupon.description}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+        <div>
+          <p className="text-[11px] text-gray-400 mb-1">Tipo</p>
+          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium ${typeConfig.color}`}>
+            <TypeIcon className="h-3 w-3" />
+            {typeConfig.label}
+          </span>
         </div>
         <div>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
-          <p className="text-xs text-gray-500">{label}</p>
+          <p className="text-[11px] text-gray-400 mb-1">Valor</p>
+          <p className="font-bold text-gray-900 leading-none">{coupon.type === 'percentage' ? `${coupon.value}%` : `$${coupon.value}`}</p>
         </div>
+        <div>
+          <p className="text-[11px] text-gray-400 mb-1">Aplica a</p>
+          <span className={`inline-flex px-2 py-1 rounded-lg text-[11px] font-medium ${appliesConfig.color}`}>
+            {appliesConfig.label}
+          </span>
+        </div>
+        <div>
+          <p className="text-[11px] text-gray-400 mb-1">Usos</p>
+          <p className="font-medium text-gray-700 leading-none">
+            {coupon.used_count || 0}
+            {coupon.max_uses && <span className="text-gray-400">/{coupon.max_uses}</span>}
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] text-gray-400 mb-1">Expira</p>
+          <p className="text-gray-600 text-[12px] leading-tight">
+            {coupon.valid_to
+              ? new Date(coupon.valid_to).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })
+              : 'Sin límite'
+            }
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] text-gray-400 mb-1">Estado</p>
+          {isExpired ? (
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-red-100 text-red-700">
+              <AlertCircle className="h-3 w-3" /> Expirado
+            </span>
+          ) : isExhausted ? (
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">
+              Agotado
+            </span>
+          ) : coupon.is_active ? (
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-green-100 text-green-700">
+              <CheckCircle className="h-3 w-3" /> Activo
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">
+              Inactivo
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+        <button
+          onClick={onViewUsage}
+          className="inline-flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg whitespace-nowrap"
+        >
+          <Eye className="h-3.5 w-3.5" /> Uso
+        </button>
+        <button
+          onClick={onAssign}
+          className="inline-flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg whitespace-nowrap"
+        >
+          <Gift className="h-3.5 w-3.5" /> Asignar
+        </button>
+        <button
+          onClick={onEdit}
+          className="inline-flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg whitespace-nowrap"
+        >
+          <Edit2 className="h-3.5 w-3.5" /> Editar
+        </button>
+        <button
+          onClick={() => onToggle(coupon)}
+          className={`inline-flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] rounded-lg whitespace-nowrap ${coupon.is_active ? 'text-red-700 bg-red-50 hover:bg-red-100' : 'text-green-700 bg-green-50 hover:bg-green-100'}`}
+        >
+          {coupon.is_active ? <X className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
+          {coupon.is_active ? 'Desactivar' : 'Activar'}
+        </button>
+        {coupon.used_count === 0 && (
+          <button
+            onClick={() => onDelete(coupon)}
+            className="col-span-2 inline-flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] text-red-700 bg-red-50 hover:bg-red-100 rounded-lg whitespace-nowrap"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Eliminar
+          </button>
+        )}
       </div>
     </div>
   )
@@ -419,14 +562,14 @@ function CouponFormModal({ coupon, onClose, onSave }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-gray-100">
+        <div className="p-4 sm:p-6 border-b border-gray-100">
           <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <Ticket className="h-5 w-5 text-purple-600" />
             {coupon ? 'Editar cupón' : 'Nuevo cupón'}
           </h2>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
           {/* Código */}
           {!coupon && (
             <div>
@@ -455,7 +598,7 @@ function CouponFormModal({ coupon, onClose, onSave }) {
           </div>
 
           {/* Tipo y valor */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Tipo *</label>
               <select
@@ -498,7 +641,7 @@ function CouponFormModal({ coupon, onClose, onSave }) {
           </div>
 
           {/* Límites */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Compra mínima</label>
               <input
@@ -561,7 +704,7 @@ function CouponFormModal({ coupon, onClose, onSave }) {
           </div>
 
           {/* Checkboxes */}
-          <div className="flex items-center gap-6">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -583,18 +726,18 @@ function CouponFormModal({ coupon, onClose, onSave }) {
           </div>
 
           {/* Botones */}
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 pt-4 border-t border-gray-100">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+              className="w-full sm:w-auto px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
+              className="w-full sm:w-auto px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               {coupon ? 'Guardar cambios' : 'Crear cupón'}
@@ -708,13 +851,13 @@ function AssignCouponModal({ coupon, clients: initialClients, onClose, onAssigne
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="p-6 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+        <div className="p-4 sm:p-6 border-b border-gray-100 flex items-start sm:items-center justify-between gap-3 flex-shrink-0">
           <div>
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <Gift className="h-5 w-5 text-purple-600" />
               Asignar cupón a cliente
             </h2>
-            <p className="text-sm text-gray-500">
+            <p className="text-xs sm:text-sm text-gray-500">
               Cupón: <code className="font-mono bg-purple-50 px-1.5 py-0.5 rounded font-bold text-purple-700">{coupon.code}</code>
               {coupon.description && <span className="ml-2 text-gray-400">• {coupon.description}</span>}
             </p>
@@ -724,15 +867,15 @@ function AssignCouponModal({ coupon, clients: initialClients, onClose, onAssigne
           </button>
         </div>
 
-        <div className="p-6 space-y-4 overflow-y-auto flex-1">
+        <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
           {/* Cliente seleccionado */}
           {selectedClient && (
             <div className="p-4 bg-purple-50 border-2 border-purple-200 rounded-xl">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex-1">
                   <p className="text-sm text-purple-600 font-medium mb-1">Cliente seleccionado:</p>
                   <p className="font-bold text-gray-900">{selectedClient.razon_social || selectedClient.nombre || 'Sin nombre'}</p>
-                  <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-1 text-xs sm:text-sm text-gray-600">
                     {(selectedClient.cuit || selectedClient.identificacion) && (
                       <span className="font-mono bg-white px-2 py-0.5 rounded">CUIT: {selectedClient.cuit || selectedClient.identificacion}</span>
                     )}
@@ -875,7 +1018,7 @@ function AssignCouponModal({ coupon, clients: initialClients, onClose, onAssigne
             ) : (
               <div className="space-y-2 max-h-40 overflow-y-auto">
                 {assignments.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div key={a.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 bg-gray-50 rounded-lg">
                     <div>
                       <p className="font-medium text-gray-900">{a.empresa_nombre || a.usuario_nombre}</p>
                       <p className="text-xs text-gray-500">
@@ -922,13 +1065,13 @@ function CouponUsageModal({ coupon, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+        <div className="p-4 sm:p-6 border-b border-gray-100 flex items-start sm:items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <Eye className="h-5 w-5 text-blue-600" />
               Historial de uso
             </h2>
-            <p className="text-sm text-gray-500">
+            <p className="text-xs sm:text-sm text-gray-500">
               <code className="font-mono bg-purple-50 px-1.5 py-0.5 rounded">{coupon.code}</code>
               {' • '}
               Total descuentos: <span className="font-bold text-green-600">${totalDiscount.toFixed(2)}</span>
@@ -939,7 +1082,7 @@ function CouponUsageModal({ coupon, onClose }) {
           </button>
         </div>
 
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           {loading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
@@ -947,37 +1090,74 @@ function CouponUsageModal({ coupon, onClose }) {
           ) : usage.length === 0 ? (
             <p className="text-gray-400 text-center py-8">Este cupón aún no ha sido usado</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-2 text-xs font-semibold text-gray-500">Cliente</th>
-                  <th className="text-left py-2 text-xs font-semibold text-gray-500">Tipo compra</th>
-                  <th className="text-right py-2 text-xs font-semibold text-gray-500">Original</th>
-                  <th className="text-right py-2 text-xs font-semibold text-gray-500">Descuento</th>
-                  <th className="text-right py-2 text-xs font-semibold text-gray-500">Final</th>
-                  <th className="text-right py-2 text-xs font-semibold text-gray-500">Fecha</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
+            <>
+              <div className="md:hidden divide-y divide-gray-100">
                 {usage.map((u) => (
-                  <tr key={u.id}>
-                    <td className="py-2">
-                      <p className="font-medium text-gray-900">{u.usuario_nombre || '-'}</p>
-                      <p className="text-xs text-gray-500">{u.empresa_nombre}</p>
-                    </td>
-                    <td className="py-2 text-gray-600">{u.purchase_type}</td>
-                    <td className="py-2 text-right text-gray-600">${Number(u.original_amount || 0).toFixed(2)}</td>
-                    <td className="py-2 text-right font-medium text-green-600">-${Number(u.discount_amount || 0).toFixed(2)}</td>
-                    <td className="py-2 text-right font-bold text-gray-900">${Number(u.final_amount || 0).toFixed(2)}</td>
-                    <td className="py-2 text-right text-gray-500">
-                      {new Date(u.used_at).toLocaleDateString('es-ES', { 
-                        day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' 
+                  <div key={u.id} className="py-3 space-y-1.5 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-medium text-gray-900">{u.usuario_nombre || '-'}</p>
+                        <p className="text-gray-500">{u.empresa_nombre}</p>
+                      </div>
+                      <span className="text-gray-500">{u.purchase_type}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <p className="text-gray-400">Original</p>
+                        <p className="text-gray-700">${Number(u.original_amount || 0).toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Descuento</p>
+                        <p className="font-medium text-green-600">-${Number(u.discount_amount || 0).toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Final</p>
+                        <p className="font-bold text-gray-900">${Number(u.final_amount || 0).toFixed(2)}</p>
+                      </div>
+                    </div>
+                    <p className="text-gray-500">
+                      {new Date(u.used_at).toLocaleDateString('es-ES', {
+                        day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
                       })}
-                    </td>
-                  </tr>
+                    </p>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+
+              <div className="hidden md:block overflow-x-auto">
+                <table className="min-w-[760px] w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-2 text-xs font-semibold text-gray-500">Cliente</th>
+                      <th className="text-left py-2 text-xs font-semibold text-gray-500">Tipo compra</th>
+                      <th className="text-right py-2 text-xs font-semibold text-gray-500">Original</th>
+                      <th className="text-right py-2 text-xs font-semibold text-gray-500">Descuento</th>
+                      <th className="text-right py-2 text-xs font-semibold text-gray-500">Final</th>
+                      <th className="text-right py-2 text-xs font-semibold text-gray-500">Fecha</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {usage.map((u) => (
+                      <tr key={u.id}>
+                        <td className="py-2">
+                          <p className="font-medium text-gray-900">{u.usuario_nombre || '-'}</p>
+                          <p className="text-xs text-gray-500">{u.empresa_nombre}</p>
+                        </td>
+                        <td className="py-2 text-gray-600">{u.purchase_type}</td>
+                        <td className="py-2 text-right text-gray-600">${Number(u.original_amount || 0).toFixed(2)}</td>
+                        <td className="py-2 text-right font-medium text-green-600">-${Number(u.discount_amount || 0).toFixed(2)}</td>
+                        <td className="py-2 text-right font-bold text-gray-900">${Number(u.final_amount || 0).toFixed(2)}</td>
+                        <td className="py-2 text-right text-gray-500">
+                          {new Date(u.used_at).toLocaleDateString('es-ES', {
+                            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+                          })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       </div>

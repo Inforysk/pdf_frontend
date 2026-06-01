@@ -162,7 +162,7 @@ export default function AdminPreciosPaisView() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-1 sm:px-0">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -174,38 +174,40 @@ export default function AdminPreciosPaisView() {
             Lista de precios de informes completos por país y urgencia
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full sm:w-auto">
           <button
             onClick={() => setShowTasasModal(true)}
-            className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
+            className="h-11 w-full sm:w-auto sm:px-3 inline-flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded-lg border border-gray-200 sm:border-0"
             title="Tasas de cambio"
           >
             <Settings className="h-5 w-5" />
+            <span className="ml-2 sm:hidden">Tasas</span>
           </button>
           <button
             onClick={loadPrecios}
-            className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
+            className="h-11 w-full sm:w-auto sm:px-3 inline-flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded-lg border border-gray-200 sm:border-0"
             title="Refrescar"
           >
             <RefreshCw className="h-5 w-5" />
+            <span className="ml-2 sm:hidden">Actualizar</span>
           </button>
           <button
             onClick={handleExport}
-            className="flex items-center gap-2 px-3 py-2 text-gray-700 bg-white border rounded-xl hover:bg-gray-50"
+            className="h-11 flex items-center justify-center gap-2 px-3 py-2 text-gray-700 bg-white border rounded-xl hover:bg-gray-50 text-sm"
           >
             <Download className="h-4 w-4" />
             Exportar
           </button>
           <button
             onClick={() => setShowImportModal(true)}
-            className="flex items-center gap-2 px-3 py-2 text-gray-700 bg-white border rounded-xl hover:bg-gray-50"
+            className="h-11 flex items-center justify-center gap-2 px-3 py-2 text-gray-700 bg-white border rounded-xl hover:bg-gray-50 text-sm"
           >
             <Upload className="h-4 w-4" />
             Importar
           </button>
           <button
             onClick={() => { setEditingPrecio(null); setShowModal(true) }}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700"
+            className="col-span-2 sm:col-span-1 w-full sm:w-auto h-11 flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700"
           >
             <Plus className="h-4 w-4" />
             Nuevo país
@@ -214,7 +216,7 @@ export default function AdminPreciosPaisView() {
       </div>
 
       {/* Métricas */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard label="Total países" value={totalPaises} icon={Globe} color="indigo" />
         <MetricCard label="Activos" value={totalActivos} icon={CheckCircle} color="green" />
         <MetricCard label="Regiones" value={regiones.length} icon={MapPin} color="purple" />
@@ -227,8 +229,8 @@ export default function AdminPreciosPaisView() {
       </div>
 
       {/* Filtros */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-        <div className="relative flex-1 max-w-md">
+      <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-4 items-start sm:items-center">
+        <div className="relative w-full max-w-none sm:max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
@@ -239,11 +241,11 @@ export default function AdminPreciosPaisView() {
           />
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
           <select
             value={selectedRegion || ''}
             onChange={e => setSelectedRegion(e.target.value || null)}
-            className="px-3 py-2 border rounded-xl focus:ring-2 focus:ring-indigo-500"
+            className="w-full sm:w-auto px-3 py-2 border rounded-xl focus:ring-2 focus:ring-indigo-500"
           >
             <option value="">Todas las regiones</option>
             {regiones.map(r => (
@@ -275,13 +277,13 @@ export default function AdminPreciosPaisView() {
             <div key={region.id} className="bg-white rounded-2xl shadow-sm border overflow-hidden">
               <button
                 onClick={() => setExpandedRegions(prev => ({ ...prev, [region.id]: !prev[region.id] }))}
-                className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition"
+                className="w-full px-4 py-3 flex items-center justify-between gap-3 bg-gray-50 hover:bg-gray-100 transition"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
                   <MapPin className="h-5 w-5 text-indigo-500" />
-                  <span className="font-semibold text-gray-900">{region.nombre}</span>
-                  <span className="text-sm text-gray-500">({regionPrecios.length} países)</span>
+                  <span className="font-semibold text-gray-900 truncate">{region.nombre}</span>
+                  <span className="text-sm text-gray-500 whitespace-nowrap">({regionPrecios.length} países)</span>
                 </div>
               </button>
               
@@ -293,32 +295,47 @@ export default function AdminPreciosPaisView() {
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <table className="w-full">
-                      <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-                        <tr>
-                          <th className="px-4 py-3 text-left">País</th>
-                          <th className="px-4 py-3 text-center">Normal</th>
-                          <th className="px-4 py-3 text-center">Urgente</th>
-                          <th className="px-4 py-3 text-center">72 Hrs</th>
-                          <th className="px-4 py-3 text-center">Conversión</th>
-                          <th className="px-4 py-3 text-center">Estado</th>
-                          <th className="px-4 py-3 text-right">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {regionPrecios.map(precio => (
-                          <PrecioRow
-                            key={precio.id}
-                            precio={precio}
-                            tasas={tasas}
-                            onEdit={() => { setEditingPrecio(precio); setShowModal(true) }}
-                            onDelete={() => handleDelete(precio)}
-                            onToggleActive={() => handleToggleActive(precio)}
-                            onShowHistorial={() => setShowHistorial(precio)}
-                          />
-                        ))}
-                      </tbody>
-                    </table>
+                    <div className="md:hidden divide-y">
+                      {regionPrecios.map(precio => (
+                        <PrecioMobileCard
+                          key={precio.id}
+                          precio={precio}
+                          tasas={tasas}
+                          onEdit={() => { setEditingPrecio(precio); setShowModal(true) }}
+                          onDelete={() => handleDelete(precio)}
+                          onToggleActive={() => handleToggleActive(precio)}
+                          onShowHistorial={() => setShowHistorial(precio)}
+                        />
+                      ))}
+                    </div>
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="min-w-[920px] w-full">
+                        <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                          <tr>
+                            <th className="px-4 py-3 text-left">País</th>
+                            <th className="px-4 py-3 text-center">Normal</th>
+                            <th className="px-4 py-3 text-center">Urgente</th>
+                            <th className="px-4 py-3 text-center">72 Hrs</th>
+                            <th className="px-4 py-3 text-center">Conversión</th>
+                            <th className="px-4 py-3 text-center">Estado</th>
+                            <th className="px-4 py-3 text-right">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {regionPrecios.map(precio => (
+                            <PrecioRow
+                              key={precio.id}
+                              precio={precio}
+                              tasas={tasas}
+                              onEdit={() => { setEditingPrecio(precio); setShowModal(true) }}
+                              onDelete={() => handleDelete(precio)}
+                              onToggleActive={() => handleToggleActive(precio)}
+                              onShowHistorial={() => setShowHistorial(precio)}
+                            />
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -333,21 +350,36 @@ export default function AdminPreciosPaisView() {
               <span className="font-semibold text-gray-700">Sin región asignada</span>
               <span className="text-sm text-gray-500 ml-2">({preciosByRegion[0].length} países)</span>
             </div>
-            <table className="w-full">
-              <tbody className="divide-y">
-                {preciosByRegion[0].map(precio => (
-                  <PrecioRow
-                    key={precio.id}
-                    precio={precio}
-                    tasas={tasas}
-                    onEdit={() => { setEditingPrecio(precio); setShowModal(true) }}
-                    onDelete={() => handleDelete(precio)}
-                    onToggleActive={() => handleToggleActive(precio)}
-                    onShowHistorial={() => setShowHistorial(precio)}
-                  />
-                ))}
-              </tbody>
-            </table>
+            <div className="md:hidden divide-y">
+              {preciosByRegion[0].map(precio => (
+                <PrecioMobileCard
+                  key={precio.id}
+                  precio={precio}
+                  tasas={tasas}
+                  onEdit={() => { setEditingPrecio(precio); setShowModal(true) }}
+                  onDelete={() => handleDelete(precio)}
+                  onToggleActive={() => handleToggleActive(precio)}
+                  onShowHistorial={() => setShowHistorial(precio)}
+                />
+              ))}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
+              <table className="min-w-[920px] w-full">
+                <tbody className="divide-y">
+                  {preciosByRegion[0].map(precio => (
+                    <PrecioRow
+                      key={precio.id}
+                      precio={precio}
+                      tasas={tasas}
+                      onEdit={() => { setEditingPrecio(precio); setShowModal(true) }}
+                      onDelete={() => handleDelete(precio)}
+                      onToggleActive={() => handleToggleActive(precio)}
+                      onShowHistorial={() => setShowHistorial(precio)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -417,15 +449,140 @@ function MetricCard({ label, value, icon: Icon, color }) {
   }
 
   return (
-    <div className="bg-white rounded-xl p-4 border shadow-sm">
-      <div className="flex items-center gap-3">
-        <div className={`p-2 rounded-lg ${colors[color]}`}>
-          <Icon className="h-5 w-5" />
+    <div className="bg-white rounded-xl p-3 sm:p-4 border shadow-sm min-w-0">
+      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+        <div className={`p-2 rounded-lg shrink-0 ${colors[color]}`}>
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 leading-none break-words">{value}</p>
+          <p className="text-[11px] sm:text-xs text-gray-500 mt-1 leading-tight">{label}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PrecioMobileCard({ precio, tasas, onEdit, onDelete, onToggleActive, onShowHistorial }) {
+  const moneda = precio.moneda || 'EUR'
+  const MonedaIcon = moneda === 'EUR' ? Euro : DollarSign
+
+  const getConversion = () => {
+    if (moneda === 'EUR') {
+      const tasa = tasas['EUR_USD'] || 1.08
+      return {
+        label: 'USD',
+        normal: (precio.precio_normal * tasa).toFixed(2),
+        urgente: (precio.precio_urgente * tasa).toFixed(2),
+        hrs72: (precio.precio_72hrs * tasa).toFixed(2)
+      }
+    }
+    const tasa = tasas['USD_EUR'] || 0.93
+    return {
+      label: 'EUR',
+      normal: (precio.precio_normal * tasa).toFixed(2),
+      urgente: (precio.precio_urgente * tasa).toFixed(2),
+      hrs72: (precio.precio_72hrs * tasa).toFixed(2)
+    }
+  }
+
+  const conversion = getConversion()
+
+  return (
+    <div className={`p-4 space-y-3 ${!precio.is_active ? 'opacity-60 bg-gray-50' : ''}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-gray-900 break-words">{precio.pais}</span>
+            {precio.codigo_pais && (
+              <span className="text-xs text-gray-400">({precio.codigo_pais})</span>
+            )}
+            {precio.clientes_especiales > 0 && (
+              <span className="px-1.5 py-0.5 text-[11px] bg-purple-100 text-purple-700 rounded-full whitespace-nowrap">
+                {precio.clientes_especiales} especiales
+              </span>
+            )}
+          </div>
+          {precio.vigente_hasta && (
+            <p className="text-[11px] text-amber-600 flex items-center gap-1 mt-1">
+              <Calendar className="h-3 w-3" />
+              Hasta {new Date(precio.vigente_hasta).toLocaleDateString()}
+            </p>
+          )}
+        </div>
+        {precio.is_active ? (
+          <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-green-100 text-green-700 rounded-full whitespace-nowrap">
+            <CheckCircle className="h-3 w-3" /> Activo
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-gray-200 text-gray-600 rounded-full whitespace-nowrap">
+            Inactivo
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 text-xs">
+        <div>
+          <p className="text-gray-400 mb-1">Normal</p>
+          <div className="flex items-center gap-1">
+            <MonedaIcon className="h-3.5 w-3.5 text-gray-400" />
+            <span className="font-semibold">{precio.precio_normal}</span>
+          </div>
         </div>
         <div>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
-          <p className="text-xs text-gray-500">{label}</p>
+          <p className="text-gray-400 mb-1">Urgente</p>
+          <div className="flex items-center gap-1">
+            <MonedaIcon className="h-3.5 w-3.5 text-gray-400" />
+            <span className="font-semibold text-orange-600">{precio.precio_urgente}</span>
+          </div>
         </div>
+        <div>
+          <p className="text-gray-400 mb-1">72 Hrs</p>
+          <div className="flex items-center gap-1">
+            <MonedaIcon className="h-3.5 w-3.5 text-gray-400" />
+            <span className="font-semibold text-red-600">{precio.precio_72hrs}</span>
+          </div>
+        </div>
+        <div className="col-span-3">
+          <p className="text-gray-400 mb-1">Conversión {conversion.label}</p>
+          <p className="text-[11px] text-gray-600 break-words">
+            {conversion.normal} / {conversion.urgente} / {conversion.hrs72}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+        {precio.cambios_count > 0 && (
+          <button
+            onClick={onShowHistorial}
+            className="inline-flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg"
+          >
+            <History className="h-3.5 w-3.5" /> Historial
+          </button>
+        )}
+        <button
+          onClick={onToggleActive}
+          className={`inline-flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] rounded-lg ${
+            precio.is_active
+              ? 'text-orange-700 bg-orange-50 hover:bg-orange-100'
+              : 'text-green-700 bg-green-50 hover:bg-green-100'
+          }`}
+        >
+          {precio.is_active ? <ToggleRight className="h-3.5 w-3.5" /> : <ToggleLeft className="h-3.5 w-3.5" />}
+          {precio.is_active ? 'Desactivar' : 'Activar'}
+        </button>
+        <button
+          onClick={onEdit}
+          className="inline-flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg"
+        >
+          <Edit2 className="h-3.5 w-3.5" /> Editar
+        </button>
+        <button
+          onClick={onDelete}
+          className="inline-flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] text-red-700 bg-red-50 hover:bg-red-100 rounded-lg"
+        >
+          <Trash2 className="h-3.5 w-3.5" /> Eliminar
+        </button>
       </div>
     </div>
   )

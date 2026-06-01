@@ -90,7 +90,8 @@ function AdminPanel({ onBack, defaultTab = null }) {
 
         {/* Tabs - solo si no viene con defaultTab */}
         {!defaultTab && (
-          <div className="flex gap-1 mt-4 bg-gray-100 rounded-lg p-1">
+          <div className="mt-4 bg-gray-100 rounded-lg p-1 overflow-x-auto">
+            <div className="flex gap-1 min-w-max sm:min-w-0">
             {TABS.map(tab => {
               const Icon = tab.icon
               const isAprobaciones = tab.key === 'aprobaciones'
@@ -117,6 +118,7 @@ function AdminPanel({ onBack, defaultTab = null }) {
                 </button>
               )
             })}
+            </div>
           </div>
         )}
 
@@ -265,12 +267,12 @@ function UsersTab() {
   const uniqueRoles = [...new Set(users.map(u => u.rol))].filter(Boolean).sort()
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 px-1 sm:px-0">
       {/* Barra de búsqueda y filtros */}
       <div className="bg-white rounded-lg border p-4 space-y-3">
-        <div className="flex flex-col lg:flex-row gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.6fr)_220px_180px_180px_auto] gap-3">
           {/* Búsqueda */}
-          <div className="flex-1">
+          <div className="sm:col-span-2 xl:col-span-1">
             <div className="relative">
               <input
                 type="text"
@@ -286,7 +288,7 @@ function UsersTab() {
           </div>
           
           {/* Filtro por rol */}
-          <div className="w-full lg:w-48">
+          <div className="w-full">
             <select
               value={filterRol}
               onChange={(e) => setFilterRol(e.target.value)}
@@ -300,7 +302,7 @@ function UsersTab() {
           </div>
 
           {/* Fecha desde */}
-          <div className="w-full lg:w-40">
+          <div className="w-full">
             <input
               type="date"
               value={filterFechaDesde}
@@ -312,7 +314,7 @@ function UsersTab() {
           </div>
 
           {/* Fecha hasta */}
-          <div className="w-full lg:w-40">
+          <div className="w-full">
             <input
               type="date"
               value={filterFechaHasta}
@@ -327,7 +329,7 @@ function UsersTab() {
           {(searchTerm || filterRol || filterFechaDesde || filterFechaHasta) && (
             <button
               onClick={clearFilters}
-              className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg flex items-center gap-1"
+              className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg inline-flex items-center justify-center gap-1 w-full xl:w-auto"
             >
               <X className="h-4 w-4" /> Limpiar
             </button>
@@ -336,16 +338,16 @@ function UsersTab() {
       </div>
 
       {/* Header con conteo y acciones */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
         <span className="text-sm text-gray-500">
           {filteredUsers.length === users.length 
             ? `${users.length} usuarios` 
             : `${filteredUsers.length} de ${users.length} usuarios`
           }
         </span>
-        <div className="flex gap-2">
-          <button onClick={loadData} className="btn-secondary text-sm flex items-center gap-1"><RefreshCw className="h-4 w-4" /></button>
-          <button onClick={() => { setEditingUser(null); setShowForm(true) }} className="btn-primary text-sm flex items-center gap-1">
+        <div className="grid grid-cols-[56px_minmax(0,1fr)] sm:flex gap-2 w-full sm:w-auto">
+          <button onClick={loadData} className="btn-secondary text-sm inline-flex items-center justify-center gap-1 w-full sm:w-auto"><RefreshCw className="h-4 w-4" /></button>
+          <button onClick={() => { setEditingUser(null); setShowForm(true) }} className="btn-primary text-sm inline-flex items-center justify-center gap-1 w-full sm:w-auto">
             <UserPlus className="h-4 w-4" /> Nuevo
           </button>
         </div>
@@ -363,7 +365,7 @@ function UsersTab() {
         ) : (
           paginatedUsers.map(user => (
             <div key={user.id} className={`bg-white rounded-lg border p-4 ${!user.activo ? 'opacity-60' : ''}`}>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${
                     user.rol === 'admin' ? 'bg-red-500' : user.rol === 'analista' ? 'bg-blue-500' : 'bg-gray-500'
@@ -372,7 +374,7 @@ function UsersTab() {
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-gray-900">{user.nombre_completo || user.username}</span>
+                      <span className="font-semibold text-gray-900 break-words">{user.nombre_completo || user.username}</span>
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         user.rol === 'admin' ? 'bg-red-100 text-red-700' :
                         user.rol === 'analista' ? 'bg-blue-100 text-blue-700' :
@@ -382,27 +384,27 @@ function UsersTab() {
                       {!user.activo && <span className="px-2 py-0.5 bg-gray-200 text-gray-600 rounded-full text-xs">INACTIVO</span>}
                       {user.must_change_password && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs">Debe cambiar pwd</span>}
                     </div>
-                    <p className="text-xs text-gray-500 truncate">@{user.username} · {user.email || 'Sin email'}</p>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-gray-500 break-all">@{user.username} · {user.email || 'Sin email'}</p>
+                    <p className="text-xs text-gray-400 break-words leading-relaxed">
                       Registro: {user.created_at ? new Date(user.created_at).toLocaleDateString('es-AR') : '-'} · 
                       Último login: {user.last_login ? new Date(user.last_login).toLocaleString('es-AR') : 'Nunca'}
                     </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1">
+              <div className="grid grid-cols-4 sm:flex items-center gap-1 sm:gap-1 w-full sm:w-auto pl-[52px] sm:pl-0">
                 {user.bloqueado && (
-                  <button onClick={() => handleUnlock(user)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg" title="Desbloquear">
+                  <button onClick={() => handleUnlock(user)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg inline-flex items-center justify-center" title="Desbloquear">
                     <Unlock className="h-4 w-4" />
                   </button>
                 )}
-                <button onClick={() => setResetPasswordUser(user)} className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg" title="Reset contraseña">
+                <button onClick={() => setResetPasswordUser(user)} className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg inline-flex items-center justify-center" title="Reset contraseña">
                   <Key className="h-4 w-4" />
                 </button>
-                <button onClick={() => { setEditingUser(user); setShowForm(true) }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Editar">
+                <button onClick={() => { setEditingUser(user); setShowForm(true) }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg inline-flex items-center justify-center" title="Editar">
                   <Edit2 className="h-4 w-4" />
                 </button>
-                <button onClick={() => handleDelete(user)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Desactivar">
+                <button onClick={() => handleDelete(user)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg inline-flex items-center justify-center" title="Desactivar">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -414,19 +416,19 @@ function UsersTab() {
 
       {/* Paginación */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white rounded-lg border px-4 py-3">
-          <div className="text-sm text-gray-500">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white rounded-lg border px-4 py-3">
+          <div className="text-sm text-gray-500 text-center sm:text-left">
             Mostrando {currentPage * ITEMS_PER_PAGE + 1}-{Math.min((currentPage + 1) * ITEMS_PER_PAGE, filteredUsers.length)} de {filteredUsers.length}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
             <button
               onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
               disabled={currentPage === 0}
-              className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              className="px-3 py-2 text-sm border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 w-full sm:w-auto"
             >
               ← Anterior
             </button>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center justify-center gap-1 flex-wrap">
               {Array.from({ length: totalPages }, (_, i) => (
                 <button
                   key={i}
@@ -444,7 +446,7 @@ function UsersTab() {
             <button
               onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
               disabled={currentPage >= totalPages - 1}
-              className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              className="px-3 py-2 text-sm border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 w-full sm:w-auto"
             >
               Siguiente →
             </button>
@@ -1896,12 +1898,12 @@ function LogsTab() {
   const totalPages = Math.ceil(total / LIMIT)
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 px-1 sm:px-0">
       {/* Filtros */}
       <div className="bg-white rounded-lg border p-4 space-y-3">
-        <div className="flex flex-col lg:flex-row gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_220px_240px_180px_180px_auto] gap-3">
           {/* Búsqueda */}
-          <div className="flex-1">
+          <div className="sm:col-span-2 xl:col-span-1">
             <div className="relative">
               <input
                 type="text"
@@ -1917,7 +1919,7 @@ function LogsTab() {
           </div>
           
           {/* Filtro por usuario */}
-          <div className="w-full lg:w-44">
+          <div className="w-full">
             <select
               value={filterUsuario}
               onChange={(e) => setFilterUsuario(e.target.value)}
@@ -1931,7 +1933,7 @@ function LogsTab() {
           </div>
 
           {/* Filtro por acción */}
-          <div className="w-full lg:w-56">
+          <div className="w-full">
             <select
               value={filterAccion}
               onChange={(e) => setFilterAccion(e.target.value)}
@@ -1945,7 +1947,7 @@ function LogsTab() {
           </div>
 
           {/* Fecha desde */}
-          <div className="w-full lg:w-40">
+          <div className="w-full">
             <input
               type="date"
               value={filterFechaDesde}
@@ -1956,7 +1958,7 @@ function LogsTab() {
           </div>
 
           {/* Fecha hasta */}
-          <div className="w-full lg:w-40">
+          <div className="w-full">
             <input
               type="date"
               value={filterFechaHasta}
@@ -1970,7 +1972,7 @@ function LogsTab() {
           {hasFilters && (
             <button
               onClick={clearFilters}
-              className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg flex items-center gap-1"
+              className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg inline-flex items-center justify-center gap-1 w-full xl:w-auto"
             >
               <X className="h-4 w-4" /> Limpiar
             </button>
@@ -1978,15 +1980,50 @@ function LogsTab() {
         </div>
       </div>
 
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
         <span className="text-sm text-gray-500">{total} registros {hasFilters ? 'encontrados' : 'totales'}</span>
-        <button onClick={loadLogs} disabled={loading} className="btn-secondary text-sm flex items-center gap-1">
+        <button onClick={loadLogs} disabled={loading} className="btn-secondary text-sm inline-flex items-center justify-center gap-1 w-full sm:w-auto">
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
       <div className="bg-white rounded-lg border overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="md:hidden divide-y">
+          {loading && logs.length === 0 ? (
+            <div className="px-4 py-8 text-center">
+              <Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" />
+            </div>
+          ) : logs.length === 0 ? (
+            <div className="px-4 py-8 text-center text-gray-500">
+              {hasFilters ? 'No se encontraron registros con los filtros aplicados' : 'No hay registros'}
+            </div>
+          ) : (
+            logs.map(log => (
+              <div key={log.id} className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs text-gray-500">{log.created_at ? new Date(log.created_at).toLocaleString('es-AR') : '-'}</p>
+                    <p className="font-medium text-gray-900 break-words mt-1">{log.username || '-'}</p>
+                  </div>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getActionColor(log.accion)} shrink-0`}>
+                    {log.accion}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-2 text-sm">
+                  <div>
+                    <p className="text-xs text-gray-500">IP</p>
+                    <p className="text-gray-700 break-all">{log.ip_address || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Detalles</p>
+                    <p className="text-gray-700 break-words">{log.detalles || '-'}</p>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
@@ -2034,19 +2071,19 @@ function LogsTab() {
 
       {/* Paginación mejorada */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white rounded-lg border px-4 py-3">
-          <div className="text-sm text-gray-500">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white rounded-lg border px-4 py-3">
+          <div className="text-sm text-gray-500 text-center sm:text-left">
             Mostrando {page * LIMIT + 1}-{Math.min((page + 1) * LIMIT, total)} de {total}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
             <button
               onClick={() => setPage(p => Math.max(0, p - 1))}
               disabled={page === 0}
-              className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              className="px-3 py-2 text-sm border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 w-full sm:w-auto"
             >
               ← Anterior
             </button>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center justify-center gap-1 flex-wrap">
               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                 let pageNum
                 if (totalPages <= 5) {
@@ -2076,7 +2113,7 @@ function LogsTab() {
             <button
               onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
               disabled={page >= totalPages - 1}
-              className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              className="px-3 py-2 text-sm border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 w-full sm:w-auto"
             >
               Siguiente →
             </button>

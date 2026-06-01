@@ -78,9 +78,9 @@ export default function AdminRevenueView() {
   const { mrr, mes_actual, churn, proyecciones, historico, desglose } = data
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-1 sm:px-0">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard de Revenue</h1>
           <p className="text-sm text-gray-500 mt-1">Métricas financieras y proyecciones</p>
@@ -88,7 +88,7 @@ export default function AdminRevenueView() {
         <button
           onClick={() => loadDashboard(true)}
           disabled={refreshing}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-sm"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-sm"
         >
           <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
           Actualizar
@@ -96,32 +96,32 @@ export default function AdminRevenueView() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* MRR */}
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-5 text-white">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 bg-white/20 rounded-lg">
-              <DollarSign className="w-5 h-5" />
+        <div className="col-span-2 lg:col-span-1 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-4 sm:p-5 text-white">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="p-2 bg-white/20 rounded-lg shrink-0">
+              <DollarSign className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <span className="text-xs bg-white/20 px-2 py-1 rounded-full">MRR</span>
+            <span className="text-[11px] sm:text-xs bg-white/20 px-2 py-1 rounded-full whitespace-nowrap">MRR</span>
           </div>
-          <p className="text-3xl font-bold">{formatCurrency(mrr.valor)}</p>
-          <p className="text-sm text-blue-100 mt-1">
+          <p className="text-2xl sm:text-3xl font-bold break-words">{formatCurrency(mrr.valor)}</p>
+          <p className="text-xs sm:text-sm text-blue-100 mt-1">
             {mrr.clientes_activos} clientes activos
           </p>
-          <div className="flex gap-3 mt-3 text-xs text-blue-100">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 text-[11px] sm:text-xs text-blue-100">
             <span>{mrr.clientes_mensuales} mensuales</span>
             <span>{mrr.clientes_anuales} anuales</span>
           </div>
         </div>
 
         {/* Revenue Mes Actual */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <TrendingUp className="w-5 h-5 text-green-600" />
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 sm:p-5 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="p-2 bg-green-100 rounded-lg shrink-0">
+              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
             </div>
-            <div className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full ${
+            <div className={`flex items-center gap-1 text-[11px] sm:text-xs px-2 py-1 rounded-full whitespace-nowrap ${
               mes_actual.variacion_mom >= 0 
                 ? 'bg-green-100 text-green-700' 
                 : 'bg-red-100 text-red-700'
@@ -133,20 +133,20 @@ export default function AdminRevenueView() {
               {formatPercent(mes_actual.variacion_mom)}
             </div>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{formatCurrency(mes_actual.cobrado)}</p>
-          <p className="text-sm text-gray-500 mt-1">Cobrado este mes</p>
-          <div className="flex justify-between mt-3 text-xs text-gray-500">
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 break-words">{formatCurrency(mes_actual.cobrado)}</p>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">Cobrado este mes</p>
+          <div className="flex justify-between mt-3 text-[11px] sm:text-xs text-gray-500">
             <span>{mes_actual.pagadas}/{mes_actual.facturas} facturas pagadas</span>
           </div>
         </div>
 
         {/* Churn */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 bg-red-100 rounded-lg">
-              <Users className="w-5 h-5 text-red-600" />
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 sm:p-5 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="p-2 bg-red-100 rounded-lg shrink-0">
+              <Users className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
             </div>
-            <span className={`text-xs px-2 py-1 rounded-full ${
+            <span className={`text-[11px] sm:text-xs px-2 py-1 rounded-full whitespace-nowrap ${
               churn.rate <= 5 ? 'bg-green-100 text-green-700' : 
               churn.rate <= 10 ? 'bg-amber-100 text-amber-700' : 
               'bg-red-100 text-red-700'
@@ -154,24 +154,24 @@ export default function AdminRevenueView() {
               {churn.rate <= 5 ? 'Bajo' : churn.rate <= 10 ? 'Moderado' : 'Alto'}
             </span>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{churn.rate}%</p>
-          <p className="text-sm text-gray-500 mt-1">Churn Rate</p>
-          <p className="text-xs text-gray-400 mt-3">
+          <p className="text-xl sm:text-2xl font-bold text-gray-900">{churn.rate}%</p>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">Churn Rate</p>
+          <p className="text-[11px] sm:text-xs text-gray-400 mt-3">
             {churn.clientes_perdidos} de {churn.clientes_anterior} clientes
           </p>
         </div>
 
         {/* Proyección */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <Target className="w-5 h-5 text-purple-600" />
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 sm:p-5 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="p-2 bg-purple-100 rounded-lg shrink-0">
+              <Target className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600" />
             </div>
-            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">Proyección</span>
+            <span className="text-[11px] sm:text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full whitespace-nowrap">Proyeccion</span>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{formatCurrency(proyecciones.mes_siguiente)}</p>
-          <p className="text-sm text-gray-500 mt-1">Próximo mes (estimado)</p>
-          <div className="flex justify-between mt-3 text-xs text-gray-500">
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 break-words">{formatCurrency(proyecciones.mes_siguiente)}</p>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">Proximo mes (estimado)</p>
+          <div className="flex justify-between mt-3 text-[11px] sm:text-xs text-gray-500">
             <span>Trimestre: {formatCurrency(proyecciones.trimestre)}</span>
           </div>
         </div>
@@ -180,13 +180,13 @@ export default function AdminRevenueView() {
       {/* Gráficos principales */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Revenue Mensual */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
             <div>
               <h3 className="font-semibold text-gray-900">Revenue Mensual</h3>
               <p className="text-sm text-gray-500">Últimos 12 meses</p>
             </div>
-            <div className="flex gap-4 text-xs">
+            <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded bg-blue-500" />
                 <span className="text-gray-600">Cobrado</span>
@@ -197,7 +197,7 @@ export default function AdminRevenueView() {
               </div>
             </div>
           </div>
-          <div className="h-72">
+          <div className="h-64 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={historico.revenue_mensual}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -226,10 +226,10 @@ export default function AdminRevenueView() {
         </div>
 
         {/* Revenue por Plan */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 sm:p-6">
           <h3 className="font-semibold text-gray-900 mb-1">Revenue por Plan</h3>
           <p className="text-sm text-gray-500 mb-6">Distribución últimos 12 meses</p>
-          <div className="h-52">
+          <div className="h-48 sm:h-52">
             <ResponsiveContainer width="100%" height="100%">
               <RePieChart>
                 <Pie
@@ -252,12 +252,12 @@ export default function AdminRevenueView() {
           </div>
           <div className="space-y-2 mt-4">
             {desglose.por_plan.slice(0, 4).map((plan, i) => (
-              <div key={plan.plan_nombre} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
+              <div key={plan.plan_nombre} className="flex items-center justify-between gap-3 text-sm">
+                <div className="flex items-center gap-2 min-w-0">
                   <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS[i] }} />
-                  <span className="text-gray-700">{plan.plan_nombre}</span>
+                  <span className="text-gray-700 truncate">{plan.plan_nombre}</span>
                 </div>
-                <span className="font-medium">{formatCurrency(plan.revenue)}</span>
+                <span className="font-medium whitespace-nowrap">{formatCurrency(plan.revenue)}</span>
               </div>
             ))}
           </div>
@@ -267,10 +267,10 @@ export default function AdminRevenueView() {
       {/* Segunda fila de gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Crecimiento MoM */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 sm:p-6">
           <h3 className="font-semibold text-gray-900 mb-1">Crecimiento MoM</h3>
           <p className="text-sm text-gray-500 mb-6">Variación mensual del revenue</p>
-          <div className="h-56">
+          <div className="h-52 sm:h-56">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={historico.growth_mom}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -299,10 +299,10 @@ export default function AdminRevenueView() {
         </div>
 
         {/* Nuevos clientes */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 sm:p-6">
           <h3 className="font-semibold text-gray-900 mb-1">Nuevos Clientes</h3>
           <p className="text-sm text-gray-500 mb-6">Adquisición mensual</p>
-          <div className="h-56">
+          <div className="h-52 sm:h-56">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={historico.nuevos_clientes}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -324,7 +324,7 @@ export default function AdminRevenueView() {
       </div>
 
       {/* Top Clientes */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-6">
+      <div className="bg-white rounded-2xl border border-gray-200 p-4 sm:p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h3 className="font-semibold text-gray-900">Top Clientes</h3>
@@ -332,8 +332,39 @@ export default function AdminRevenueView() {
           </div>
           <Building2 className="w-5 h-5 text-gray-400" />
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
+        <div className="md:hidden divide-y divide-gray-100">
+          {desglose.top_clientes.map((cliente, i) => (
+            <div key={cliente.id} className="py-3 space-y-2">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0"
+                     style={{ backgroundColor: COLORS[i % COLORS.length] }}>
+                  {i + 1}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-gray-900 break-words">{cliente.nombre}</p>
+                  <p className="text-xs text-gray-500">{cliente.facturas} facturas</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <p className="text-gray-400 mb-1">Revenue</p>
+                  <p className="font-semibold text-gray-900 break-words">{formatCurrency(cliente.revenue_total)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 mb-1">Ultima factura</p>
+                  <p className="text-gray-700">
+                    {cliente.ultima_factura
+                      ? new Date(cliente.ultima_factura).toLocaleDateString('es-AR')
+                      : '-'
+                    }
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="hidden md:block overflow-x-auto">
+          <table className="min-w-[760px] w-full">
             <thead>
               <tr className="border-b border-gray-200">
                 <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Cliente</th>
@@ -372,7 +403,7 @@ export default function AdminRevenueView() {
       </div>
 
       {/* Proyecciones Card */}
-      <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl p-6 text-white">
+      <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl p-4 sm:p-6 text-white">
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2 bg-white/20 rounded-lg">
             <Target className="w-6 h-6" />
@@ -382,18 +413,18 @@ export default function AdminRevenueView() {
             <p className="text-sm text-purple-200">Basado en tendencias de los últimos 3 meses</p>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6">
           <div className="bg-white/10 rounded-xl p-4">
             <p className="text-sm text-purple-200 mb-1">Próximo Mes</p>
-            <p className="text-3xl font-bold">{formatCurrency(proyecciones.mes_siguiente)}</p>
+            <p className="text-2xl sm:text-3xl font-bold break-words">{formatCurrency(proyecciones.mes_siguiente)}</p>
           </div>
           <div className="bg-white/10 rounded-xl p-4">
             <p className="text-sm text-purple-200 mb-1">Próximo Trimestre</p>
-            <p className="text-3xl font-bold">{formatCurrency(proyecciones.trimestre)}</p>
+            <p className="text-2xl sm:text-3xl font-bold break-words">{formatCurrency(proyecciones.trimestre)}</p>
           </div>
           <div className="bg-white/10 rounded-xl p-4">
             <p className="text-sm text-purple-200 mb-1">Proyección Anual</p>
-            <p className="text-3xl font-bold">{formatCurrency(proyecciones.anual)}</p>
+            <p className="text-2xl sm:text-3xl font-bold break-words">{formatCurrency(proyecciones.anual)}</p>
           </div>
         </div>
       </div>

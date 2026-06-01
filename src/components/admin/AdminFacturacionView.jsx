@@ -316,9 +316,9 @@ export default function AdminFacturacionView() {
   const hasActiveFilters = estadoFilter || empresaFilter || periodoFilter || fechaDesde || fechaHasta || search
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 sm:p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-blue-100 rounded-xl">
             <FileText className="w-6 h-6 text-blue-600" />
@@ -328,35 +328,37 @@ export default function AdminFacturacionView() {
             <p className="text-sm text-gray-500">Gestión de todas las facturas del sistema</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
           {activeTab === 'clientes' && (
             <>
               <button
                 onClick={loadGlobalStats}
-                className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50"
+                className="min-w-0 flex items-center justify-center gap-2 px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm"
               >
                 <BarChart3 className="w-4 h-4" />
-                Estadísticas
+                <span className="truncate">Estadisticas</span>
               </button>
               <button
                 onClick={exportCSV}
-                className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50"
+                className="min-w-0 flex items-center justify-center gap-2 px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm"
               >
                 <Download className="w-4 h-4" />
-                Exportar CSV
+                <span className="truncate">Exportar CSV</span>
               </button>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="min-w-0 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
               >
                 <Plus className="w-4 h-4" />
-                Nueva Factura
+                <span className="hidden sm:inline">Nueva Factura</span>
+                <span className="sm:hidden">Nueva</span>
               </button>
               <button
                 onClick={loadFacturas}
-                className="p-2 border rounded-lg hover:bg-gray-50"
+                className="min-w-0 flex items-center justify-center px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm"
               >
                 <RefreshCw className="w-4 h-4" />
+                <span className="ml-2 sm:hidden">Actualizar</span>
               </button>
             </>
           )}
@@ -364,7 +366,7 @@ export default function AdminFacturacionView() {
             <button
               onClick={loadFacturasProveedores}
               disabled={loadingProveedores}
-              className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50"
+              className="col-span-2 sm:col-span-1 flex items-center justify-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50"
             >
               {loadingProveedores ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               Actualizar
@@ -374,29 +376,31 @@ export default function AdminFacturacionView() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+      <div className="bg-gray-100 p-1 rounded-lg">
+        <div className="grid grid-cols-1 sm:flex gap-1 sm:min-w-max">
         <button
           onClick={() => setActiveTab('clientes')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center sm:justify-start gap-2 min-w-0 ${
             activeTab === 'clientes' 
               ? 'bg-white text-blue-600 shadow-sm' 
               : 'text-gray-600 hover:text-gray-800'
           }`}
         >
           <DollarSign className="w-4 h-4" />
-          Facturas a Clientes
+          <span className="truncate">Facturas a Clientes</span>
         </button>
         <button
           onClick={() => setActiveTab('proveedores')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center sm:justify-start gap-2 min-w-0 ${
             activeTab === 'proveedores' 
               ? 'bg-white text-blue-600 shadow-sm' 
               : 'text-gray-600 hover:text-gray-800'
           }`}
         >
           <Receipt className="w-4 h-4" />
-          Facturas a Proveedores
+          <span className="truncate">Facturas a Proveedores</span>
         </button>
+        </div>
       </div>
 
       {/* TAB: Facturas a Clientes */}
@@ -404,27 +408,27 @@ export default function AdminFacturacionView() {
         <>
       {/* Stats Cards */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div className="p-4 bg-white rounded-xl border shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <FileText className="w-5 h-5 text-blue-600" />
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4">
+          <div className="p-3 sm:p-4 bg-white rounded-xl border shadow-sm min-w-0">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="p-2 bg-blue-100 rounded-lg shrink-0">
+                <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
               </div>
-              <div>
-                <p className="text-2xl font-bold">{pagination.total}</p>
-                <p className="text-sm text-gray-500">Total Facturas</p>
+              <div className="min-w-0">
+                <p className="text-xl sm:text-2xl font-bold leading-none">{pagination.total}</p>
+                <p className="text-xs sm:text-sm text-gray-500 mt-1 leading-tight">Total Facturas</p>
               </div>
             </div>
           </div>
           
-          <div className="p-4 bg-white rounded-xl border shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <DollarSign className="w-5 h-5 text-green-600" />
+          <div className="p-3 sm:p-4 bg-white rounded-xl border shadow-sm min-w-0">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="p-2 bg-green-100 rounded-lg shrink-0">
+                <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
               </div>
-              <div>
-                <p className="text-xl font-bold">{formatMonto(stats.este_mes?.monto)}</p>
-                <p className="text-sm text-gray-500">Este Mes</p>
+              <div className="min-w-0">
+                <p className="text-lg sm:text-xl font-bold break-words leading-none">{formatMonto(stats.este_mes?.monto)}</p>
+                <p className="text-xs sm:text-sm text-gray-500 mt-1 leading-tight">Este Mes</p>
               </div>
             </div>
           </div>
@@ -434,18 +438,18 @@ export default function AdminFacturacionView() {
             return (
               <div
                 key={estado}
-                className={`p-4 bg-white rounded-xl border shadow-sm cursor-pointer transition-all ${
+                className={`p-3 sm:p-4 bg-white rounded-xl border shadow-sm cursor-pointer transition-all min-w-0 ${
                   estadoFilter === estado ? 'ring-2 ring-blue-500' : ''
                 }`}
                 onClick={() => { setEstadoFilter(estadoFilter === estado ? '' : estado); setPage(1) }}
               >
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${config.color.split(' ')[0]}`}>
-                    <config.icon className={`w-5 h-5 ${config.color.split(' ')[1]}`} />
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                  <div className={`p-2 rounded-lg shrink-0 ${config.color.split(' ')[0]}`}>
+                    <config.icon className={`w-4 h-4 sm:w-5 sm:h-5 ${config.color.split(' ')[1]}`} />
                   </div>
-                  <div>
-                    <p className="text-xl font-bold">{stat.count}</p>
-                    <p className="text-sm text-gray-500">{config.label}</p>
+                  <div className="min-w-0">
+                    <p className="text-lg sm:text-xl font-bold leading-none">{stat.count}</p>
+                    <p className="text-xs sm:text-sm text-gray-500 mt-1 leading-tight">{config.label}</p>
                   </div>
                 </div>
               </div>
@@ -456,8 +460,8 @@ export default function AdminFacturacionView() {
 
       {/* Filters Bar */}
       <div className="bg-white rounded-xl border p-4">
-        <div className="flex flex-wrap gap-4 items-end">
-          <form onSubmit={handleSearch} className="flex-1 min-w-[200px]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.6fr)_repeat(4,minmax(0,1fr))_auto] gap-3 items-end">
+          <form onSubmit={handleSearch} className="sm:col-span-2 xl:col-span-1 min-w-0">
             <label className="block text-xs font-medium text-gray-500 mb-1">Buscar</label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -471,7 +475,7 @@ export default function AdminFacturacionView() {
             </div>
           </form>
 
-          <div className="w-40">
+          <div className="min-w-0">
             <label className="block text-xs font-medium text-gray-500 mb-1">Empresa</label>
             <select
               value={empresaFilter}
@@ -485,7 +489,7 @@ export default function AdminFacturacionView() {
             </select>
           </div>
 
-          <div className="w-36">
+          <div className="min-w-0">
             <label className="block text-xs font-medium text-gray-500 mb-1">Periodo</label>
             <select
               value={periodoFilter}
@@ -499,7 +503,7 @@ export default function AdminFacturacionView() {
             </select>
           </div>
 
-          <div className="w-36">
+          <div className="min-w-0">
             <label className="block text-xs font-medium text-gray-500 mb-1">Desde</label>
             <input
               type="date"
@@ -509,7 +513,7 @@ export default function AdminFacturacionView() {
             />
           </div>
 
-          <div className="w-36">
+          <div className="min-w-0">
             <label className="block text-xs font-medium text-gray-500 mb-1">Hasta</label>
             <input
               type="date"
@@ -522,7 +526,7 @@ export default function AdminFacturacionView() {
           {hasActiveFilters && (
             <button
               onClick={clearFilters}
-              className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:text-gray-800"
+              className="w-full xl:w-auto flex items-center justify-center gap-1 px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border rounded-lg xl:border-0"
             >
               <X className="w-4 h-4" />
               Limpiar
@@ -542,8 +546,69 @@ export default function AdminFacturacionView() {
             No se encontraron facturas
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <>
+            <div className="md:hidden divide-y divide-gray-100">
+              {facturas.map((factura) => {
+                const estadoConfig = ESTADO_CONFIG[factura.estado] || ESTADO_CONFIG.pendiente
+                return (
+                  <div key={factura.id} className="p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-800 break-words">{factura.empresa_nombre || '-'}</p>
+                        <p className="text-xs text-gray-500 break-all">{factura.empresa_cuit}</p>
+                        <p className="text-[11px] text-gray-400 mt-1">#{factura.id} · {factura.periodo || '-'}</p>
+                      </div>
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium whitespace-nowrap ${estadoConfig.badge}`}>
+                        <estadoConfig.icon className="w-3 h-3" />
+                        {estadoConfig.label}
+                      </span>
+                    </div>
+
+                    <div>
+                      <p className="text-[11px] text-gray-400 mb-1">Descripcion</p>
+                      <p className="text-sm text-gray-600">{factura.descripcion || factura.plan_nombre || '-'}</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <p className="text-gray-400 mb-1">Total</p>
+                        <p className="font-medium text-gray-900 break-words">{formatMonto(factura.precio_total, factura.currency_code)}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 mb-1">Fecha</p>
+                        <p className="text-gray-700">{formatDate(factura.created_at)}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100">
+                      <button
+                        onClick={() => loadDetail(factura.id)}
+                        className="inline-flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> Ver
+                      </button>
+                      <button
+                        onClick={() => handleDownloadPdf(factura.id)}
+                        disabled={downloadingPdf === factura.id}
+                        className="inline-flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg disabled:opacity-50"
+                      >
+                        {downloadingPdf === factura.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                        PDF
+                      </button>
+                      <button
+                        onClick={() => setShowDeleteModal(factura)}
+                        className="inline-flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] text-red-700 bg-red-50 hover:bg-red-100 rounded-lg"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Eliminar
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
+            <table className="min-w-[980px] w-full">
               <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                 <tr>
                   <th className="px-4 py-3 text-left">ID</th>
@@ -619,12 +684,13 @@ export default function AdminFacturacionView() {
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
 
         {/* Pagination */}
         {pagination.pages > 1 && (
-          <div className="p-4 border-t flex items-center justify-between">
+          <div className="p-4 border-t flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <p className="text-sm text-gray-500">
               Mostrando {facturas.length} de {pagination.total}
             </p>
@@ -662,13 +728,13 @@ export default function AdminFacturacionView() {
               {Object.entries(ESTADO_PAGO_PROV).map(([key, cfg]) => {
                 const stat = proveedoresStats[key] || { cantidad: 0, total: 0 }
                 return (
-                  <div key={key} className={`${cfg.color} rounded-xl p-4`}>
-                    <div className="flex items-center gap-2">
-                      <cfg.icon className="h-5 w-5" />
+                  <div key={key} className={`${cfg.color} rounded-xl p-3 sm:p-4 min-w-0`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <cfg.icon className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
                       <span className="font-medium">{cfg.label}</span>
                     </div>
-                    <p className="text-2xl font-bold mt-2">{stat.cantidad || 0}</p>
-                    <p className="text-sm opacity-75">€{(stat.total || 0).toFixed(2)}</p>
+                    <p className="text-xl sm:text-2xl font-bold mt-2 leading-none">{stat.cantidad || 0}</p>
+                    <p className="text-xs sm:text-sm opacity-75 break-words">€{(stat.total || 0).toFixed(2)}</p>
                   </div>
                 )
               })}
@@ -688,8 +754,74 @@ export default function AdminFacturacionView() {
                 <p className="text-sm mt-1">Ve a Facturación de Solicitudes para generar facturas</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
+              <>
+                <div className="md:hidden divide-y divide-gray-100">
+                  {facturasProveedores.map(f => {
+                    const estadoKey = f.estado_pago || 'pendiente'
+                    const estadoCfg = ESTADO_PAGO_PROV[estadoKey] || ESTADO_PAGO_PROV.pendiente
+                    return (
+                      <div key={f.id} className="p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-mono font-medium text-blue-600 break-all">{f.numero_factura}</p>
+                            <div className="flex items-center gap-1 mt-1 text-gray-600 text-xs">
+                              <Clock className="h-3 w-3" />
+                              {new Date(f.created_at).toLocaleDateString('es-AR')}
+                            </div>
+                          </div>
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium whitespace-nowrap ${estadoCfg.color}`}>
+                            <estadoCfg.icon className="h-3 w-3" />
+                            {estadoCfg.label}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div className="col-span-2">
+                            <p className="text-gray-400 mb-1">Cliente</p>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{f.usuario_abono}</span>
+                              {f.usuario_nombre && <span className="text-gray-700">{f.usuario_nombre}</span>}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-gray-400 mb-1">Documento</p>
+                            <span className={`inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium ${f.tipo_documento === 'Remito' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{f.tipo_documento}</span>
+                          </div>
+                          <div>
+                            <p className="text-gray-400 mb-1">Cantidad</p>
+                            <p className="text-gray-700">{f.cantidad_solicitudes}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-400 mb-1">Total EUR</p>
+                            <p className="font-medium text-gray-900">€{parseFloat(f.total_eur || 0).toFixed(2)}</p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+                          <button
+                            onClick={() => setShowProveedorDetail(f)}
+                            className="inline-flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
+                          >
+                            <Eye className="w-3.5 h-3.5" /> Ver
+                          </button>
+                          {f.tiene_pdf ? (
+                            <button
+                              onClick={() => handleDownloadPdfProveedor(f.id, f.numero_factura, f.usuario_abono)}
+                              className="inline-flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg"
+                            >
+                              <Download className="w-3.5 h-3.5" /> PDF
+                            </button>
+                          ) : (
+                            <div />
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div className="hidden md:block overflow-x-auto">
+                <table className="min-w-[920px] w-full">
                   <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                     <tr>
                       <th className="px-4 py-3 text-left">Fecha</th>
@@ -760,7 +892,8 @@ export default function AdminFacturacionView() {
                     })}
                   </tbody>
                 </table>
-              </div>
+                </div>
+              </>
             )}
           </div>
         </div>

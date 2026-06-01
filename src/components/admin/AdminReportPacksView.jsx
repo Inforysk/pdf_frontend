@@ -198,7 +198,7 @@ export default function AdminReportPacksView() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-1 sm:px-0">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -212,28 +212,29 @@ export default function AdminReportPacksView() {
         </div>
         <button 
           onClick={loadData}
-          className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition"
+          className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition self-end sm:self-auto"
         >
           <RefreshCw className="h-5 w-5" />
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+      <div className="bg-gray-100 rounded-xl p-1">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
         <button
           onClick={() => setActiveTab('tipos')}
-          className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+          className={`min-h-11 py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 min-w-0 ${
             activeTab === 'tipos' 
               ? 'bg-white text-indigo-600 shadow-sm' 
               : 'text-gray-600 hover:text-gray-900'
           }`}
         >
           <Settings className="h-4 w-4" />
-          Tipos de Informe
+          <span className="truncate">Tipos de Informe</span>
         </button>
         <button
           onClick={() => setActiveTab('packs')}
-          className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+          className={`min-h-11 py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 min-w-0 ${
             activeTab === 'packs' 
               ? 'bg-white text-indigo-600 shadow-sm' 
               : 'text-gray-600 hover:text-gray-900'
@@ -244,15 +245,16 @@ export default function AdminReportPacksView() {
         </button>
         <button
           onClick={() => setActiveTab('pricing')}
-          className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+          className={`min-h-11 py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 min-w-0 ${
             activeTab === 'pricing' 
               ? 'bg-white text-indigo-600 shadow-sm' 
               : 'text-gray-600 hover:text-gray-900'
           }`}
         >
           <DollarSign className="h-4 w-4" />
-          Precios
+          <span className="truncate">Precios</span>
         </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -319,7 +321,7 @@ function PacksTab({
       <div className="flex justify-end">
         <button 
           onClick={onNew}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition shadow-sm"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition shadow-sm w-full sm:w-auto"
         >
           <Plus className="h-4 w-4" />
           Nuevo Pack
@@ -349,7 +351,7 @@ function PacksTab({
         
         return (
           <div key={type} className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-            <div className={`px-4 py-3 border-b flex items-center gap-2 ${colorClass}`}>
+            <div className={`px-4 py-3 border-b flex flex-wrap items-center gap-2 ${colorClass}`}>
               <Icon className="h-5 w-5" />
               <span className="font-semibold">
                 {tipoInfo.nombre || `Informe ${type}`}
@@ -392,10 +394,10 @@ function PackRow({ pack, onEdit, onToggle }) {
   const descuento = pack.precio_original ? Math.round((1 - pack.precio / pack.precio_original) * 100) : 0
 
   return (
-    <div className={`p-4 flex items-center gap-4 hover:bg-gray-50 transition ${!pack.is_active ? 'opacity-50' : ''}`}>
+    <div className={`p-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:bg-gray-50 transition ${!pack.is_active ? 'opacity-50' : ''}`}>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-900">{pack.nombre}</span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium text-gray-900 break-words">{pack.nombre}</span>
           {!pack.is_active && (
             <span className="px-2 py-0.5 text-xs bg-gray-200 text-gray-600 rounded-full">
               Inactivo
@@ -407,11 +409,11 @@ function PackRow({ pack, onEdit, onToggle }) {
             </span>
           )}
         </div>
-        <p className="text-sm text-gray-500 truncate">{pack.descripcion}</p>
+        <p className="text-sm text-gray-500 break-words">{pack.descripcion}</p>
       </div>
 
-      <div className="text-right">
-        <div className="flex items-center gap-2">
+      <div className="sm:text-right">
+        <div className="flex items-center gap-2 flex-wrap sm:justify-end">
           {pack.precio_original && pack.precio_original > pack.precio && (
             <span className="text-sm text-gray-400 line-through">
               ${pack.precio_original}
@@ -426,7 +428,7 @@ function PackRow({ pack, onEdit, onToggle }) {
         </p>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="grid grid-cols-2 sm:flex items-center gap-1 w-full sm:w-auto">
         <button
           onClick={() => onToggle(pack)}
           className={`p-2 rounded-lg transition ${
@@ -471,7 +473,7 @@ function PackFormModal({ packForm, editingPack, pricing, onChange, onSave, onCan
         className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
-        <div className="p-6 border-b flex items-center justify-between">
+        <div className="p-4 sm:p-6 border-b flex items-center justify-between gap-3">
           <h3 className="text-lg font-semibold">
             {editingPack ? 'Editar Pack' : 'Nuevo Pack'}
           </h3>
@@ -480,7 +482,7 @@ function PackFormModal({ packForm, editingPack, pricing, onChange, onSave, onCan
           </button>
         </div>
 
-        <div className="p-6 grid md:grid-cols-2 gap-6">
+        <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Columna izquierda - Form */}
           <div className="space-y-4">
             <div>
@@ -526,7 +528,7 @@ function PackFormModal({ packForm, editingPack, pricing, onChange, onSave, onCan
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Cantidad
@@ -645,16 +647,16 @@ function PackFormModal({ packForm, editingPack, pricing, onChange, onSave, onCan
           </div>
         </div>
 
-        <div className="p-6 border-t bg-gray-50 flex justify-end gap-3">
+        <div className="p-4 sm:p-6 border-t bg-gray-50 flex flex-col-reverse sm:flex-row justify-end gap-3">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-xl transition"
+            className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-xl transition w-full sm:w-auto"
           >
             Cancelar
           </button>
           <button
             onClick={onSave}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition flex items-center gap-2"
+            className="px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition inline-flex items-center justify-center gap-2 w-full sm:w-auto"
           >
             <Save className="h-4 w-4" />
             {editingPack ? 'Guardar Cambios' : 'Crear Pack'}
@@ -707,17 +709,17 @@ function PricingTab({ pricing, onUpdate }) {
           const isEditing = editingType === p.report_type
 
           return (
-            <div key={p.report_type} className="p-4 flex items-center gap-4 hover:bg-gray-50 transition">
+            <div key={p.report_type} className="p-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:bg-gray-50 transition">
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-gray-100 ${p.color}`}>
                 <Icon className="h-5 w-5" />
               </div>
 
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">{p.nombre}</p>
-                <p className="text-sm text-gray-500">{p.descripcion}</p>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-gray-900 break-words">{p.nombre}</p>
+                <p className="text-sm text-gray-500 break-words">{p.descripcion}</p>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto sm:justify-end">
                 {isEditing ? (
                   <>
                     <div className="relative">
@@ -899,7 +901,7 @@ function TiposTab({ tipos, onReload }) {
       <div className="flex justify-end">
         <button
           onClick={handleNew}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition w-full sm:w-auto"
         >
           <Plus className="h-4 w-4" />
           Nuevo Tipo
@@ -921,7 +923,7 @@ function TiposTab({ tipos, onReload }) {
 
       {/* Lista de tipos */}
       <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-        <div className="px-6 py-4 border-b bg-gray-50">
+        <div className="px-4 sm:px-6 py-4 border-b bg-gray-50">
           <h3 className="font-semibold text-gray-900">Tipos de Informe Configurados</h3>
           <p className="text-sm text-gray-500 mt-1">
             Gestiona qué tipos de informe aparecen en el buscador
@@ -935,9 +937,9 @@ function TiposTab({ tipos, onReload }) {
             return (
               <div 
                 key={tipo.report_type} 
-                className={`p-4 flex items-center gap-4 hover:bg-gray-50 transition ${!tipo.is_active ? 'opacity-50' : ''}`}
+                className={`p-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:bg-gray-50 transition ${!tipo.is_active ? 'opacity-50' : ''}`}
               >
-                <div className="text-gray-300 cursor-grab">
+                <div className="text-gray-300 cursor-grab hidden sm:block">
                   <GripVertical className="h-5 w-5" />
                 </div>
 
@@ -946,8 +948,8 @@ function TiposTab({ tipos, onReload }) {
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-900">{tipo.nombre}</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-gray-900 break-words">{tipo.nombre}</span>
                     <code className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
                       {tipo.report_type}
                     </code>
@@ -967,15 +969,15 @@ function TiposTab({ tipos, onReload }) {
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-gray-500 truncate">{tipo.descripcion}</p>
+                  <p className="text-sm text-gray-500 break-words">{tipo.descripcion}</p>
                 </div>
 
-                <div className="text-right">
+                <div className="sm:text-right">
                   <span className="font-bold text-gray-900">${tipo.precio_unitario}</span>
                   <p className="text-xs text-gray-500">Orden: {tipo.orden}</p>
                 </div>
 
-                <div className="flex items-center gap-1">
+                <div className="grid grid-cols-2 sm:flex items-center gap-1 w-full sm:w-auto">
                   <button
                     onClick={() => handleToggleVisible(tipo)}
                     className={`p-2 rounded-lg transition ${
@@ -1048,7 +1050,7 @@ function TipoFormModal({ form, editingTipo, onChange, onSave, onCancel }) {
         className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
-        <div className="p-6 border-b flex items-center justify-between">
+        <div className="p-4 sm:p-6 border-b flex items-center justify-between gap-3">
           <h3 className="text-lg font-semibold">
             {editingTipo ? 'Editar Tipo' : 'Nuevo Tipo de Informe'}
           </h3>
@@ -1057,7 +1059,7 @@ function TipoFormModal({ form, editingTipo, onChange, onSave, onCancel }) {
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-4 sm:p-6 space-y-4">
           {!editingTipo && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1099,7 +1101,7 @@ function TipoFormModal({ form, editingTipo, onChange, onSave, onCancel }) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Precio Unitario
@@ -1128,7 +1130,7 @@ function TipoFormModal({ form, editingTipo, onChange, onSave, onCancel }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Icono
@@ -1206,16 +1208,16 @@ function TipoFormModal({ form, editingTipo, onChange, onSave, onCancel }) {
           </div>
         </div>
 
-        <div className="p-6 border-t bg-gray-50 flex justify-end gap-3">
+        <div className="p-4 sm:p-6 border-t bg-gray-50 flex flex-col-reverse sm:flex-row justify-end gap-3">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-xl transition"
+            className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-xl transition w-full sm:w-auto"
           >
             Cancelar
           </button>
           <button
             onClick={onSave}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition flex items-center gap-2"
+            className="px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition inline-flex items-center justify-center gap-2 w-full sm:w-auto"
           >
             <Save className="h-4 w-4" />
             {editingTipo ? 'Guardar' : 'Crear'}

@@ -87,6 +87,9 @@ export default function AdminFacturacionSolicitudesView() {
 
   // Acordeón de resumen
   const [showResumen, setShowResumen] = useState(false)
+  const [showMobilePeriodo, setShowMobilePeriodo] = useState(false)
+  const [showMobileFiltros, setShowMobileFiltros] = useState(false)
+  const [showMobileDetalle, setShowMobileDetalle] = useState(false)
 
   const limpiarFiltros = () => {
     const now = new Date()
@@ -539,24 +542,25 @@ export default function AdminFacturacionSolicitudesView() {
   }, [resumenFiltrado, monedaResumen])
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 px-1 sm:px-0">
       {/* Header */}
-      <div className="bg-white rounded-lg shadow-sm border p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="bg-white rounded-lg shadow-sm border p-4 sm:p-5">
+        <div className="flex flex-col gap-4">
           <div>
             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <Receipt className="h-5 w-5 text-emerald-600" />
               Facturación de Solicitudes
             </h3>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-gray-500 mt-1 max-w-xl">
               Solicitudes completadas de clientes con proveedor fijo asignado
             </p>
           </div>
-          <div className="flex gap-2">
+
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
             <button
               onClick={() => handleExport('csv')}
               disabled={exporting || loading}
-              className="btn-secondary text-sm flex items-center gap-1"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
               Excel
@@ -564,7 +568,7 @@ export default function AdminFacturacionSolicitudesView() {
             <button
               onClick={() => handleExport('pdf')}
               disabled={exporting || loading}
-              className="btn-secondary text-sm flex items-center gap-1"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
               PDF
@@ -573,191 +577,236 @@ export default function AdminFacturacionSolicitudesView() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mt-4 border-b">
+        <div className="mt-4 rounded-xl bg-gray-100 p-1">
+          <div className="grid grid-cols-2 gap-1">
           <button
             onClick={() => setActiveTab('solicitudes')}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+            className={`min-h-11 px-4 py-2 text-sm font-medium rounded-lg transition-colors inline-flex items-center justify-center gap-2 ${
               activeTab === 'solicitudes'
-                ? 'bg-emerald-100 text-emerald-700 border-b-2 border-emerald-600'
-                : 'text-gray-600 hover:bg-gray-100'
+                ? 'bg-emerald-100 text-emerald-700 shadow-sm ring-1 ring-emerald-200'
+                : 'text-gray-600 hover:bg-white/70'
             }`}
           >
-            <Receipt className="h-4 w-4 inline mr-1" />
+            <Receipt className="h-4 w-4" />
             Solicitudes
           </button>
           <button
             onClick={() => setActiveTab('historial')}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+            className={`min-h-11 px-4 py-2 text-sm font-medium rounded-lg transition-colors inline-flex items-center justify-center gap-2 ${
               activeTab === 'historial'
-                ? 'bg-emerald-100 text-emerald-700 border-b-2 border-emerald-600'
-                : 'text-gray-600 hover:bg-gray-100'
+                ? 'bg-emerald-100 text-emerald-700 shadow-sm ring-1 ring-emerald-200'
+                : 'text-gray-600 hover:bg-white/70'
             }`}
           >
-            <History className="h-4 w-4 inline mr-1" />
-            Historial de Facturas
+            <History className="h-4 w-4" />
+            <span className="sm:hidden">Historial</span>
+            <span className="hidden sm:inline">Historial de Facturas</span>
           </button>
+          </div>
         </div>
 
         {/* Filtros */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-3 mt-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Desde</label>
-            <div className="relative">
-              <input
-                type="date"
-                value={filtros.fechaDesde}
-                onChange={e => setFiltros({ ...filtros, fechaDesde: e.target.value, mes: '', anio: '' })}
-                className="w-full px-3 py-2 text-sm border rounded-lg pr-8"
-              />
-              {filtros.fechaDesde && (
-                <button
-                  onClick={() => setFiltros({ ...filtros, fechaDesde: '' })}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Hasta</label>
-            <div className="relative">
-              <input
-                type="date"
-                value={filtros.fechaHasta}
-                onChange={e => setFiltros({ ...filtros, fechaHasta: e.target.value, mes: '', anio: '' })}
-                className="w-full px-3 py-2 text-sm border rounded-lg pr-8"
-              />
-              {filtros.fechaHasta && (
-                <button
-                  onClick={() => setFiltros({ ...filtros, fechaHasta: '' })}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Mes</label>
-            <div className="relative">
-              <select
-                value={filtros.mes}
-                onChange={e => setFiltros({ ...filtros, mes: e.target.value ? parseInt(e.target.value) : '', fechaDesde: '', fechaHasta: '' })}
-                className="w-full px-3 py-2 text-sm border rounded-lg pr-8"
-                disabled={filtros.fechaDesde || filtros.fechaHasta}
+        <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50/80 p-3 sm:p-4 space-y-4">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+            <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-3">
+              <button
+                type="button"
+                onClick={() => setShowMobilePeriodo(prev => !prev)}
+                className="md:hidden w-full flex items-center justify-between gap-3 text-left"
               >
-                <option value="">-</option>
-                {MESES.map(m => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
-              </select>
-              {filtros.mes && (
-                <button
-                  onClick={() => setFiltros({ ...filtros, mes: '' })}
-                  className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <Calendar className="h-4 w-4" />
+                  Periodo
+                </div>
+                {showMobilePeriodo ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+              </button>
+              <div className="hidden md:flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <Calendar className="h-4 w-4" />
+                Periodo
+              </div>
+              <div className={`${showMobilePeriodo ? 'grid' : 'hidden'} md:grid grid-cols-1 sm:grid-cols-2 gap-3`}>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Desde</label>
+                  <div className="relative">
+                    <input
+                      type="date"
+                      value={filtros.fechaDesde}
+                      onChange={e => setFiltros({ ...filtros, fechaDesde: e.target.value, mes: '', anio: '' })}
+                      className="w-full min-h-11 px-3 py-2 text-sm border rounded-xl pr-8 bg-white"
+                    />
+                    {filtros.fechaDesde && (
+                      <button
+                        onClick={() => setFiltros({ ...filtros, fechaDesde: '' })}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Hasta</label>
+                  <div className="relative">
+                    <input
+                      type="date"
+                      value={filtros.fechaHasta}
+                      onChange={e => setFiltros({ ...filtros, fechaHasta: e.target.value, mes: '', anio: '' })}
+                      className="w-full min-h-11 px-3 py-2 text-sm border rounded-xl pr-8 bg-white"
+                    />
+                    {filtros.fechaHasta && (
+                      <button
+                        onClick={() => setFiltros({ ...filtros, fechaHasta: '' })}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Mes</label>
+                  <div className="relative">
+                    <select
+                      value={filtros.mes}
+                      onChange={e => setFiltros({ ...filtros, mes: e.target.value ? parseInt(e.target.value) : '', fechaDesde: '', fechaHasta: '' })}
+                      className="w-full min-h-11 px-3 py-2 text-sm border rounded-xl pr-8 bg-white"
+                      disabled={filtros.fechaDesde || filtros.fechaHasta}
+                    >
+                      <option value="">-</option>
+                      {MESES.map(m => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
+                    {filtros.mes && (
+                      <button
+                        onClick={() => setFiltros({ ...filtros, mes: '' })}
+                        className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Año</label>
+                  <div className="relative">
+                    <select
+                      value={filtros.anio}
+                      onChange={e => setFiltros({ ...filtros, anio: e.target.value ? parseInt(e.target.value) : '', fechaDesde: '', fechaHasta: '' })}
+                      className="w-full min-h-11 px-3 py-2 text-sm border rounded-xl pr-8 bg-white"
+                      disabled={filtros.fechaDesde || filtros.fechaHasta}
+                    >
+                      <option value="">-</option>
+                      {[2024, 2025, 2026, 2027].map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                    {filtros.anio && (
+                      <button
+                        onClick={() => setFiltros({ ...filtros, anio: '' })}
+                        className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Año</label>
-            <div className="relative">
-              <select
-                value={filtros.anio}
-                onChange={e => setFiltros({ ...filtros, anio: e.target.value ? parseInt(e.target.value) : '', fechaDesde: '', fechaHasta: '' })}
-                className="w-full px-3 py-2 text-sm border rounded-lg pr-8"
-                disabled={filtros.fechaDesde || filtros.fechaHasta}
+
+            <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-3">
+              <button
+                type="button"
+                onClick={() => setShowMobileFiltros(prev => !prev)}
+                className="md:hidden w-full flex items-center justify-between gap-3 text-left"
               >
-                <option value="">-</option>
-                {[2024, 2025, 2026, 2027].map(y => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-              {filtros.anio && (
-                <button
-                  onClick={() => setFiltros({ ...filtros, anio: '' })}
-                  className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <Filter className="h-4 w-4" />
+                  Filtros
+                </div>
+                {showMobileFiltros ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+              </button>
+              <div className="hidden md:flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <Filter className="h-4 w-4" />
+                Filtros
+              </div>
+              <div className={`${showMobileFiltros ? 'grid' : 'hidden'} md:grid grid-cols-1 sm:grid-cols-2 gap-3`}>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Proveedor</label>
+                  <div className="relative">
+                    <select
+                      value={filtros.proveedor_id}
+                      onChange={e => setFiltros({ ...filtros, proveedor_id: e.target.value })}
+                      className="w-full min-h-11 px-3 py-2 text-sm border rounded-xl pr-8 bg-white"
+                    >
+                      <option value="">Todos</option>
+                      {proveedores.map(p => (
+                        <option key={p.id} value={p.id}>{p.codigo}</option>
+                      ))}
+                    </select>
+                    {filtros.proveedor_id && (
+                      <button
+                        onClick={() => setFiltros({ ...filtros, proveedor_id: '' })}
+                        className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Cliente</label>
+                  <div className="relative">
+                    <select
+                      value={filtros.usuario_id}
+                      onChange={e => setFiltros({ ...filtros, usuario_id: e.target.value })}
+                      className="w-full min-h-11 px-3 py-2 text-sm border rounded-xl pr-8 bg-white"
+                    >
+                      <option value="">Todos</option>
+                      {usuarios.map(u => (
+                        <option key={u.id} value={u.id}>{u.abono} - {u.nombre_completo}</option>
+                      ))}
+                    </select>
+                    {filtros.usuario_id && (
+                      <button
+                        onClick={() => setFiltros({ ...filtros, usuario_id: '' })}
+                        className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Estado</label>
+                  <div className="relative">
+                    <select
+                      value={filtros.facturado}
+                      onChange={e => setFiltros({ ...filtros, facturado: e.target.value })}
+                      className="w-full min-h-11 px-3 py-2 text-sm border rounded-xl pr-8 bg-white"
+                    >
+                      <option value="">Todos</option>
+                      <option value="false">Pendiente</option>
+                      <option value="true">Facturado</option>
+                    </select>
+                    {filtros.facturado && (
+                      <button
+                        onClick={() => setFiltros({ ...filtros, facturado: '' })}
+                        className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Proveedor</label>
-            <div className="relative">
-              <select
-                value={filtros.proveedor_id}
-                onChange={e => setFiltros({ ...filtros, proveedor_id: e.target.value })}
-                className="w-full px-3 py-2 text-sm border rounded-lg pr-8"
-              >
-                <option value="">Todos</option>
-                {proveedores.map(p => (
-                  <option key={p.id} value={p.id}>{p.codigo}</option>
-                ))}
-              </select>
-              {filtros.proveedor_id && (
-                <button
-                  onClick={() => setFiltros({ ...filtros, proveedor_id: '' })}
-                  className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Cliente</label>
-            <div className="relative">
-              <select
-                value={filtros.usuario_id}
-                onChange={e => setFiltros({ ...filtros, usuario_id: e.target.value })}
-                className="w-full px-3 py-2 text-sm border rounded-lg pr-8"
-              >
-                <option value="">Todos</option>
-                {usuarios.map(u => (
-                  <option key={u.id} value={u.id}>{u.abono} - {u.nombre_completo}</option>
-                ))}
-              </select>
-              {filtros.usuario_id && (
-                <button
-                  onClick={() => setFiltros({ ...filtros, usuario_id: '' })}
-                  className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Estado</label>
-            <div className="relative">
-              <select
-                value={filtros.facturado}
-                onChange={e => setFiltros({ ...filtros, facturado: e.target.value })}
-                className="w-full px-3 py-2 text-sm border rounded-lg pr-8"
-              >
-                <option value="">Todos</option>
-                <option value="false">Pendiente</option>
-                <option value="true">Facturado</option>
-              </select>
-              {filtros.facturado && (
-                <button
-                  onClick={() => setFiltros({ ...filtros, facturado: '' })}
-                  className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="flex items-end gap-2">
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-end gap-2">
             <button
               onClick={limpiarFiltros}
-              className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-1"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100"
             >
               <X className="h-4 w-4" />
               Limpiar
@@ -765,7 +814,7 @@ export default function AdminFacturacionSolicitudesView() {
             <button
               onClick={loadData}
               disabled={loading}
-              className="btn-primary text-sm flex items-center justify-center gap-1 px-4"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Actualizar
@@ -782,48 +831,112 @@ export default function AdminFacturacionSolicitudesView() {
         <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
           <button
             onClick={() => setShowResumen(!showResumen)}
-            className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+            className="hidden md:flex w-full px-4 py-3 items-start sm:items-center justify-between gap-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
           >
-            <h4 className="font-medium text-gray-900 flex items-center gap-2">
+            <h4 className="font-medium text-gray-900 flex items-center gap-2 min-w-0">
               <Euro className="h-4 w-4 text-emerald-600" />
-              Resumen por Cliente
-              <span className="text-sm font-normal text-gray-500">({resumenFiltrado.length} clientes)</span>
+              <span className="truncate">Resumen por Cliente</span>
+              <span className="text-sm font-normal text-gray-500 whitespace-nowrap">({resumenFiltrado.length} clientes)</span>
             </h4>
-            <div className="flex items-center gap-3">
-              <span className="font-bold text-emerald-700">
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="font-bold text-emerald-700 text-sm sm:text-base">
                 {monedaResumen === 'USD' ? '$' : '€'}{totalGeneralMonto.toFixed(2)}
               </span>
               {showResumen ? <ChevronDown className="h-5 w-5 text-gray-500" /> : <ChevronRight className="h-5 w-5 text-gray-500" />}
             </div>
           </button>
+
+          <button
+            onClick={() => setShowResumen(!showResumen)}
+            className="md:hidden w-full px-4 py-3 flex items-center justify-between gap-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+          >
+            <div className="min-w-0 flex items-start gap-3">
+              <div className="mt-0.5 shrink-0 rounded-full bg-emerald-100 p-2 text-emerald-700">
+                <Euro className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="font-medium text-gray-900">Resumen por Cliente</h4>
+                <p className="text-xs text-gray-500 mt-1">{resumenFiltrado.length} cliente(s)</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="font-bold text-emerald-700 text-sm">
+                {monedaResumen === 'USD' ? '$' : '€'}{totalGeneralMonto.toFixed(2)}
+              </span>
+              {showResumen ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+            </div>
+          </button>
           
           {showResumen && (
-            <div className="p-4 overflow-x-auto">
+            <div className="p-4">
               {/* Selector de moneda */}
-              <div className="mb-3 flex items-center gap-2">
+              <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-2">
                 <span className="text-sm text-gray-600">Moneda:</span>
-                <button
-                  onClick={() => setMonedaResumen('EUR')}
-                  className={`px-3 py-1 text-xs font-medium rounded-l border ${
-                    monedaResumen === 'EUR' 
-                      ? 'bg-blue-500 text-white border-blue-500' 
-                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  € EUR
-                </button>
-                <button
-                  onClick={() => setMonedaResumen('USD')}
-                  className={`px-3 py-1 text-xs font-medium rounded-r border-t border-r border-b ${
-                    monedaResumen === 'USD' 
-                      ? 'bg-green-500 text-white border-green-500' 
-                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  $ USD
-                </button>
+                <div className="grid grid-cols-2 sm:inline-flex rounded-lg overflow-hidden border border-gray-300">
+                  <button
+                    onClick={() => setMonedaResumen('EUR')}
+                    className={`px-3 py-2 text-xs font-medium ${
+                      monedaResumen === 'EUR' 
+                        ? 'bg-blue-500 text-white border-blue-500' 
+                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    € EUR
+                  </button>
+                  <button
+                    onClick={() => setMonedaResumen('USD')}
+                    className={`px-3 py-2 text-xs font-medium border-l border-gray-300 ${
+                      monedaResumen === 'USD' 
+                        ? 'bg-green-500 text-white border-green-500' 
+                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    $ USD
+                  </button>
+                </div>
               </div>
-              
+
+              <div className="md:hidden space-y-3">
+                {resumenFiltrado.map((r, i) => (
+                  <div key={i} className="border rounded-lg p-4 space-y-3 bg-white">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-mono text-sm text-blue-600">{r.usuario_abono}</p>
+                        <p className="font-medium text-gray-900 break-words">{r.usuario_nombre}</p>
+                      </div>
+                      <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-xs font-medium shrink-0">
+                        {r.proveedor_codigo}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div><p className="text-xs text-gray-500">Normal</p><p className="font-medium">{r.qty_normal}</p></div>
+                      <div><p className="text-xs text-gray-500">Urgente</p><p className="font-medium">{r.qty_urgente}</p></div>
+                      <div><p className="text-xs text-gray-500">72h</p><p className="font-medium">{r.qty_72h}</p></div>
+                      <div><p className="text-xs text-gray-500">Total informes</p><p className="font-medium">{r.total_informes}</p></div>
+                    </div>
+                    <div className="pt-2 border-t flex items-center justify-between gap-2">
+                      <span className="text-xs text-gray-500">Monto {monedaResumen}</span>
+                      <span className="font-semibold text-emerald-600">
+                        {monedaResumen === 'USD' ? '$' : '€'}{(monedaResumen === 'USD' ? r.total_usd : r.total_eur).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-4 grid grid-cols-2 gap-3 text-sm">
+                  <div><p className="text-xs text-gray-500">Normal</p><p className="font-bold">{resumenFiltrado.reduce((sum, r) => sum + r.qty_normal, 0)}</p></div>
+                  <div><p className="text-xs text-gray-500">Urgente</p><p className="font-bold">{resumenFiltrado.reduce((sum, r) => sum + r.qty_urgente, 0)}</p></div>
+                  <div><p className="text-xs text-gray-500">72h</p><p className="font-bold">{resumenFiltrado.reduce((sum, r) => sum + r.qty_72h, 0)}</p></div>
+                  <div><p className="text-xs text-gray-500">Total informes</p><p className="font-bold">{resumenFiltrado.reduce((sum, r) => sum + r.total_informes, 0)}</p></div>
+                  <div className="col-span-2 pt-2 border-t border-emerald-200 flex items-center justify-between">
+                    <span className="font-semibold text-gray-900">Subtotal</span>
+                    <span className="font-bold text-emerald-700 text-lg">
+                      {monedaResumen === 'USD' ? '$' : '€'}{totalGeneralMonto.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="hidden md:block overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
@@ -878,6 +991,7 @@ export default function AdminFacturacionSolicitudesView() {
                   </tr>
                 </tfoot>
               </table>
+              </div>
             </div>
           )}
         </div>
@@ -885,12 +999,50 @@ export default function AdminFacturacionSolicitudesView() {
 
       {/* Detalle por Cliente */}
       <div className="bg-white rounded-lg shadow-sm border p-4">
-        <div className="flex justify-between items-center mb-3">
-          <h4 className="font-medium text-gray-900">Detalle de Solicitudes</h4>
+        <div className="flex flex-col gap-3 mb-3">
+          <div className="hidden md:flex sm:justify-between sm:items-center gap-3">
+            <h4 className="font-medium text-gray-900">Detalle de Solicitudes</h4>
+            {selectedIds.length > 0 && (
+              <button
+                onClick={handleMarcarFacturado}
+                className="btn-primary text-sm inline-flex items-center justify-center gap-1 w-full sm:w-auto"
+              >
+                <Receipt className="h-4 w-4" />
+                Facturar ({selectedIds.length})
+              </button>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowMobileDetalle(prev => !prev)}
+            className="md:hidden w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 flex items-center justify-between gap-3 text-left"
+          >
+            <div className="min-w-0 flex items-start gap-3">
+              <div className="mt-0.5 shrink-0 rounded-full bg-blue-100 p-2 text-blue-700">
+                <Receipt className="h-4 w-4" />
+              </div>
+              <div>
+              <h4 className="font-medium text-gray-900">Detalle de Solicitudes</h4>
+              <p className="text-xs text-gray-500 mt-1">
+                {Object.keys(solicitudesPorCliente).length} cliente(s)
+              </p>
+            </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {selectedIds.length > 0 && (
+                <span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">
+                  {selectedIds.length} sel.
+                </span>
+              )}
+              {showMobileDetalle ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+            </div>
+          </button>
+
           {selectedIds.length > 0 && (
             <button
               onClick={handleMarcarFacturado}
-              className="btn-primary text-sm flex items-center gap-1"
+              className={`${showMobileDetalle ? 'inline-flex' : 'hidden'} md:hidden btn-primary text-sm items-center justify-center gap-1 w-full`}
             >
               <Receipt className="h-4 w-4" />
               Facturar ({selectedIds.length})
@@ -898,6 +1050,7 @@ export default function AdminFacturacionSolicitudesView() {
           )}
         </div>
 
+        <div className={`${showMobileDetalle ? 'block' : 'hidden'} md:block`}>
         {loading ? (
           <div className="flex justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
@@ -953,13 +1106,13 @@ export default function AdminFacturacionSolicitudesView() {
                 <div key={abono} className="border rounded-lg overflow-hidden">
                   {/* Header del grupo */}
                   <div
-                    className="flex items-center justify-between px-4 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100"
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-3 sm:px-4 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100"
                     onClick={() => setExpandedCliente(isExpanded ? null : abono)}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
                       {/* Checkbox solo si hay pendientes */}
                       {solsPendientes.length > 0 ? (
-                        <button onClick={(e) => { e.stopPropagation(); toggleSelectAll(abono) }}>
+                        <button onClick={(e) => { e.stopPropagation(); toggleSelectAll(abono) }} className="shrink-0 mt-0.5">
                           <div className={`w-5 h-5 rounded border flex items-center justify-center ${
                             allPendientesSelected ? 'bg-blue-500 border-blue-500' : 'border-gray-300'
                           }`}>
@@ -967,36 +1120,43 @@ export default function AdminFacturacionSolicitudesView() {
                           </div>
                         </button>
                       ) : (
-                        <div className="w-5 h-5" /> 
+                        <div className="w-5 h-5 shrink-0" /> 
                       )}
-                      {isExpanded ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
-                      <span className="font-mono font-medium text-blue-600">{abono}</span>
-                      <span className="font-medium text-gray-900">{grupo.usuario_nombre}</span>
-                      <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs">
-                        {grupo.proveedor_codigo}
-                      </span>
-                      {/* Badge de estado */}
-                      {todasFacturadas && estadoPagoConfig ? (
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium inline-flex items-center gap-1 ${estadoPagoConfig.color}`}>
-                          <estadoPagoConfig.icon className="h-3 w-3" />
-                          {estadoPagoConfig.label}
-                        </span>
-                      ) : todasPendientes ? (
-                        <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">
-                          ○ Pendiente
-                        </span>
-                      ) : estadoPagoConfig ? (
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium inline-flex items-center gap-1 ${estadoPagoConfig.color}`}>
-                          <estadoPagoConfig.icon className="h-3 w-3" />
-                          {solsFacturadas.length} {estadoPagoConfig.label} / {solsPendientes.length} Pend.
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                          {solsFacturadas.length} Fact. / {solsPendientes.length} Pend.
-                        </span>
-                      )}
+                      <div className="pt-0.5 shrink-0">
+                        {isExpanded ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                      </div>
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 min-w-0">
+                          <span className="font-mono font-medium text-blue-600 text-sm break-all">{abono}</span>
+                          <span className="font-medium text-gray-900 break-words">{grupo.usuario_nombre}</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs">
+                            {grupo.proveedor_codigo}
+                          </span>
+                          {todasFacturadas && estadoPagoConfig ? (
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium inline-flex items-center gap-1 ${estadoPagoConfig.color}`}>
+                              <estadoPagoConfig.icon className="h-3 w-3" />
+                              {estadoPagoConfig.label}
+                            </span>
+                          ) : todasPendientes ? (
+                            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">
+                              ○ Pendiente
+                            </span>
+                          ) : estadoPagoConfig ? (
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium inline-flex items-center gap-1 ${estadoPagoConfig.color}`}>
+                              <estadoPagoConfig.icon className="h-3 w-3" />
+                              {solsFacturadas.length} {estadoPagoConfig.label} / {solsPendientes.length} Pend.
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                              {solsFacturadas.length} Fact. / {solsPendientes.length} Pend.
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-4 sm:justify-end">
                       {/* Botón Revertir para admin - solo si hay facturadas */}
                       {isAdmin && solsFacturadas.length > 0 && (
                         <button
@@ -1039,7 +1199,95 @@ export default function AdminFacturacionSolicitudesView() {
 
                   {/* Detalle de solicitudes */}
                   {isExpanded && (
-                    <div className="overflow-x-auto">
+                    <div>
+                      <div className="md:hidden divide-y divide-gray-100 bg-white">
+                        {grupo.solicitudes.map(sol => (
+                          <div key={sol.id} className={`p-4 space-y-3 ${sol.facturado ? 'bg-green-50' : ''} ${selectedIds.includes(sol.id) ? 'bg-blue-50' : ''}`}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-3 min-w-0">
+                                {!sol.facturado ? (
+                                  <button
+                                    onClick={() => {
+                                      if (selectedIds.includes(sol.id)) {
+                                        setSelectedIds(prev => prev.filter(id => id !== sol.id))
+                                      } else {
+                                        const otroCliente = selectedIds.length > 0 && 
+                                          data.solicitudes.find(s => selectedIds.includes(s.id))?.usuario_abono !== sol.usuario_abono
+
+                                        if (otroCliente) {
+                                          setSelectedIds([sol.id])
+                                        } else {
+                                          setSelectedIds(prev => [...prev, sol.id])
+                                        }
+                                      }
+                                    }}
+                                    className="shrink-0 mt-0.5"
+                                  >
+                                    <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                                      selectedIds.includes(sol.id) ? 'bg-blue-500 border-blue-500' : 'border-gray-300'
+                                    }`}>
+                                      {selectedIds.includes(sol.id) && <Check className="h-3 w-3 text-white" />}
+                                    </div>
+                                  </button>
+                                ) : (
+                                  <div className="w-4 h-4 shrink-0 mt-0.5" />
+                                )}
+                                <div className="min-w-0">
+                                  <p className="font-medium text-gray-900 break-words">{sol.razon_social}</p>
+                                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                                    <span className="font-mono text-xs text-gray-500 break-all">{sol.cuit}</span>
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                      sol.pais_codigo === 'AR' ? 'bg-sky-100 text-sky-700' :
+                                      sol.pais_codigo === 'CL' ? 'bg-red-100 text-red-700' :
+                                      sol.pais_codigo === 'BR' ? 'bg-green-100 text-green-700' :
+                                      sol.pais_codigo === 'UY' ? 'bg-blue-100 text-blue-700' :
+                                      'bg-gray-100 text-gray-600'
+                                    }`} title={sol.pais_nombre}>
+                                      {sol.pais_codigo || '??'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <span className="font-semibold text-emerald-600 shrink-0">
+                                {simboloMoneda}{(monedaCliente === 'USD' ? (sol.precio_usd || 0) : (sol.precio_eur || sol.precio_calculado || 0)).toFixed(2)}
+                              </span>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                sol.prioridad === 'urgente' ? 'bg-red-100 text-red-700' :
+                                sol.prioridad === '72h' ? 'bg-orange-100 text-orange-700' :
+                                'bg-blue-100 text-blue-700'
+                              }`}>
+                                {sol.prioridad === 'urgente' ? 'Urgente' : sol.prioridad === '72h' ? '72h' : 'Normal'}
+                              </span>
+                              {sol.facturado ? (
+                                (() => {
+                                  const estadoSol = sol.factura_estado_pago || 'facturada'
+                                  const cfg = ESTADO_PAGO_CONFIG[estadoSol] || ESTADO_PAGO_CONFIG.facturada
+                                  return (
+                                    <span className={`px-2 py-0.5 rounded text-xs font-medium inline-flex items-center gap-1 ${cfg.color}`}>
+                                      <cfg.icon className="h-3 w-3" />
+                                      {cfg.label}
+                                    </span>
+                                  )
+                                })()
+                              ) : (
+                                <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">
+                                  ○ Pendiente
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center justify-between gap-3 text-xs text-gray-500 pt-2 border-t">
+                              <span>Actualizada</span>
+                              <span>{sol.updated_at}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="hidden md:block overflow-x-auto">
                       <table className="min-w-full text-sm">
                         <thead className="bg-gray-100">
                           <tr>
@@ -1138,6 +1386,7 @@ export default function AdminFacturacionSolicitudesView() {
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1145,6 +1394,7 @@ export default function AdminFacturacionSolicitudesView() {
             })}
           </div>
         )}
+        </div>
       </div>
       </>
       )}
@@ -1152,7 +1402,7 @@ export default function AdminFacturacionSolicitudesView() {
       {/* TAB: Historial de Facturas */}
       {activeTab === 'historial' && (
         <div className="bg-white rounded-lg shadow-sm border p-4">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <h4 className="font-medium text-gray-900 flex items-center gap-2">
               <History className="h-4 w-4 text-emerald-600" />
               Historial de Facturas Generadas
@@ -1160,7 +1410,7 @@ export default function AdminFacturacionSolicitudesView() {
             <button
               onClick={loadHistorial}
               disabled={loadingHistorial}
-              className="btn-secondary text-sm flex items-center gap-1"
+              className="btn-secondary text-sm inline-flex items-center justify-center gap-1 w-full sm:w-auto"
             >
               {loadingHistorial ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Actualizar
@@ -1196,7 +1446,71 @@ export default function AdminFacturacionSolicitudesView() {
               <p>No hay facturas generadas para este período</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div>
+              <div className="md:hidden space-y-3">
+                {historial.map(f => {
+                  const estadoKey = f.estado_pago || 'pendiente'
+                  const estadoCfg = ESTADO_PAGO_CONFIG[estadoKey] || ESTADO_PAGO_CONFIG.pendiente
+                  return (
+                    <div key={f.id} className="border rounded-lg p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-mono font-medium text-blue-600 break-all">{f.numero_factura}</p>
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                              f.tipo_documento === 'Remito' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                            }`}>
+                              {f.tipo_documento}
+                            </span>
+                            <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                              <Clock className="h-3 w-3" />
+                              {new Date(f.created_at).toLocaleDateString('es-AR')}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="font-semibold text-emerald-600 shrink-0">
+                          €{parseFloat(f.total_eur || 0).toFixed(2)}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="col-span-2">
+                          <p className="text-xs text-gray-500">Cliente</p>
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{f.usuario_abono}</span>
+                            {f.usuario_nombre && <span className="text-gray-700 break-words">{f.usuario_nombre}</span>}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Cantidad</p>
+                          <p className="font-medium">{f.cantidad_solicitudes}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Estado</p>
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium mt-1 ${estadoCfg.color}`}>
+                            <estadoCfg.icon className="h-3 w-3" />
+                            {estadoCfg.label}
+                          </span>
+                        </div>
+                      </div>
+
+                      {f.tiene_pdf ? (
+                        <button
+                          onClick={() => descargarPdfHistorial(f.id, f.numero_factura, f.usuario_abono)}
+                          className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg"
+                        >
+                          <Download className="h-4 w-4" />
+                          Descargar PDF
+                        </button>
+                      ) : (
+                        <div className="text-sm text-gray-400 text-center py-2 bg-gray-50 rounded-lg">Sin PDF disponible</div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="hidden md:block overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
@@ -1261,6 +1575,7 @@ export default function AdminFacturacionSolicitudesView() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </div>
@@ -1287,7 +1602,7 @@ export default function AdminFacturacionSolicitudesView() {
             </div>
 
             {/* Body */}
-            <div className="p-6 space-y-4">
+            <div className="p-4 sm:p-6 space-y-4">
               {/* Info del cliente */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="grid grid-cols-2 gap-3 text-sm">
@@ -1445,7 +1760,7 @@ export default function AdminFacturacionSolicitudesView() {
             </div>
 
             {/* Body */}
-            <div className="p-6 space-y-4">
+            <div className="p-4 sm:p-6 space-y-4">
               <div className="bg-gray-50 rounded-lg p-4 space-y-3">
                 <div className="flex justify-between">
                   <span className="text-gray-500 text-sm">Cliente:</span>
@@ -1529,7 +1844,7 @@ export default function AdminFacturacionSolicitudesView() {
             </div>
 
             {/* Body */}
-            <div className="p-6 space-y-4">
+            <div className="p-4 sm:p-6 space-y-4">
               <div className="bg-gray-50 rounded-lg p-4 space-y-3">
                 {/* Mostrar info del grupo o de la solicitud individual */}
                 {revertData.count ? (

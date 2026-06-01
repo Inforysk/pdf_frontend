@@ -126,9 +126,9 @@ export default function AdminDunningView() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 sm:p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-red-100 rounded-xl">
             <AlertTriangle className="w-6 h-6 text-red-600" />
@@ -138,18 +138,18 @@ export default function AdminDunningView() {
             <p className="text-sm text-gray-500">Dunning y estados de cuenta</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="grid grid-cols-1 sm:flex gap-2 w-full sm:w-auto">
           <button
             onClick={runDunningRules}
             disabled={runningRules}
-            className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
           >
             {runningRules ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlayCircle className="w-4 h-4" />}
             Ejecutar Reglas
           </button>
           <button
             onClick={() => { loadData(); loadGlobalStats() }}
-            className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50"
           >
             <RefreshCw className="w-4 h-4" />
             Actualizar
@@ -158,20 +158,20 @@ export default function AdminDunningView() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <div 
-          className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+          className={`p-3 sm:p-4 rounded-xl border-2 cursor-pointer transition-all min-w-0 ${
             estadoFilter === null ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
           }`}
           onClick={() => { setEstadoFilter(null); setPage(1) }}
         >
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <Users className="w-5 h-5 text-blue-600" />
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="p-2 bg-blue-100 rounded-lg shrink-0">
+              <Users className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
             </div>
-            <div>
-              <p className="text-2xl font-bold">{stats.activo + stats.en_riesgo + stats.suspendido}</p>
-              <p className="text-sm text-gray-500">Total Clientes</p>
+            <div className="min-w-0">
+              <p className="text-xl sm:text-2xl font-bold leading-none">{stats.activo + stats.en_riesgo + stats.suspendido}</p>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1 leading-tight">Total Clientes</p>
             </div>
           </div>
         </div>
@@ -181,18 +181,18 @@ export default function AdminDunningView() {
           return (
             <div
               key={estado}
-              className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+              className={`p-3 sm:p-4 rounded-xl border-2 cursor-pointer transition-all min-w-0 ${
                 estadoFilter === estado ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
               }`}
               onClick={() => { setEstadoFilter(estado); setPage(1) }}
             >
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${config.color.split(' ')[1]}`}>
-                  <Icon className={`w-5 h-5 ${config.color.split(' ')[0]}`} />
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className={`p-2 rounded-lg shrink-0 ${config.color.split(' ')[1]}`}>
+                  <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${config.color.split(' ')[0]}`} />
                 </div>
-                <div>
-                  <p className="text-2xl font-bold">{stats[estado] || 0}</p>
-                  <p className="text-sm text-gray-500">{config.label}</p>
+                <div className="min-w-0">
+                  <p className="text-xl sm:text-2xl font-bold leading-none">{stats[estado] || 0}</p>
+                  <p className="text-xs sm:text-sm text-gray-500 mt-1 leading-tight">{config.label}</p>
                 </div>
               </div>
             </div>
@@ -202,41 +202,41 @@ export default function AdminDunningView() {
 
       {/* Global Stats Row */}
       {globalStats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="p-4 bg-gradient-to-br from-red-50 to-red-100 rounded-xl border border-red-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-red-600">Monto Pendiente</p>
-                <p className="text-xl font-bold text-red-700">{formatMonto(globalStats.monto_pendiente)}</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+          <div className="p-3 sm:p-4 bg-gradient-to-br from-red-50 to-red-100 rounded-xl border border-red-200 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-red-600 leading-tight">Monto Pendiente</p>
+                <p className="text-lg sm:text-xl font-bold text-red-700 break-words">{formatMonto(globalStats.monto_pendiente)}</p>
               </div>
-              <DollarSign className="w-8 h-8 text-red-400" />
+              <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-red-400 shrink-0" />
             </div>
           </div>
-          <div className="p-4 bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl border border-amber-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-amber-600">Cuentas con Fallos</p>
-                <p className="text-xl font-bold text-amber-700">{globalStats.cuentas_con_fallos}</p>
+          <div className="p-3 sm:p-4 bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl border border-amber-200 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-amber-600 leading-tight">Cuentas con Fallos</p>
+                <p className="text-lg sm:text-xl font-bold text-amber-700">{globalStats.cuentas_con_fallos}</p>
               </div>
-              <AlertCircle className="w-8 h-8 text-amber-400" />
+              <AlertCircle className="w-6 h-6 sm:w-8 sm:h-8 text-amber-400 shrink-0" />
             </div>
           </div>
-          <div className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Fallos (30 días)</p>
-                <p className="text-xl font-bold text-gray-700">{globalStats.fallos_mes}</p>
+          <div className="p-3 sm:p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border border-gray-200 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-gray-600 leading-tight">Fallos (30 dias)</p>
+                <p className="text-lg sm:text-xl font-bold text-gray-700">{globalStats.fallos_mes}</p>
               </div>
-              <XCircle className="w-8 h-8 text-gray-400" />
+              <XCircle className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400 shrink-0" />
             </div>
           </div>
-          <div className="p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-xl border border-green-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-green-600">Recuperaciones</p>
-                <p className="text-xl font-bold text-green-700">{globalStats.recuperaciones_mes}</p>
+          <div className="p-3 sm:p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-xl border border-green-200 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-green-600 leading-tight">Recuperaciones</p>
+                <p className="text-lg sm:text-xl font-bold text-green-700">{globalStats.recuperaciones_mes}</p>
               </div>
-              <TrendingUp className="w-8 h-8 text-green-400" />
+              <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-green-400 shrink-0" />
             </div>
           </div>
         </div>
@@ -244,8 +244,8 @@ export default function AdminDunningView() {
 
       {/* Search & Table */}
       <div className="bg-white rounded-xl shadow-sm border">
-        <div className="p-4 border-b flex items-center gap-4">
-          <div className="relative flex-1 max-w-md">
+        <div className="p-4 border-b flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="relative flex-1 max-w-none sm:max-w-md w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
@@ -275,8 +275,92 @@ export default function AdminDunningView() {
             No hay cuentas con el filtro seleccionado
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <>
+            <div className="md:hidden divide-y divide-gray-100">
+              {filteredItems.map((item) => {
+                const estadoConfig = ESTADO_CONFIG[item.estado_pago || 'activo']
+                const EstadoIcon = estadoConfig.icon
+                return (
+                  <div key={item.empresa_id} className="p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-800 break-words">{item.empresa_nombre}</p>
+                        <p className="text-xs text-gray-500 break-all">{item.empresa_cuit}</p>
+                      </div>
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium whitespace-nowrap ${estadoConfig.badge}`}>
+                        <EstadoIcon className="w-3 h-3" />
+                        {estadoConfig.label}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <p className="text-gray-400 mb-1">Intentos</p>
+                        {item.intentos_fallidos > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-full text-[11px] font-medium">
+                            <XCircle className="w-3 h-3" />
+                            {item.intentos_fallidos}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-gray-400 mb-1">Pendiente</p>
+                        {item.monto_pendiente > 0 ? (
+                          <span className="font-medium text-red-600 break-words">
+                            {formatMonto(item.monto_pendiente, item.currency_code)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-gray-400 mb-1">Ultimo fallo</p>
+                        {item.ultimo_intento_fallido ? (
+                          <div>
+                            <p className="text-gray-700">{formatDate(item.ultimo_intento_fallido)}</p>
+                            {item.dias_desde_fallo !== null && (
+                              <p className="text-[11px] text-gray-500">hace {item.dias_desde_fallo} dias</p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-gray-400 mb-1">Ultimo pago</p>
+                        <p className="text-gray-700">{formatDate(item.ultimo_pago_exitoso)}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100">
+                      <button
+                        onClick={() => loadDetails(item.empresa_id)}
+                        className="inline-flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> Ver
+                      </button>
+                      <button
+                        onClick={() => setShowChangeStatusModal(item)}
+                        className="inline-flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg"
+                      >
+                        <Activity className="w-3.5 h-3.5" /> Estado
+                      </button>
+                      <button
+                        onClick={() => setShowRegisterPaymentModal(item)}
+                        className="inline-flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] text-green-700 bg-green-50 hover:bg-green-100 rounded-lg"
+                      >
+                        <CreditCard className="w-3.5 h-3.5" /> Pago
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
+            <table className="min-w-[980px] w-full">
               <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                 <tr>
                   <th className="px-4 py-3 text-left">Empresa</th>
@@ -369,12 +453,13 @@ export default function AdminDunningView() {
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
 
         {/* Pagination */}
         {pagination.pages > 1 && (
-          <div className="p-4 border-t flex items-center justify-between">
+          <div className="p-4 border-t flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <p className="text-sm text-gray-500">
               Mostrando {filteredItems.length} de {pagination.total}
             </p>

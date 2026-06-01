@@ -22,7 +22,7 @@ export default function AdminProveedoresView() {
   const [activeSubTab, setActiveSubTab] = useState('proveedores')
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 px-1 sm:px-0">
       {/* Header */}
       <div className="bg-white rounded-lg shadow-sm border p-4">
         <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -34,24 +34,26 @@ export default function AdminProveedoresView() {
         </p>
 
         {/* Sub-tabs */}
-        <div className="flex gap-1 mt-4 bg-gray-100 rounded-lg p-1">
+        <div className="mt-4 bg-gray-100 rounded-lg p-1">
+          <div className="grid grid-cols-2 gap-1 sm:flex sm:flex-wrap">
           {SUBTABS.map(tab => {
             const Icon = tab.icon
             return (
               <button
                 key={tab.key}
                 onClick={() => setActiveSubTab(tab.key)}
-                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${
+                className={`flex min-h-11 items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all min-w-0 ${
                   activeSubTab === tab.key
                     ? 'bg-white text-blue-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                <Icon className="h-4 w-4" />
-                <span className="hidden sm:inline">{tab.label}</span>
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="truncate text-xs sm:text-sm">{tab.label}</span>
               </button>
             )
           })}
+          </div>
         </div>
       </div>
 
@@ -152,7 +154,7 @@ function PreciosPaisTab() {
 
   return (
     <div className="bg-white rounded-lg shadow-sm border p-4">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
         <div>
           <h4 className="font-medium text-gray-900 flex items-center gap-2">
             <Globe2 className="h-5 w-5 text-blue-600" />
@@ -160,13 +162,13 @@ function PreciosPaisTab() {
           </h4>
           <p className="text-sm text-gray-500">Precios de costo por proveedor, país y prioridad</p>
         </div>
-        <button onClick={loadData} className="btn-secondary text-sm flex items-center gap-1">
+        <button onClick={loadData} className="btn-secondary text-sm flex items-center justify-center gap-1 w-full sm:w-auto">
           <RefreshCw className="h-4 w-4" /> Actualizar
         </button>
       </div>
 
       {/* Filtros */}
-      <div className="flex gap-4 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
         <div className="flex-1">
           <label className="block text-xs font-medium text-gray-700 mb-1">Proveedor</label>
           <select
@@ -193,7 +195,7 @@ function PreciosPaisTab() {
             ))}
           </select>
         </div>
-        <div className="w-32">
+        <div className="min-w-0">
           <label className="block text-xs font-medium text-gray-700 mb-1">Moneda</label>
           <select
             value={filtroMoneda}
@@ -208,14 +210,28 @@ function PreciosPaisTab() {
       </div>
 
       {/* Tabla */}
-      <div className="overflow-x-auto">
+      <div className="space-y-6">
         {Object.entries(porProveedor).map(([codigo, data]) => (
           <div key={codigo} className="mb-6">
             <h5 className="font-medium text-gray-800 mb-2 flex items-center gap-2">
               <Building2 className="h-4 w-4 text-blue-600" />
               {codigo} - {data.nombre}
             </h5>
-            <table className="min-w-full divide-y divide-gray-200 border rounded-lg">
+            <div className="md:hidden border rounded-lg overflow-hidden divide-y divide-gray-100 bg-white">
+              {data.precios.map(p => (
+                <PrecioProveedorMobileCard
+                  key={p.id}
+                  precio={p}
+                  editingId={editingId}
+                  editForm={editForm}
+                  setEditForm={setEditForm}
+                  onEdit={handleEdit}
+                  onSave={handleSave}
+                  onCancel={() => setEditingId(null)}
+                />
+              ))}
+            </div>
+            <table className="hidden md:table min-w-full divide-y divide-gray-200 border rounded-lg">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">País</th>
@@ -364,16 +380,16 @@ function ProveedoresTab() {
 
   return (
     <div className="bg-white rounded-lg shadow-sm border p-4">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
         <div>
           <h4 className="font-medium text-gray-900">Proveedores de Informes</h4>
           <p className="text-sm text-gray-500">{proveedores.length} proveedores configurados</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={loadData} className="btn-secondary text-sm flex items-center gap-1">
+        <div className="flex gap-2 w-full sm:w-auto">
+            <button onClick={loadData} className="btn-secondary text-sm flex items-center justify-center gap-1 w-11 sm:w-auto sm:px-3">
             <RefreshCw className="h-4 w-4" />
           </button>
-          <button onClick={() => { setEditing(null); setShowForm(true) }} className="btn-primary text-sm flex items-center gap-1">
+            <button onClick={() => { setEditing(null); setShowForm(true) }} className="btn-primary text-sm flex-1 sm:flex-none flex items-center justify-center gap-1">
             <Plus className="h-4 w-4" /> Agregar
           </button>
         </div>
@@ -389,7 +405,22 @@ function ProveedoresTab() {
       )}
 
       {/* Table */}
-      <div className="overflow-x-auto">
+      <div className="md:hidden divide-y divide-gray-100 border rounded-lg overflow-hidden">
+        {proveedores.map(prov => (
+          <ProveedorMobileCard
+            key={prov.id}
+            prov={prov}
+            onToggleActive={() => handleToggleActive(prov)}
+            onEdit={() => { setEditing(prov); setShowForm(true) }}
+          />
+        ))}
+        {proveedores.length === 0 && (
+          <div className="px-4 py-8 text-center text-gray-500">
+            No hay proveedores configurados
+          </div>
+        )}
+      </div>
+      <div className="hidden md:block overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -519,11 +550,11 @@ function ProveedorForm({ proveedor, onSave, onCancel }) {
           />
         </div>
       </div>
-      <div className="flex justify-end gap-2 mt-4">
-        <button type="button" onClick={onCancel} className="btn-secondary text-sm">
+      <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 mt-4">
+        <button type="button" onClick={onCancel} className="btn-secondary text-sm w-full sm:w-auto justify-center">
           <X className="h-4 w-4" /> Cancelar
         </button>
-        <button type="submit" disabled={saving} className="btn-primary text-sm">
+        <button type="submit" disabled={saving} className="btn-primary text-sm w-full sm:w-auto justify-center">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {proveedor ? 'Guardar' : 'Crear'}
         </button>
@@ -610,12 +641,12 @@ function ClientesProveedorTab() {
 
   return (
     <div className="bg-white rounded-lg shadow-sm border p-4">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
         <div>
           <h4 className="font-medium text-gray-900">Asignación de Clientes</h4>
           <p className="text-sm text-gray-500">Asigna empresas clientes a proveedores fijos</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="btn-primary text-sm flex items-center gap-1">
+        <button onClick={() => setShowForm(true)} className="btn-primary text-sm flex items-center justify-center gap-1 w-full sm:w-auto">
           <Plus className="h-4 w-4" /> Nueva Asignación
         </button>
       </div>
@@ -636,17 +667,23 @@ function ClientesProveedorTab() {
           <div key={prov.id} className="border rounded-lg overflow-hidden">
             <button
               onClick={() => handleExpand(prov.id)}
-              className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+              className="w-full px-3 sm:px-4 py-3 hover:bg-gray-50 transition-colors"
             >
-              <div className="flex items-center gap-3">
-                {expandedProv === prov.id ? 
-                  <ChevronDown className="h-4 w-4 text-gray-400" /> : 
-                  <ChevronRight className="h-4 w-4 text-gray-400" />
-                }
-                <span className="font-mono font-medium text-sm">{prov.codigo}</span>
-                <span className="text-gray-600">{prov.nombre}</span>
+              <div className="flex items-start gap-3 min-w-0 text-left">
+                <div className="pt-0.5 shrink-0">
+                  {expandedProv === prov.id ? 
+                    <ChevronDown className="h-4 w-4 text-gray-400" /> : 
+                    <ChevronRight className="h-4 w-4 text-gray-400" />
+                  }
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 min-w-0">
+                    <span className="font-mono font-medium text-xs sm:text-sm break-all">{prov.codigo}</span>
+                    <span className="text-sm text-gray-700 break-words">{prov.nombre}</span>
+                  </div>
+                  <span className="mt-1 inline-flex text-xs sm:text-sm text-gray-500">{prov.clientes_asignados || 0} clientes asignados</span>
+                </div>
               </div>
-              <span className="text-sm text-gray-500">{prov.clientes_asignados || 0} clientes</span>
             </button>
             
             {expandedProv === prov.id && (
@@ -654,21 +691,29 @@ function ClientesProveedorTab() {
                 {asignaciones[prov.id]?.length > 0 ? (
                   <div className="space-y-2">
                     {asignaciones[prov.id].map(a => (
-                      <div key={a.id} className={`flex items-center justify-between p-2 rounded ${a.activo ? 'bg-white' : 'bg-gray-100 opacity-60'}`}>
-                        <div>
-                          <span className="font-medium">{a.empresa_nombre}</span>
-                          <span className="text-xs text-gray-500 ml-2">{a.empresa_cuit}</span>
-                          {a.descuento_pct > 0 && (
-                            <span className="ml-2 text-xs bg-green-100 text-green-700 px-1 rounded">
-                              -{a.descuento_pct}%
+                      <div key={a.id} className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-lg border ${a.activo ? 'bg-white border-gray-200' : 'bg-gray-100 border-gray-200 opacity-60'}`}>
+                        <div className="min-w-0 space-y-2">
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900 break-words">{a.empresa_nombre}</p>
+                            <p className="text-xs text-gray-500 break-all">{a.empresa_cuit}</p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${a.activo ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
+                              {a.activo ? 'Activa' : 'Inactiva'}
                             </span>
-                          )}
+                            {a.descuento_pct > 0 && (
+                              <span className="px-2 py-1 rounded-full text-[11px] font-medium bg-green-100 text-green-700">
+                                Descuento {a.descuento_pct}%
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <button
                           onClick={() => handleDesasignar(a.id, prov.id)}
-                          className="text-red-600 hover:text-red-800 p-1"
+                          className="self-stretch sm:self-auto inline-flex items-center justify-center gap-2 px-3 py-2 text-sm text-red-600 bg-red-50 hover:bg-red-100 rounded-lg"
                         >
                           <Trash2 className="h-4 w-4" />
+                          Desasignar
                         </button>
                       </div>
                     ))}
@@ -682,6 +727,119 @@ function ClientesProveedorTab() {
             )}
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+function ProveedorMobileCard({ prov, onToggleActive, onEdit }) {
+  return (
+    <div className={`p-4 space-y-3 ${!prov.activo ? 'bg-gray-50 opacity-60' : ''}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-mono font-medium text-sm break-all">{prov.codigo}</p>
+          <p className="font-medium text-gray-900 mt-1 break-words">{prov.nombre}</p>
+          {prov.descripcion && <p className="text-xs text-gray-500 mt-1">{prov.descripcion}</p>}
+        </div>
+        <button
+          onClick={onEdit}
+          className="inline-flex items-center justify-center h-9 w-9 text-blue-600 hover:bg-blue-50 rounded-lg shrink-0"
+        >
+          <Edit2 className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 text-xs">
+        <div>
+          <p className="text-gray-400 mb-1">Moneda</p>
+          <p className="font-mono text-sm">{prov.moneda_defecto}</p>
+        </div>
+        <div>
+          <p className="text-gray-400 mb-1">Clientes</p>
+          <p className="font-medium text-sm">{prov.clientes_asignados || 0}</p>
+        </div>
+        <div>
+          <p className="text-gray-400 mb-1">Estado</p>
+          <button
+            onClick={onToggleActive}
+            className={`px-2 py-1 rounded-full text-[11px] font-medium ${
+              prov.activo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+            }`}
+          >
+            {prov.activo ? 'Activo' : 'Inactivo'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PrecioProveedorMobileCard({ precio: p, editingId, editForm, setEditForm, onEdit, onSave, onCancel }) {
+  return (
+    <div className="p-4 space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-medium text-gray-900 break-words">{PAISES_LABELS[p.codigo_pais] || p.codigo_pais} ({p.codigo_pais})</p>
+          <span className={`inline-flex mt-1 px-2 py-0.5 rounded text-[11px] font-medium ${
+            p.moneda === 'USD' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+          }`}>
+            {p.moneda || 'EUR'}
+          </span>
+        </div>
+        {editingId !== p.id && (
+          <button onClick={() => onEdit(p)} className="inline-flex items-center justify-center h-9 w-9 text-blue-600 hover:bg-blue-50 rounded-lg shrink-0">
+            <Edit2 className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {editingId === p.id ? (
+        <>
+          <div className="grid grid-cols-3 gap-2">
+            <input type="number" step="0.01" value={editForm.precio_normal} onChange={e => setEditForm({ ...editForm, precio_normal: parseFloat(e.target.value) })} className="w-full px-2 py-2 border rounded text-center text-sm" />
+            <input type="number" step="0.01" value={editForm.precio_urgente} onChange={e => setEditForm({ ...editForm, precio_urgente: parseFloat(e.target.value) })} className="w-full px-2 py-2 border rounded text-center text-sm" />
+            <input type="number" step="0.01" value={editForm.precio_72hrs} onChange={e => setEditForm({ ...editForm, precio_72hrs: parseFloat(e.target.value) })} className="w-full px-2 py-2 border rounded text-center text-sm" />
+          </div>
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <button onClick={() => onSave(p.id)} className="inline-flex items-center justify-center gap-1 px-3 py-2 text-[11px] text-green-700 bg-green-50 hover:bg-green-100 rounded-lg"><Save className="h-3.5 w-3.5" /> Guardar</button>
+            <button onClick={onCancel} className="inline-flex items-center justify-center gap-1 px-3 py-2 text-[11px] text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"><X className="h-3.5 w-3.5" /> Cancelar</button>
+          </div>
+        </>
+      ) : (
+        <div className="grid grid-cols-3 gap-3 text-xs">
+          <div><p className="text-gray-400 mb-1">Normal</p><p className="font-mono text-sm">{p.moneda === 'USD' ? '$' : '€'}{parseFloat(p.precio_normal || 0).toFixed(2)}</p></div>
+          <div><p className="text-gray-400 mb-1">Urgente</p><p className="font-mono text-sm text-orange-600">{p.moneda === 'USD' ? '$' : '€'}{parseFloat(p.precio_urgente || 0).toFixed(2)}</p></div>
+          <div><p className="text-gray-400 mb-1">72 hrs</p><p className="font-mono text-sm text-blue-600">{p.moneda === 'USD' ? '$' : '€'}{parseFloat(p.precio_72hrs || 0).toFixed(2)}</p></div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MargenMobileCard({ margen: m, onEdit }) {
+  return (
+    <div className={`p-4 space-y-3 ${!m.activo ? 'bg-gray-50 opacity-60' : ''}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex items-center gap-2 flex-wrap">
+          <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${
+            m.scope === 'global' ? 'bg-purple-100 text-purple-700' :
+            m.scope === 'proveedor' ? 'bg-blue-100 text-blue-700' :
+            'bg-green-100 text-green-700'
+          }`}>
+            {m.scope}
+          </span>
+          <span className="text-sm text-gray-700 break-words">{m.scope_nombre}</span>
+        </div>
+        <button onClick={onEdit} className="inline-flex items-center justify-center h-9 w-9 text-blue-600 hover:bg-blue-50 rounded-lg shrink-0">
+          <Edit2 className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div><p className="text-gray-400 mb-1">Min %</p><p className="font-mono text-sm">{m.margen_min_pct}%</p></div>
+        <div><p className="text-gray-400 mb-1">Objetivo %</p><p className="font-mono text-sm font-medium">{m.margen_objetivo_pct}%</p></div>
+        <div><p className="text-gray-400 mb-1">Max %</p><p className="font-mono text-sm">{m.margen_max_pct}%</p></div>
+        <div><p className="text-gray-400 mb-1">Urgente +%</p><p className="font-mono text-sm text-orange-600">+{m.markup_urgente_pct || 0}%</p></div>
+        <div><p className="text-gray-400 mb-1">72hrs +%</p><p className="font-mono text-sm text-blue-600">+{m.markup_72hrs_pct || 0}%</p></div>
       </div>
     </div>
   )
@@ -736,7 +894,6 @@ function AsignacionForm({ proveedores, empresas, onSave, onCancel }) {
               value={form.empresa_cliente_id}
               onChange={e => setForm({ ...form, empresa_cliente_id: e.target.value })}
               className="w-full px-3 py-2 border rounded-md text-sm"
-              size={4}
             >
               <option value="">-- Seleccionar --</option>
               {filteredEmpresas.slice(0, 20).map(emp => (
@@ -773,7 +930,7 @@ function AsignacionForm({ proveedores, empresas, onSave, onCancel }) {
             className="w-full px-3 py-2 border rounded-md text-sm"
           />
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -792,9 +949,9 @@ function AsignacionForm({ proveedores, empresas, onSave, onCancel }) {
           </label>
         </div>
       </div>
-      <div className="flex justify-end gap-2 mt-4">
-        <button type="button" onClick={onCancel} className="btn-secondary text-sm">Cancelar</button>
-        <button type="submit" disabled={saving} className="btn-primary text-sm">
+      <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 mt-4">
+        <button type="button" onClick={onCancel} className="btn-secondary text-sm w-full sm:w-auto justify-center">Cancelar</button>
+        <button type="submit" disabled={saving} className="btn-primary text-sm w-full sm:w-auto justify-center">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           Asignar
         </button>
@@ -852,12 +1009,12 @@ function MargenesTab() {
 
   return (
     <div className="bg-white rounded-lg shadow-sm border p-4">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
         <div>
           <h4 className="font-medium text-gray-900">Configuración de Márgenes</h4>
           <p className="text-sm text-gray-500">Define márgenes globales, por proveedor o por cliente</p>
         </div>
-        <button onClick={() => { setEditing(null); setShowForm(true) }} className="btn-primary text-sm flex items-center gap-1">
+        <button onClick={() => { setEditing(null); setShowForm(true) }} className="btn-primary text-sm flex items-center justify-center gap-1 w-full sm:w-auto">
           <Plus className="h-4 w-4" /> Agregar
         </button>
       </div>
@@ -871,7 +1028,17 @@ function MargenesTab() {
         />
       )}
 
-      <div className="overflow-x-auto">
+      <div className="md:hidden divide-y divide-gray-100 border rounded-lg overflow-hidden">
+        {margenes.map(m => (
+          <MargenMobileCard key={m.id} margen={m} onEdit={() => { setEditing(m); setShowForm(true) }} />
+        ))}
+        {margenes.length === 0 && (
+          <div className="px-4 py-8 text-center text-gray-500">
+            No hay márgenes configurados
+          </div>
+        )}
+      </div>
+      <div className="hidden md:block overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -954,7 +1121,7 @@ function MargenForm({ margen, proveedores, onSave, onCancel }) {
   return (
     <form onSubmit={handleSubmit} className="bg-gray-50 rounded-lg p-4 mb-4 border">
       <h5 className="font-medium mb-3">{margen ? 'Editar Margen' : 'Nuevo Margen'}</h5>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Scope</label>
           <select
@@ -1046,9 +1213,9 @@ function MargenForm({ margen, proveedores, onSave, onCancel }) {
           </select>
         </div>
       </div>
-      <div className="flex justify-end gap-2 mt-4">
-        <button type="button" onClick={onCancel} className="btn-secondary text-sm">Cancelar</button>
-        <button type="submit" disabled={saving} className="btn-primary text-sm">
+      <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 mt-4">
+        <button type="button" onClick={onCancel} className="btn-secondary text-sm w-full sm:w-auto justify-center">Cancelar</button>
+        <button type="submit" disabled={saving} className="btn-primary text-sm w-full sm:w-auto justify-center">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Guardar
         </button>
@@ -1152,7 +1319,6 @@ function SimuladorTab() {
               value={form.empresa_cliente_id}
               onChange={e => setForm({ ...form, empresa_cliente_id: e.target.value })}
               className="w-full px-3 py-2 border rounded-md text-sm"
-              size={4}
             >
               <option value="">-- Seleccionar --</option>
               {filteredEmpresas.slice(0, 20).map(emp => (
@@ -1207,7 +1373,7 @@ function SimuladorTab() {
           <button
             onClick={handleSimular}
             disabled={simulating || !form.empresa_cliente_id || !form.pais}
-            className="btn-primary flex items-center gap-2"
+            className="btn-primary flex items-center justify-center gap-2 w-full sm:w-auto"
           >
             {simulating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Calculator className="h-4 w-4" />}
             Simular Precio
@@ -1223,17 +1389,17 @@ function SimuladorTab() {
           {resultado.success ? (
             <div className="space-y-4">
               {/* Precio principal */}
-              <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg p-6">
-                <div className="flex items-center justify-between">
-                  <div>
+              <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg p-4 sm:p-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
                     <p className="text-sm opacity-80">Precio Final ({form.urgencia})</p>
-                    <p className="text-4xl font-bold">{resultado.moneda} {resultado.precio_final?.toFixed(2)}</p>
-                    <p className="text-sm mt-1 opacity-80">
+                    <p className="text-3xl sm:text-4xl font-bold break-words">{resultado.moneda} {resultado.precio_final?.toFixed(2)}</p>
+                    <p className="text-sm mt-1 opacity-80 break-words">
                       Modalidad: {resultado.modalidad} 
                       {resultado.proveedor && ` | Proveedor: ${resultado.proveedor}`}
                     </p>
                   </div>
-                  <DollarSign className="h-16 w-16 opacity-30" />
+                  <DollarSign className="h-12 w-12 sm:h-16 sm:w-16 opacity-30 shrink-0" />
                 </div>
               </div>
 
@@ -1265,7 +1431,7 @@ function SimuladorTab() {
                   <h5 className="font-medium text-gray-700 mb-2">Alternativas de Proveedores</h5>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {resultado.alternativas.map((alt, i) => (
-                      <div key={i} className={`flex items-center justify-between p-3 rounded-lg border ${
+                      <div key={i} className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 rounded-lg border ${
                         alt.seleccionado ? 'bg-blue-50 border-blue-200' : 'bg-white'
                       }`}>
                         <div className="flex items-center gap-2">

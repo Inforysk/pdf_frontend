@@ -105,9 +105,10 @@ export default function AdminClientesBalanceView() {
   // Vista de detalle de cliente
   if (selectedCliente && clienteDetalle) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 px-1 sm:px-0">
         {/* Header */}
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex items-start gap-4 w-full min-w-0">
           <button
             onClick={() => { setSelectedCliente(null); setClienteDetalle(null); }}
             className="p-2 hover:bg-gray-100 rounded-lg transition"
@@ -118,9 +119,10 @@ export default function AdminClientesBalanceView() {
             <h2 className="text-xl font-bold text-gray-900">{clienteDetalle.empresa.nombre}</h2>
             <p className="text-sm text-gray-500">{clienteDetalle.empresa.identificacion || 'Sin ID'}</p>
           </div>
+          </div>
           <button
             onClick={() => { setShowAjusteModal(selectedCliente); setAjusteData({ report_type: 'completo', cantidad: 0, motivo: '' }); }}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium"
           >
             <Plus className="h-4 w-4" />
             Ajustar Balance
@@ -128,7 +130,7 @@ export default function AdminClientesBalanceView() {
         </div>
 
         {/* Balances */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           {Object.entries(REPORT_TYPES).map(([type, config]) => {
             const bal = clienteDetalle.balances[type]?.balance || 0
             const Icon = config.icon
@@ -154,8 +156,8 @@ export default function AdminClientesBalanceView() {
             </h3>
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {clienteDetalle.usuarios.map(u => (
-                <div key={u.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                  <div>
+                <div key={u.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2 border-b border-gray-100 last:border-0">
+                  <div className="min-w-0">
                     <p className="font-medium text-gray-900">{u.nombre_completo || u.username}</p>
                     <p className="text-xs text-gray-500">{u.rol}</p>
                   </div>
@@ -178,8 +180,8 @@ export default function AdminClientesBalanceView() {
             </h3>
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {clienteDetalle.compras.slice(0, 10).map(c => (
-                <div key={c.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                  <div>
+                <div key={c.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2 border-b border-gray-100 last:border-0">
+                  <div className="min-w-0">
                     <p className="font-medium text-gray-900">{c.package_nombre}</p>
                     <p className="text-xs text-gray-500">{formatDate(c.created_at)}</p>
                   </div>
@@ -205,7 +207,30 @@ export default function AdminClientesBalanceView() {
           {clienteDetalle.consumos.length === 0 ? (
             <p className="text-gray-500 text-sm text-center py-8">Sin consumos registrados</p>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <div className="md:hidden space-y-3">
+              {clienteDetalle.consumos.slice(0, 20).map(c => {
+                const typeConfig = REPORT_TYPES[c.report_type] || REPORT_TYPES.completo
+                return (
+                  <div key={c.id} className="border rounded-lg p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs text-gray-500">{formatDate(c.used_at)}</p>
+                        <p className="font-mono text-sm text-blue-600 break-all">{c.cuit}</p>
+                      </div>
+                      <span className={`px-2 py-1 rounded text-xs font-medium bg-${typeConfig.color}-100 text-${typeConfig.color}-700 shrink-0`}>
+                        {typeConfig.label}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900 break-words">{c.razon_social || '-'}</p>
+                      <p className="text-xs text-gray-500 mt-1">Usuario: {c.usuario_nombre || '-'}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-600">
                   <tr>
@@ -236,6 +261,7 @@ export default function AdminClientesBalanceView() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </div>
       </div>
@@ -244,7 +270,7 @@ export default function AdminClientesBalanceView() {
 
   // Vista principal - Lista de clientes
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-1 sm:px-0">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -256,7 +282,7 @@ export default function AdminClientesBalanceView() {
         </div>
         <button
           onClick={loadData}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition text-sm font-medium"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition text-sm font-medium"
         >
           <RefreshCw className="h-4 w-4" />
           Actualizar
@@ -265,8 +291,8 @@ export default function AdminClientesBalanceView() {
 
       {/* Stats globales */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl p-4 text-white">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl p-4 text-white sm:col-span-2 md:col-span-1">
             <p className="text-indigo-100 text-xs font-medium">Total Balance</p>
             <p className="text-2xl font-bold">
               {Object.values(stats.balances_totales).reduce((a, b) => a + (b || 0), 0)}
@@ -307,7 +333,52 @@ export default function AdminClientesBalanceView() {
 
       {/* Tabla de clientes */}
       <div className="bg-white rounded-xl border overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="md:hidden divide-y divide-gray-100">
+          {filteredClientes.map(c => (
+            <div key={c.id} className="p-4 space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-medium text-gray-900 break-words">{c.nombre}</p>
+                  <p className="text-xs text-gray-500 break-all">{c.identificacion || '-'}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs text-gray-500">Total</p>
+                  <p className="font-bold text-gray-900">{c.total_balance}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-lg bg-indigo-50 px-3 py-2"><p className="text-xs text-gray-500">Completo</p><p className="font-semibold text-indigo-700">{c.balance_completo}</p></div>
+                <div className="rounded-lg bg-blue-50 px-3 py-2"><p className="text-xs text-gray-500">Reducido</p><p className="font-semibold text-blue-700">{c.balance_reducido}</p></div>
+                <div className="rounded-lg bg-purple-50 px-3 py-2"><p className="text-xs text-gray-500">Histórico</p><p className="font-semibold text-purple-700">{c.balance_historico}</p></div>
+                <div className="rounded-lg bg-orange-50 px-3 py-2"><p className="text-xs text-gray-500">Actualizado</p><p className="font-semibold text-orange-700">{c.balance_actualizado}</p></div>
+                <div><p className="text-xs text-gray-500">Consumos</p><p className="font-medium text-gray-700">{c.total_consumos}</p></div>
+                <div><p className="text-xs text-gray-500">Pagado</p><p className="font-medium text-green-600">${c.total_pagado?.toFixed(0) || 0}</p></div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => loadClienteDetalle(c.id)}
+                  className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition"
+                >
+                  <Eye className="h-4 w-4" /> Ver detalle
+                </button>
+                <button
+                  onClick={() => { setShowAjusteModal(c.id); setAjusteData({ report_type: 'completo', cantidad: 0, motivo: '' }); }}
+                  className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition"
+                >
+                  <Plus className="h-4 w-4" /> Ajustar
+                </button>
+              </div>
+            </div>
+          ))}
+          {filteredClientes.length === 0 && (
+            <div className="px-4 py-12 text-center text-gray-500">
+              No se encontraron clientes
+            </div>
+          )}
+        </div>
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-600">
               <tr>
@@ -390,7 +461,7 @@ export default function AdminClientesBalanceView() {
       {showAjusteModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl">
-            <div className="p-6 border-b bg-gradient-to-r from-indigo-500 to-purple-600">
+            <div className="p-4 sm:p-6 border-b bg-gradient-to-r from-indigo-500 to-purple-600">
               <div className="flex items-center justify-between text-white">
                 <h3 className="text-lg font-bold">Ajustar Balance</h3>
                 <button onClick={() => setShowAjusteModal(null)} className="p-1 hover:bg-white/20 rounded">
@@ -398,7 +469,7 @@ export default function AdminClientesBalanceView() {
                 </button>
               </div>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-4 sm:p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Informe</label>
                 <select
@@ -432,7 +503,7 @@ export default function AdminClientesBalanceView() {
                 />
               </div>
             </div>
-            <div className="p-4 border-t bg-gray-50 flex gap-3">
+            <div className="p-4 border-t bg-gray-50 flex flex-col-reverse sm:flex-row gap-3">
               <button
                 onClick={() => setShowAjusteModal(null)}
                 className="flex-1 px-4 py-2.5 text-gray-700 hover:bg-gray-200 rounded-xl transition font-medium"
