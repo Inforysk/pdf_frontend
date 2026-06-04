@@ -118,6 +118,21 @@ const normalizePublication = (p, source = 'resultado', idx = 0) => ({
   es_nuevo_ingreso: !!p?.es_nuevo_ingreso,
 })
 
+const buildPublicationSignature = (p) => {
+  if (!p) return ''
+  const titulo = normalizeText(p.titulo || '')
+    .toLowerCase()
+    .replace(/\bcuit[:\s]*\d{11}\b/g, ' ')
+    .replace(/\bbo(let[ií]n)?[:\s]*\d{3,6}\/\d{2}\b/g, ' ')
+    .replace(/\b\d{3,6}\/\d{2}\b/g, ' ')
+    .slice(0, 180)
+  return [
+    p.fecha || '',
+    p.seccion || '',
+    titulo,
+  ].join('|')
+}
+
 const buildPublicationSummary = (item) => {
   if (!item) return ''
   const lines = [
@@ -235,7 +250,7 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
     const tieneContenidoMinimo = (r) => {
       const titulo = (r.titulo || '').trim()
       const texto = (r.texto_completo || '').trim()
-      return titulo.length > 10 || texto.length > 50
+      return Boolean(titulo || texto || r.fecha || r.numero_boletin || r.url)
     }
     
     const tabla = resultadosLocal
@@ -244,9 +259,7 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
     
     const uniqueMap = new Map()
     tabla.forEach((p) => {
-      const textoNorm = normalizeText(p.texto || '').split(/\s+/).slice(0, 50).join(' ')
-      const stableRef = p.url || (p.id != null ? `id-${p.id}` : '')
-      const dedupeKey = stableRef || `${p.fecha || ''}-${textoNorm.slice(0, 200)}`
+      const dedupeKey = buildPublicationSignature(p)
       if (!uniqueMap.has(dedupeKey)) {
         uniqueMap.set(dedupeKey, p)
       }
@@ -378,11 +391,17 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
       const resultadosExistentes = resultado?.resultados || []
       const resultadosNuevos = data.resultados || []
       
-      // Deduplicar combinando por URL/fecha
-      const urlsExistentes = new Set(resultadosExistentes.map(r => r.url || r.url_fuente || ''))
-      const nuevosUnicos = resultadosNuevos.filter(r => {
-        const url = r.url || r.url_fuente || ''
-        return url && !urlsExistentes.has(url)
+      // Deduplicar con firma compuesta; URL sola no alcanza porque varias publicaciones comparten fuente.
+      const firmasExistentes = new Set(
+        resultadosExistentes
+          .map((r, i) => buildPublicationSignature(normalizePublication(r, 'existente', i)))
+          .filter(Boolean)
+      )
+      const nuevosUnicos = resultadosNuevos.filter((r, i) => {
+        const firma = buildPublicationSignature(normalizePublication(r, 'nuevo', i))
+        if (!firma || firmasExistentes.has(firma)) return false
+        firmasExistentes.add(firma)
+        return true
       })
       
       const resultadosCombinados = [...resultadosExistentes, ...nuevosUnicos]
@@ -418,8 +437,8 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
   const tieneContenidoMinimo = (r) => {
     const titulo = (r.titulo || '').trim()
     const texto = (r.texto_completo || '').trim()
-    // Mostrar si tiene título significativo o algo de texto
-    return titulo.length > 10 || texto.length > 50
+    // Mostrar todas las filas útiles, aunque el texto completo venga resumido desde cache.
+    return Boolean(titulo || texto || r.fecha || r.numero_boletin || r.url)
   }
   
   // Mostrar todos los resultados que tengan contenido mínimo
@@ -430,10 +449,8 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
   // Deduplicar por primeras palabras del texto (más preciso)
   const uniquePublicationMap = new Map()
   publicacionesTabla.forEach((p) => {
-    // Priorizar referencia estable (URL/ID) para no colapsar avisos distintos.
-    const textoNorm = normalizeText(p.texto || '').split(/\s+/).slice(0, 50).join(' ')
-    const stableRef = p.url || (p.id != null ? `id-${p.id}` : '')
-    const dedupeKey = stableRef || `${p.fecha || ''}-${textoNorm.slice(0, 200)}`
+    // Dedupe por firma compuesta para conservar avisos distintos aunque compartan URL.
+    const dedupeKey = buildPublicationSignature(p)
     if (!uniquePublicationMap.has(dedupeKey)) {
       uniquePublicationMap.set(dedupeKey, p)
     } else {
