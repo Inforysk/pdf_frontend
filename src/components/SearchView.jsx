@@ -1793,6 +1793,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
             )}
             <div className="grid gap-4">
               {filteredSolicitudes.map((sol) => {
+                const tipoId = sol.tipo_identificacion || 'ID'
                 const nombreLimpio = cleanDisplayRazonSocial(sol.razon_social)
 
                 // Resolver país real priorizando pais/codigo_pais explícitos.
