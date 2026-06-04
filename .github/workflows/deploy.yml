@@ -32,7 +32,8 @@ jobs:
           username: ${{ secrets.AWS_USER }}
           key: ${{ secrets.AWS_SSH_KEY }}
           source: "dist/*"
-          target: "/tmp/frontend_deploy/"
+          target: "/opt/inforysk/frontend_deploy/"
+          tar_tmp_path: "/opt/inforysk/frontend_deploy/"
           strip_components: 1
           overwrite: true
       
@@ -45,7 +46,8 @@ jobs:
           script: |
             # Move files to final location
             sudo rm -rf /opt/inforysk/frontend/assets /opt/inforysk/frontend/index.html /opt/inforysk/frontend/favicon.ico 2>/dev/null || true
-            sudo mv /tmp/frontend_deploy/* /opt/inforysk/frontend/
+            sudo mkdir -p /opt/inforysk/frontend_deploy
+            sudo mv /opt/inforysk/frontend_deploy/* /opt/inforysk/frontend/
             sudo chown -R nginx:nginx /opt/inforysk/frontend/
-            sudo rm -rf /tmp/frontend_deploy
+            sudo rm -rf /opt/inforysk/frontend_deploy
             echo "✅ Frontend deployed successfully!"
