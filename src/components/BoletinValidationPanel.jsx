@@ -245,7 +245,8 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
     const uniqueMap = new Map()
     tabla.forEach((p) => {
       const textoNorm = normalizeText(p.texto || '').split(/\s+/).slice(0, 50).join(' ')
-      const dedupeKey = `${p.fecha || ''}-${textoNorm.slice(0, 200)}`
+      const stableRef = p.url || (p.id != null ? `id-${p.id}` : '')
+      const dedupeKey = stableRef || `${p.fecha || ''}-${textoNorm.slice(0, 200)}`
       if (!uniqueMap.has(dedupeKey)) {
         uniqueMap.set(dedupeKey, p)
       }
@@ -268,6 +269,14 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
   useEffect(() => {
     setPaginaActual(1)
   }, [filtroSeccion, soloConBO, resultado])
+
+  // Cada vez que se abre el modal, mostrar todas las publicaciones por defecto.
+  useEffect(() => {
+    if (!selectionModalOpen) return
+    setFiltroSeccion('todas')
+    setSoloConBO(false)
+    setPaginaActual(1)
+  }, [selectionModalOpen])
 
   // Obtener paso actual del modal de progreso
   const stepsToUse = historialCompletoLoading ? HISTORIAL_COMPLETO_STEPS : BOLETIN_STEPS
@@ -308,6 +317,9 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
       setResultado(data)
       setYaValidado(true) // Marcar que ya se validó
       setExpanded(true) // Siempre expandir para mostrar resultados o mensaje de "no encontrado"
+      setFiltroSeccion('todas')
+      setSoloConBO(false)
+      setPaginaActual(1)
 
       // Cargar historial para mostrar evolución y cambios detectados
       setHistorialLoading(true)
@@ -358,6 +370,9 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
       }
 
       const data = res.data.data || {}
+      setFiltroSeccion('todas')
+      setSoloConBO(false)
+      setPaginaActual(1)
       
       // Combinar resultados nuevos con los existentes
       const resultadosExistentes = resultado?.resultados || []
@@ -415,9 +430,10 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
   // Deduplicar por primeras palabras del texto (más preciso)
   const uniquePublicationMap = new Map()
   publicacionesTabla.forEach((p) => {
-    // Usar primeras 50 palabras del texto normalizado como clave
+    // Priorizar referencia estable (URL/ID) para no colapsar avisos distintos.
     const textoNorm = normalizeText(p.texto || '').split(/\s+/).slice(0, 50).join(' ')
-    const dedupeKey = `${p.fecha || ''}-${textoNorm.slice(0, 200)}`
+    const stableRef = p.url || (p.id != null ? `id-${p.id}` : '')
+    const dedupeKey = stableRef || `${p.fecha || ''}-${textoNorm.slice(0, 200)}`
     if (!uniquePublicationMap.has(dedupeKey)) {
       uniquePublicationMap.set(dedupeKey, p)
     } else {
@@ -460,7 +476,11 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
     paginaSegura * ITEMS_POR_PAGINA
   )
   
-  const selectedPublication = publicacionesFiltradas.find((p) => p.key === selectedPublicationKey) || publicacionesFiltradas[0] || null
+  const selectedPublication =
+    publicacionesUnicas.find((p) => p.key === selectedPublicationKey) ||
+    publicacionesFiltradas[0] ||
+    publicacionesUnicas[0] ||
+    null
   const actualizacionDetectada = !!(resultado?.actualizacion_detectada || historialData?.actualizacion_detectada)
   const referenciaAlta = !!(historialData?.referencia_alta || actualizacionDetectada)
 
@@ -985,6 +1005,8 @@ export default function BoletinValidationPanel({ cuit, razonSocial, onApplyField
                               <button
                                 type="button"
                                 onClick={() => {
+                                  setFiltroSeccion('todas')
+                                  setSoloConBO(false)
                                   setSelectedPublicationKey(p.key)
                                   setSelectionModalOpen(true)
                                 }}
