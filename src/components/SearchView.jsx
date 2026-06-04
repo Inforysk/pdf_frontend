@@ -162,25 +162,10 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
   }
 
   const resolvePais = (empresa) => {
-    // 1. Si tiene país guardado explícitamente, usarlo
-    if (empresa?.pais) {
-      return empresa.pais
-    }
-
-    const codigoPais = (empresa?.codigo_pais || '').toUpperCase()
-    if (codigoPais === 'CL') return 'Chile'
-    if (codigoPais === 'UY') return 'Uruguay'
-    if (codigoPais === 'AR') return 'Argentina'
-    if (codigoPais === 'CO') return 'Colombia'
-    if (codigoPais === 'PE') return 'Peru'
-    if (codigoPais === 'DO') return 'Rep. Dominicana'
-    if (codigoPais === 'HN') return 'Honduras'
-    if (codigoPais === 'MX') return 'Mexico'
-    if (codigoPais === 'CR') return 'Costa Rica'
-    if (codigoPais === 'GT') return 'Guatemala'
-    if (codigoPais === 'BR') return 'Brasil'
-    
     const tipo = inferDisplayedTaxType(empresa)
+    const codigoPais = (empresa?.codigo_pais || '').toUpperCase()
+    const paisRaw = (empresa?.pais || '').trim()
+    const paisNorm = paisRaw.toLowerCase()
     const cuitDigits = (empresa?.cuit || '').replace(/\D/g, '')
 
     const contentText = [
@@ -195,6 +180,36 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
       .join(' ')
       .toLowerCase()
 
+    const domChile = contentText.includes('chile') || contentText.includes('santiago') || contentText.includes('vina del mar') || contentText.includes('viña del mar')
+    const domUruguay = contentText.includes('uruguay') || contentText.includes('montevideo') || contentText.includes('republica oriental')
+
+    // RUT ambiguo: priorizar codigo y domicilio por encima de pais legacy.
+    if (tipo === 'RUT') {
+      if (codigoPais === 'CL') return 'Chile'
+      if (codigoPais === 'UY') return 'Uruguay'
+      if (domChile) return 'Chile'
+      if (domUruguay) return 'Uruguay'
+      if (paisNorm === 'cl' || paisNorm === 'chile') return 'Chile'
+      if (paisNorm === 'uy' || paisNorm === 'uruguay') return 'Uruguay'
+    }
+
+    // Si tiene país guardado explícitamente, usarlo para el resto de casos.
+    if (paisRaw) {
+      return paisRaw
+    }
+
+    if (codigoPais === 'CL') return 'Chile'
+    if (codigoPais === 'UY') return 'Uruguay'
+    if (codigoPais === 'AR') return 'Argentina'
+    if (codigoPais === 'CO') return 'Colombia'
+    if (codigoPais === 'PE') return 'Peru'
+    if (codigoPais === 'DO') return 'Rep. Dominicana'
+    if (codigoPais === 'HN') return 'Honduras'
+    if (codigoPais === 'MX') return 'Mexico'
+    if (codigoPais === 'CR') return 'Costa Rica'
+    if (codigoPais === 'GT') return 'Guatemala'
+    if (codigoPais === 'BR') return 'Brasil'
+    
     if (contentText.includes('uruguay') || contentText.includes('montevideo') || contentText.includes('republica oriental')) {
       return 'Uruguay'
     }
@@ -1747,8 +1762,8 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
           // Filtrar solicitudes cuyo CUIT ya aparece en resultados de empresas (evitar duplicados)
           const empresaCuits = new Set(results.map(e => (e.cuit || '').replace(/[-.\s]/g, '')))
           
-          // Mapeo tipo_identificacion → país
-          const TIPO_TO_PAIS = { CUIT: 'Argentina', RUC: 'Peru', RUT: 'Uruguay', RNC: 'Rep. Dominicana', NIT: 'Colombia', RTN: 'Honduras', 'CEDULA JURIDICA': 'Costa Rica', CNPJ: 'Brasil', RFC: 'Mexico', HRB: 'Alemania', DPI: 'Guatemala' }
+          // Mapeo tipo_identificacion → país (RUT se resuelve aparte por ambigüedad CL/UY)
+          const TIPO_TO_PAIS = { CUIT: 'Argentina', RUC: 'Peru', RNC: 'Rep. Dominicana', NIT: 'Colombia', RTN: 'Honduras', 'CEDULA JURIDICA': 'Costa Rica', CNPJ: 'Brasil', RFC: 'Mexico', HRB: 'Alemania', DPI: 'Guatemala' }
 
           const codigoToPais = {
             AR: 'Argentina',
@@ -1766,10 +1781,29 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
           }
 
           const resolveSolicitudPais = (sol) => {
-            if (sol?.pais) return sol.pais
             const code = (sol?.codigo_pais || '').toUpperCase()
             if (code && codigoToPais[code]) return codigoToPais[code]
-            return TIPO_TO_PAIS[(sol?.tipo_identificacion || 'ID').toUpperCase()] || null
+
+            const tipo = (sol?.tipo_identificacion || '').toUpperCase()
+            const paisRaw = (sol?.pais || '').trim()
+            const paisNorm = paisRaw.toLowerCase()
+            const contentText = [sol?.domicilio, sol?.domicilio_legal, sol?.direccion, sol?.ciudad, sol?.provincia]
+              .filter(Boolean)
+              .join(' ')
+              .toLowerCase()
+            const idDigits = String(sol?.cuit || '').replace(/\D/g, '')
+
+            if (tipo === 'RUT') {
+              if (contentText.includes('chile') || contentText.includes('santiago') || contentText.includes('vina del mar') || contentText.includes('viña del mar')) return 'Chile'
+              if (contentText.includes('uruguay') || contentText.includes('montevideo') || contentText.includes('republica oriental')) return 'Uruguay'
+              if (paisNorm === 'chile' || paisNorm === 'cl') return 'Chile'
+              if (paisNorm === 'uruguay' || paisNorm === 'uy') return 'Uruguay'
+              if (idDigits.length === 9) return 'Chile'
+              if (idDigits.length === 12) return 'Uruguay'
+            }
+
+            if (paisRaw) return paisRaw
+            return TIPO_TO_PAIS[tipo || 'ID'] || null
           }
           
           const filteredSolicitudes = solicitudesResults.filter(sol => {
