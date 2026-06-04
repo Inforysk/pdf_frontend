@@ -166,6 +166,19 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
     if (empresa?.pais) {
       return empresa.pais
     }
+
+    const codigoPais = (empresa?.codigo_pais || '').toUpperCase()
+    if (codigoPais === 'CL') return 'Chile'
+    if (codigoPais === 'UY') return 'Uruguay'
+    if (codigoPais === 'AR') return 'Argentina'
+    if (codigoPais === 'CO') return 'Colombia'
+    if (codigoPais === 'PE') return 'Peru'
+    if (codigoPais === 'DO') return 'Rep. Dominicana'
+    if (codigoPais === 'HN') return 'Honduras'
+    if (codigoPais === 'MX') return 'Mexico'
+    if (codigoPais === 'CR') return 'Costa Rica'
+    if (codigoPais === 'GT') return 'Guatemala'
+    if (codigoPais === 'BR') return 'Brasil'
     
     const tipo = inferDisplayedTaxType(empresa)
     const cuitDigits = (empresa?.cuit || '').replace(/\D/g, '')
@@ -1736,6 +1749,28 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
           
           // Mapeo tipo_identificacion → país
           const TIPO_TO_PAIS = { CUIT: 'Argentina', RUC: 'Peru', RUT: 'Uruguay', RNC: 'Rep. Dominicana', NIT: 'Colombia', RTN: 'Honduras', 'CEDULA JURIDICA': 'Costa Rica', CNPJ: 'Brasil', RFC: 'Mexico', HRB: 'Alemania', DPI: 'Guatemala' }
+
+          const codigoToPais = {
+            AR: 'Argentina',
+            CL: 'Chile',
+            UY: 'Uruguay',
+            CO: 'Colombia',
+            PE: 'Peru',
+            DO: 'Rep. Dominicana',
+            HN: 'Honduras',
+            MX: 'Mexico',
+            CR: 'Costa Rica',
+            GT: 'Guatemala',
+            BR: 'Brasil',
+            DE: 'Alemania',
+          }
+
+          const resolveSolicitudPais = (sol) => {
+            if (sol?.pais) return sol.pais
+            const code = (sol?.codigo_pais || '').toUpperCase()
+            if (code && codigoToPais[code]) return codigoToPais[code]
+            return TIPO_TO_PAIS[(sol?.tipo_identificacion || 'ID').toUpperCase()] || null
+          }
           
           const filteredSolicitudes = solicitudesResults.filter(sol => {
             const solCuit = (sol.cuit || '').replace(/[-.\s]/g, '')
@@ -1743,8 +1778,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
             
             // Filtrar por país si hay filtro activo
             if (countryFilter !== 'all') {
-              const tipoId = sol.tipo_identificacion || 'ID'
-              const solPaisReal = TIPO_TO_PAIS[tipoId] || null
+              const solPaisReal = resolveSolicitudPais(sol)
               if (solPaisReal !== countryFilter) return false
             }
             return true
@@ -1759,11 +1793,10 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
             )}
             <div className="grid gap-4">
               {filteredSolicitudes.map((sol) => {
-                const tipoId = sol.tipo_identificacion || 'ID'
                 const nombreLimpio = cleanDisplayRazonSocial(sol.razon_social)
 
-                // Resolver país real desde tipo_identificacion (NO del filtro)
-                const solPais = TIPO_TO_PAIS[tipoId] || null
+                // Resolver país real priorizando pais/codigo_pais explícitos.
+                const solPais = resolveSolicitudPais(sol)
                 const iso = solPais ? COUNTRY_ISO[solPais] : null
 
                 // Solicitudes no tienen fecha_informe
