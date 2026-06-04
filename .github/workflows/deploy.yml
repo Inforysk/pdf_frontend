@@ -24,6 +24,20 @@ jobs:
       
       - name: Build
         run: npm run build
+
+      - name: Prepare remote staging and free tmp
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USER }}
+          key: ${{ secrets.AWS_SSH_KEY }}
+          script: |
+            mkdir -p /home/ec2-user/frontend_deploy
+            rm -rf /home/ec2-user/frontend_deploy/*
+            # Cleanup safe temp leftovers to avoid scp failures when /tmp is full
+            sudo find /tmp -maxdepth 1 -type d -name "frontend_deploy*" -exec rm -rf {} + || true
+            sudo find /tmp -maxdepth 1 -type f -name "*.tar.gz" -mtime +1 -delete || true
+            df -h /tmp
       
       - name: Upload build to AWS
         uses: appleboy/scp-action@v0.1.7
@@ -32,8 +46,8 @@ jobs:
           username: ${{ secrets.AWS_USER }}
           key: ${{ secrets.AWS_SSH_KEY }}
           source: "dist/*"
-          target: "~/frontend_deploy/"
-          tar_tmp_path: "~/frontend_deploy/"
+          target: "/home/ec2-user/frontend_deploy/"
+          tar_tmp_path: "/home/ec2-user/frontend_deploy/"
           strip_components: 1
           overwrite: true
           debug: true
