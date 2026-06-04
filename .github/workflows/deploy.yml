@@ -32,10 +32,11 @@ jobs:
           username: ${{ secrets.AWS_USER }}
           key: ${{ secrets.AWS_SSH_KEY }}
           source: "dist/*"
-          target: "/home/ec2-user/frontend_deploy/"
-          tar_tmp_path: "/home/ec2-user/frontend_deploy/"
+          target: "~/frontend_deploy/"
+          tar_tmp_path: "~/frontend_deploy/"
           strip_components: 1
           overwrite: true
+          debug: true
       
       - name: Deploy and set permissions
         uses: appleboy/ssh-action@v1.0.3
@@ -46,8 +47,8 @@ jobs:
           script: |
             # Move files to final location
             sudo rm -rf /opt/inforysk/frontend/assets /opt/inforysk/frontend/index.html /opt/inforysk/frontend/favicon.ico 2>/dev/null || true
-            mkdir -p /home/ec2-user/frontend_deploy
-            sudo mv /home/ec2-user/frontend_deploy/* /opt/inforysk/frontend/
+            mkdir -p "$HOME/frontend_deploy"
+            sudo mv "$HOME/frontend_deploy"/* /opt/inforysk/frontend/
             sudo chown -R nginx:nginx /opt/inforysk/frontend/
-            rm -rf /home/ec2-user/frontend_deploy
+            rm -rf "$HOME/frontend_deploy"
             echo "✅ Frontend deployed successfully!"
