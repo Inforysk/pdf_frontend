@@ -479,7 +479,7 @@ function UsersTab() {
 // ── Validación de identificador fiscal ──
 function validateTaxId(taxId, tipo) {
   if (!taxId) return { valid: false, error: 'Requerido' }
-  const clean = taxId.replace(/[-.\\s/]/g, '')
+  const clean = taxId.replace(/[-.\\s/]/g, '').toUpperCase()
   if (!clean) return { valid: false, error: 'Requerido' }
 
   if (tipo === 'CUIT') {
@@ -493,18 +493,35 @@ function validateTaxId(taxId, tipo) {
     return { valid: true }
   }
   if (tipo === 'RUT') {
-    if (!/^\d+$/.test(clean)) return { valid: false, error: 'Solo dígitos' }
-    if (clean.length !== 12) return { valid: false, error: 'Debe tener 12 dígitos' }
-    const rest = clean.slice(0, 11)
-    let total = 0, factor = 2
-    for (let i = 10; i >= 0; i--) {
-      total += factor * parseInt(rest[i])
-      factor = factor === 9 ? 2 : factor + 1
+    if (/^\d{12}$/.test(clean)) {
+      const rest = clean.slice(0, 11)
+      let total = 0, factor = 2
+      for (let i = 10; i >= 0; i--) {
+        total += factor * parseInt(rest[i])
+        factor = factor === 9 ? 2 : factor + 1
+      }
+      let dv = 11 - (total % 11)
+      if (dv === 11) dv = 0
+      else if (dv === 10) dv = 1
+      if (parseInt(clean[11]) !== dv) return { valid: false, error: 'Dígito verificador inválido' }
+      return { valid: true }
     }
-    let dv = 11 - (total % 11)
-    if (dv === 11) dv = 0
-    else if (dv === 10) dv = 1
-    if (parseInt(clean[11]) !== dv) return { valid: false, error: 'Dígito verificador inválido' }
+
+    if (!/^\d{7,8}[0-9K]$/.test(clean)) {
+      return { valid: false, error: 'RUT inválido (Chile: 7-8 + DV, Uruguay: 12 dígitos)' }
+    }
+
+    const cuerpo = clean.slice(0, -1)
+    const dvIngresado = clean.slice(-1)
+    let suma = 0
+    let multiplicador = 2
+    for (let i = cuerpo.length - 1; i >= 0; i--) {
+      suma += parseInt(cuerpo[i]) * multiplicador
+      multiplicador = multiplicador === 7 ? 2 : multiplicador + 1
+    }
+    const resto = 11 - (suma % 11)
+    const dvEsperado = resto === 11 ? '0' : resto === 10 ? 'K' : String(resto)
+    if (dvIngresado !== dvEsperado) return { valid: false, error: 'Dígito verificador inválido' }
     return { valid: true }
   }
   if (tipo === 'RNC') {

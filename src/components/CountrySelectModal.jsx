@@ -16,7 +16,7 @@ const PAISES_CON_VALIDACION = new Set(['AR'])
 // Validación de formato local (misma lógica que DataEditor)
 function quickFormatCheck(taxId, tipo) {
   if (!taxId) return { valid: false, error: 'Requerido' }
-  const clean = taxId.replace(/[-.\s/]/g, '')
+  const clean = taxId.replace(/[-.\s/]/g, '').toUpperCase()
   if (!clean) return { valid: false, error: 'Requerido' }
   if (tipo === 'CUIT') {
     if (!/^\d+$/.test(clean)) return { valid: false, error: 'Solo dígitos' }
@@ -29,19 +29,37 @@ function quickFormatCheck(taxId, tipo) {
     return { valid: true }
   }
   if (tipo === 'RUT') {
-    if (!/^\d+$/.test(clean)) return { valid: false, error: 'Solo dígitos' }
-    if (clean.length !== 12) return { valid: false, error: 'Debe tener 12 dígitos' }
-    // Validación dígito verificador módulo 11
-    const rest = clean.slice(0, 11)
-    let total = 0, factor = 2
-    for (let i = 10; i >= 0; i--) {
-      total += factor * parseInt(rest[i])
-      factor = factor === 9 ? 2 : factor + 1
+    if (/^\d{12}$/.test(clean)) {
+      // Uruguay: 12 dígitos.
+      const rest = clean.slice(0, 11)
+      let total = 0, factor = 2
+      for (let i = 10; i >= 0; i--) {
+        total += factor * parseInt(rest[i])
+        factor = factor === 9 ? 2 : factor + 1
+      }
+      let dv = 11 - (total % 11)
+      if (dv === 11) dv = 0
+      else if (dv === 10) dv = 1
+      if (parseInt(clean[11]) !== dv) return { valid: false, error: 'Dígito verificador inválido' }
+      return { valid: true }
     }
-    let dv = 11 - (total % 11)
-    if (dv === 11) dv = 0
-    else if (dv === 10) dv = 1
-    if (parseInt(clean[11]) !== dv) return { valid: false, error: 'Dígito verificador inválido' }
+
+    if (!/^\d{7,8}[0-9K]$/.test(clean)) {
+      return { valid: false, error: 'RUT inválido (Chile: 7-8 + DV, Uruguay: 12 dígitos)' }
+    }
+
+    // Chile: 7-8 dígitos + DV (0-9/K).
+    const cuerpo = clean.slice(0, -1)
+    const dvIngresado = clean.slice(-1)
+    let suma = 0
+    let multiplicador = 2
+    for (let i = cuerpo.length - 1; i >= 0; i--) {
+      suma += parseInt(cuerpo[i]) * multiplicador
+      multiplicador = multiplicador === 7 ? 2 : multiplicador + 1
+    }
+    const resto = 11 - (suma % 11)
+    const dvEsperado = resto === 11 ? '0' : resto === 10 ? 'K' : String(resto)
+    if (dvIngresado !== dvEsperado) return { valid: false, error: 'Dígito verificador inválido' }
     return { valid: true }
   }
   if (tipo === 'NIT') {
@@ -72,7 +90,12 @@ function autoFormatTaxId(value, tipo) {
     return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12, 14)}`
   }
   if (tipo === 'RUT') {
-    // Solo dígitos, máx 12
+    const cleanRut = value.toUpperCase().replace(/[^0-9K]/g, '')
+    if (cleanRut.includes('K') || cleanRut.length <= 9) {
+      const limited = cleanRut.slice(0, 9)
+      if (limited.length <= 1) return limited
+      return `${limited.slice(0, -1)}-${limited.slice(-1)}`
+    }
     return digits.slice(0, 12)
   }
   // Otros tipos: devolver tal cual

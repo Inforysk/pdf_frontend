@@ -337,6 +337,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     // Permitir búsqueda solo por país (sin texto)
     const hasText = searchValue && searchValue.trim().length >= 2
     const hasCountry = modalCountryFilter !== 'all'
+    const taxIdQuery = String(searchValue || '').toUpperCase().replace(/[^0-9K]/g, '')
     
     if (!hasText && !hasCountry) return
     
@@ -346,8 +347,11 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     setEmpresaExistente(false)
     try {
       // Buscar en nuestra BD con filtros
+      const queryTerm = hasText
+        ? (modalSearchType === 'cuit' && taxIdQuery ? taxIdQuery : searchValue.trim())
+        : '*'
       const params = { 
-        q: hasText ? searchValue.trim() : '*', // Usar * para buscar solo por país
+        q: queryTerm, // Para CUIT/RUT usar término normalizado y evitar fallas por puntos/guiones
         limit: 50,
         pais: modalCountryFilter !== 'all' ? modalCountryFilter : undefined
       }
@@ -356,8 +360,10 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
       
       // Filtrar por tipo de búsqueda en frontend si es necesario
       if (hasText && modalSearchType === 'cuit') {
-        const digits = searchValue.replace(/\D/g, '')
-        resultados = resultados.filter(e => (e.cuit || '').replace(/\D/g, '').includes(digits))
+        resultados = resultados.filter(e => {
+          const companyId = String(e.cuit || '').toUpperCase().replace(/[^0-9K]/g, '')
+          return companyId.includes(taxIdQuery)
+        })
       } else if (hasText && modalSearchType === 'nombre') {
         const term = searchValue.toLowerCase()
         resultados = resultados.filter(e => (e.razon_social || '').toLowerCase().includes(term))
