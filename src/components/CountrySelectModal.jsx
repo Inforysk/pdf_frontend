@@ -7,7 +7,7 @@ const COUNTRY_FLAGS = {
   PE: '🇵🇪', EC: '🇪🇨', PA: '🇵🇦', NI: '🇳🇮', DO: '🇩🇴',
   CL: '🇨🇱', SV: '🇸🇻', DE: '🇩🇪', US: '🇺🇸', BR: '🇧🇷',
   MX: '🇲🇽', HN: '🇭🇳', BO: '🇧🇴', PY: '🇵🇾', VE: '🇻🇪',
-  JM: '🇯🇲', // Jamaica
+  JM: '🇯🇲', AG: '🇦🇬', // Jamaica / Antigua & Barbuda
 }
 
 // Países con validación externa disponible
@@ -232,7 +232,7 @@ export default function CountrySelectModal({ onSelect, onClose }) {
               <button onClick={handleBackToCountries} className="p-1 rounded hover:bg-gray-100 text-gray-500">
                 <ArrowLeft className="h-4 w-4" />
               </button>
-              <span className="text-xl">{COUNTRY_FLAGS[selectedCountry.codigo_pais] || '🏳️'}</span>
+              <span className="text-xl">{COUNTRY_FLAGS[selectedCountry.codigo_pais] || selectedCountry.bandera || '🏳️'}</span>
               <h2 className="text-lg font-semibold text-gray-900">{selectedCountry.nombre_pais}</h2>
             </div>
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
@@ -436,7 +436,7 @@ export default function CountrySelectModal({ onSelect, onClose }) {
                   onClick={() => handleSelectCountry(pais)}
                   className="flex items-center gap-3 px-4 py-3 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors text-left"
                 >
-                  <span className="text-2xl">{COUNTRY_FLAGS[pais.codigo_pais] || '🏳️'}</span>
+                  <span className="text-2xl">{COUNTRY_FLAGS[pais.codigo_pais] || pais.bandera || '🏳️'}</span>
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-gray-900 truncate">{pais.nombre_pais}</p>
                     <p className="text-xs text-gray-500">{pais.tipo_id_fiscal}{pais.formato_id ? ` · ${pais.formato_id}` : ''}</p>

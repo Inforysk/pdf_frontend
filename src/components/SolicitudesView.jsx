@@ -27,11 +27,28 @@ const COUNTRY_ISO = {
   'Ecuador': 'ec', 'Paraguay': 'py', 'Bolivia': 'bo', 'Venezuela': 've',
   'Panamá': 'pa', 'Panama': 'pa', 'El Salvador': 'sv', 'Nicaragua': 'ni', 'Saint Lucia': 'lc',
   'Jamaica': 'jm', 'Barbados': 'bb', 'Bahamas': 'bs', 'Trinidad y Tobago': 'tt',
+  'Antigua & Barbuda': 'ag', 'Antigua and Barbuda': 'ag', 'Antigua y Barbuda': 'ag',
   'Estados Unidos': 'us', 'Alemania': 'de', 'Union Europea': 'eu', 'Unión Europea': 'eu',
   'Desconocido': null, 'Internacional': null
 }
 
-const PAISES_DISPONIBLES = ['Argentina', 'Uruguay', 'Chile', 'Colombia', 'Perú', 'Rep. Dominicana', 'Honduras', 'México', 'Costa Rica', 'Guatemala', 'España', 'Saint Lucia', 'Jamaica', 'Brasil', 'Estados Unidos', 'Alemania']
+const PAISES_DISPONIBLES = ['Argentina', 'Uruguay', 'Chile', 'Colombia', 'Perú', 'Rep. Dominicana', 'Honduras', 'México', 'Costa Rica', 'Guatemala', 'España', 'Saint Lucia', 'Jamaica', 'Antigua & Barbuda', 'Brasil', 'Estados Unidos', 'Alemania']
+
+const PAIS_TIPO_ID = {
+  'Argentina': 'CUIT', 'Uruguay': 'RUT', 'Chile': 'RUT', 'Colombia': 'NIT',
+  'Perú': 'RUC', 'Rep. Dominicana': 'RNC', 'Honduras': 'RTN', 'México': 'RFC',
+  'Costa Rica': 'CEDULA JURIDICA', 'Guatemala': 'DPI', 'España': 'CIF',
+  'Saint Lucia': 'ID', 'Jamaica': 'TRN', 'Antigua & Barbuda': 'ID',
+  'Brasil': 'CNPJ', 'Estados Unidos': 'EIN', 'Alemania': 'ID'
+}
+
+const PAIS_POR_CODIGO = {
+  AR: 'Argentina', UY: 'Uruguay', BR: 'Brasil', CL: 'Chile',
+  CO: 'Colombia', PE: 'Perú', DO: 'Rep. Dominicana', HN: 'Honduras',
+  CR: 'Costa Rica', GT: 'Guatemala', MX: 'México', ES: 'España',
+  JM: 'Jamaica', LC: 'Saint Lucia', AG: 'Antigua & Barbuda',
+  US: 'Estados Unidos', DE: 'Alemania'
+}
 
 const PER_PAGE = 5
 
@@ -68,7 +85,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null)
   const [clienteSearch, setClienteSearch] = useState('')
   const [empresaSearch, setEmpresaSearch] = useState('')
-  const [empresaData, setEmpresaData] = useState({ razon_social: '', cuit: '', pais: 'Argentina' })
+  const [empresaData, setEmpresaData] = useState({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT' })
   const [empresaExistente, setEmpresaExistente] = useState(false) // true si viene de BD (no editable)
   const [searchingEmpresa, setSearchingEmpresa] = useState(false)
   const [empresasEncontradas, setEmpresasEncontradas] = useState([])
@@ -103,13 +120,25 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
     setActionDropdownId(solId)
   }
 
+  const resolvePaisNombre = (paisNombre, codigoPais) => {
+    const code = String(codigoPais || '').toUpperCase()
+    if (code && PAIS_POR_CODIGO[code]) return PAIS_POR_CODIGO[code]
+    return paisNombre || 'Argentina'
+  }
+
   const inferPaisDisplay = (sol) => {
+    const resolvedByCode = resolvePaisNombre(sol.pais, sol.codigo_pais)
+    if (resolvedByCode && resolvedByCode !== 'Argentina') return resolvedByCode
+
     // Primero usar el país guardado si existe
     if (sol.pais && sol.pais !== 'Argentina') return sol.pais
     
     const tipo = (sol.tipo_identificacion || '').toUpperCase()
     // Si es tipo ID genérico, usar el país guardado o 'Internacional'
-    if (tipo === 'ID') return sol.pais || 'Internacional'
+    if (tipo === 'ID') {
+      if ((sol.pais || '').toLowerCase() === 'argentina') return 'Internacional'
+      return sol.pais || 'Internacional'
+    }
     if (tipo === 'RNC') return 'Rep. Dominicana'
     if (tipo === 'RUC') return 'Perú'
     if (tipo === 'RUT') return 'Uruguay'
@@ -321,7 +350,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
       }
     } catch {
       // Fallback a lista principal si falla
-      setPaisesEmpresas(['Argentina', 'Uruguay', 'Perú', 'Rep. Dominicana', 'Honduras', 'México', 'Colombia', 'Costa Rica', 'Guatemala', 'Jamaica', 'Saint Lucia'])
+      setPaisesEmpresas(['Argentina', 'Uruguay', 'Perú', 'Rep. Dominicana', 'Honduras', 'México', 'Colombia', 'Costa Rica', 'Guatemala', 'Jamaica', 'Saint Lucia', 'Antigua & Barbuda'])
     }
   }
 
@@ -336,7 +365,12 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
     
     setSearchingEmpresa(true)
     setEmpresasEncontradas([])
-    setEmpresaData({ razon_social: '', cuit: '', pais: modalCountryFilter !== 'all' ? modalCountryFilter : 'Argentina' })
+    setEmpresaData({
+      razon_social: '',
+      cuit: '',
+      pais: modalCountryFilter !== 'all' ? modalCountryFilter : 'Argentina',
+      tipo_identificacion: PAIS_TIPO_ID[modalCountryFilter] || 'CUIT'
+    })
     setEmpresaExistente(false)
     try {
       // Buscar en nuestra BD con filtros
@@ -369,7 +403,8 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
         setEmpresaData({
           razon_social: searchValue.trim(),
           cuit: '',
-          pais: modalCountryFilter !== 'all' ? modalCountryFilter : 'Argentina'
+          pais: modalCountryFilter !== 'all' ? modalCountryFilter : 'Argentina',
+          tipo_identificacion: PAIS_TIPO_ID[modalCountryFilter] || 'ID'
         })
         setEmpresaExistente(false)
       }
@@ -406,10 +441,12 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
   }, [])
 
   const seleccionarEmpresa = (emp) => {
+    const paisResuelto = resolvePaisNombre(emp.pais, emp.codigo_pais)
     setEmpresaData({
       razon_social: emp.razon_social || '',
       cuit: emp.cuit || '',
-      pais: emp.pais || 'Argentina'
+      pais: paisResuelto,
+      tipo_identificacion: emp.tipo_identificacion || PAIS_TIPO_ID[paisResuelto] || 'ID'
     })
     setEmpresaExistente(true) // Viene de BD, no editable
     setEmpresasEncontradas([])
@@ -439,6 +476,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
         cuit: empresaData.cuit || '',
         razon_social: empresaData.razon_social,
         pais: empresaData.pais || 'Argentina',
+        tipo_identificacion: empresaData.tipo_identificacion || PAIS_TIPO_ID[empresaData.pais] || 'ID',
         tipo_solicitud: 'informe',
         prioridad: prioridadSeleccionada,
         notas: `Solicitud creada por analista para cliente: ${clienteSeleccionado.numero_abono || clienteSeleccionado.id} - ${clienteSeleccionado.nombre_completo}`,
@@ -465,7 +503,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
     setClienteSeleccionado(null)
     setClienteSearch('')
     setEmpresaSearch('')
-    setEmpresaData({ razon_social: '', cuit: '', pais: 'Argentina' })
+    setEmpresaData({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT' })
     setEmpresaExistente(false)
     setEmpresasEncontradas([])
     setModalSearchType('all')
@@ -1539,7 +1577,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                             setModalCountryFilter('all')
                             setEmpresaSearch('')
                             setEmpresasEncontradas([])
-                            setEmpresaData({ razon_social: '', cuit: '', pais: 'Argentina' })
+                            setEmpresaData({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT' })
                             setEmpresaExistente(false)
                           }}
                           className="ml-auto px-3 py-1.5 border border-gray-300 rounded-lg bg-white text-xs text-gray-700 hover:bg-gray-50"
@@ -1561,7 +1599,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                       )}
                       <div className="border border-gray-200 rounded-xl max-h-64 overflow-y-auto">
                         {empresasEncontradas.map((emp, idx) => {
-                          const empPais = emp.pais || 'Argentina'
+                          const empPais = resolvePaisNombre(emp.pais, emp.codigo_pais)
                           const code = COUNTRY_ISO[empPais]
                           return (
                             <button
@@ -1636,6 +1674,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                             <option value="Costa Rica">Costa Rica</option>
                             <option value="Guatemala">Guatemala</option>
                             <option value="España">España</option>
+                            <option value="Antigua & Barbuda">Antigua & Barbuda</option>
                           </select>
                         </div>
                         {/* Selector de Prioridad */}
