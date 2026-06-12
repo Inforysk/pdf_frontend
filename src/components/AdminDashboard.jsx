@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, LineChart, Line, RadarChart, Radar,
-  PolarGrid, PolarAngleAxis, PolarRadiusAxis, AreaChart, Area
+  PieChart, Pie, Cell, Legend, LineChart, Line, AreaChart, Area
 } from 'recharts'
 import {
   Building2, ClipboardList, TrendingUp, Users, Shield, AlertTriangle,
@@ -65,10 +64,13 @@ function KpiCard({ icon: Icon, label, value, sub, color = 'blue', active, onClic
   )
 }
 
-function ChartCard({ title, children, className = '' }) {
+function ChartCard({ title, children, className = '', headerRight = null }) {
   return (
     <div className={`bg-white rounded-xl border p-4 sm:p-5 ${className}`}>
-      <h3 className="text-sm font-semibold text-gray-700 mb-4">{title}</h3>
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
+        {headerRight}
+      </div>
       {children}
     </div>
   )
@@ -207,6 +209,25 @@ export default function AdminDashboard() {
   
   // Filtro de período para gráfica de facturación
   const [periodoFacturacion, setPeriodoFacturacion] = useState(6)
+  const [periodoResumenEmpresas, setPeriodoResumenEmpresas] = useState('6m')
+  const [periodoResumenSolicitudes, setPeriodoResumenSolicitudes] = useState('6m')
+  const [periodoResumenClientes, setPeriodoResumenClientes] = useState('6m')
+
+  const PERIODOS_RESUMEN = [
+    { value: 'day', label: 'D' },
+    { value: '1m', label: '1M' },
+    { value: '3m', label: '3M' },
+    { value: '6m', label: '6M' },
+    { value: '1y', label: '1A' },
+  ]
+
+  const RESUMEN_LABELS = {
+    day: 'Hoy',
+    '1m': 'Este mes',
+    '3m': 'Últimos 3 meses',
+    '6m': 'Últimos 6 meses',
+    '1y': 'Último año',
+  }
 
   const loadSolicitudesActivas = async (estado = '', prioridad = '') => {
     setLoadingDetail(true)
@@ -288,10 +309,17 @@ export default function AdminDashboard() {
     }
   }
 
-  const loadDashboard = async (periodo = periodoFacturacion) => {
+  const loadDashboard = async (
+    periodo = periodoFacturacion,
+    resumenEmpresas = periodoResumenEmpresas,
+    resumenSolicitudes = periodoResumenSolicitudes,
+    resumenClientes = periodoResumenClientes,
+  ) => {
     setLoading(true)
     try {
-      const res = await axios.get(`/api/admin/dashboard?periodo_facturacion=${periodo}`)
+      const res = await axios.get(
+        `/api/admin/dashboard?periodo_facturacion=${periodo}&periodo_empresas=${resumenEmpresas}&periodo_solicitudes=${resumenSolicitudes}&periodo_clientes=${resumenClientes}`
+      )
       if (res.data.success) setData(res.data.data)
     } catch {
       toast.error('Error al cargar dashboard')
@@ -302,7 +330,22 @@ export default function AdminDashboard() {
   
   const handlePeriodoChange = (nuevoPeriodo) => {
     setPeriodoFacturacion(nuevoPeriodo)
-    loadDashboard(nuevoPeriodo)
+    loadDashboard(nuevoPeriodo, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes)
+  }
+
+  const handlePeriodoEmpresasChange = (nuevoPeriodo) => {
+    setPeriodoResumenEmpresas(nuevoPeriodo)
+    loadDashboard(periodoFacturacion, nuevoPeriodo, periodoResumenSolicitudes, periodoResumenClientes)
+  }
+
+  const handlePeriodoSolicitudesChange = (nuevoPeriodo) => {
+    setPeriodoResumenSolicitudes(nuevoPeriodo)
+    loadDashboard(periodoFacturacion, periodoResumenEmpresas, nuevoPeriodo, periodoResumenClientes)
+  }
+
+  const handlePeriodoClientesChange = (nuevoPeriodo) => {
+    setPeriodoResumenClientes(nuevoPeriodo)
+    loadDashboard(periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, nuevoPeriodo)
   }
 
   // Auto-refresh cada 30 segundos para datos en tiempo real
@@ -339,12 +382,6 @@ export default function AdminDashboard() {
     ...s,
     name: ESTADO_LABELS[s.estado] || s.estado,
     fill: ESTADO_COLORS[s.estado] || '#9ca3af'
-  }))
-
-  // Preparar datos de ratings
-  const ratings = (data.distribucion_ratings || []).map(r => ({
-    ...r,
-    fill: RATING_COLORS[r.rating] || '#9ca3af'
   }))
 
   return (
@@ -669,7 +706,26 @@ export default function AdminDashboard() {
 
       {/* ── Fila 1: Empresas por país + Solicitudes por estado ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        <ChartCard title="Empresas por País">
+        <ChartCard
+          title={`Empresas por País (${RESUMEN_LABELS[periodoResumenEmpresas] || 'Últimos 6 meses'})`}
+          headerRight={
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+              {PERIODOS_RESUMEN.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => handlePeriodoEmpresasChange(opt.value)}
+                  className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                    periodoResumenEmpresas === opt.value
+                      ? 'bg-white text-blue-700 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          }
+        >
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.empresas_por_pais || []} layout="vertical" margin={{ left: 20 }}>
@@ -687,7 +743,26 @@ export default function AdminDashboard() {
           </div>
         </ChartCard>
 
-        <ChartCard title="Solicitudes Hoy ⚡">
+        <ChartCard
+          title={`Solicitudes ${RESUMEN_LABELS[periodoResumenSolicitudes] || 'Últimos 6 meses'} ⚡`}
+          headerRight={
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+              {PERIODOS_RESUMEN.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => handlePeriodoSolicitudesChange(opt.value)}
+                  className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                    periodoResumenSolicitudes === opt.value
+                      ? 'bg-white text-blue-700 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          }
+        >
           <div className="h-64">
             {(data.solicitudes_hoy || []).length > 0 ? (
               <div className="space-y-3 pt-2">
@@ -714,13 +789,13 @@ export default function AdminDashboard() {
                   )
                 })}
                 <div className="pt-2 border-t mt-3 flex justify-between text-sm">
-                  <span className="text-gray-500">Total hoy</span>
+                  <span className="text-gray-500">Total {RESUMEN_LABELS[periodoResumenSolicitudes]?.toLowerCase() || 'período'}</span>
                   <span className="font-bold">{(data.solicitudes_hoy || []).reduce((a, b) => a + (b.cantidad || 0), 0)}</span>
                 </div>
               </div>
             ) : (
               <div className="h-full flex items-center justify-center text-gray-400 text-sm">
-                Sin solicitudes hoy
+                Sin solicitudes en el período
               </div>
             )}
           </div>
@@ -729,7 +804,26 @@ export default function AdminDashboard() {
 
       {/* ── Fila 2: Top Clientes + Facturación mensual ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        <ChartCard title="Top 5 Clientes (Solicitudes)">
+        <ChartCard
+          title={`Top 5 Clientes (${RESUMEN_LABELS[periodoResumenClientes] || 'Últimos 6 meses'})`}
+          headerRight={
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+              {PERIODOS_RESUMEN.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => handlePeriodoClientesChange(opt.value)}
+                  className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                    periodoResumenClientes === opt.value
+                      ? 'bg-white text-blue-700 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          }
+        >
           <div className="h-64">
             {(data.top_clientes || []).length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -808,53 +902,6 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* ── Fila 3: Distribución ratings + Radar scoring ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        <ChartCard title="Distribución de Ratings Crediticios">
-          {ratings.length > 0 ? (
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={ratings} margin={{ top: 5, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                  <XAxis dataKey="rating" tick={{ fontSize: 12, fontWeight: 600 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="cantidad" name="Empresas" radius={[6, 6, 0, 0]}>
-                    {ratings.map((r, i) => (
-                      <Cell key={i} fill={r.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
-              Sin datos de scoring aún
-            </div>
-          )}
-        </ChartCard>
-
-        <ChartCard title="Promedios por Módulo de Scoring">
-          {(data.scoring_promedios || []).length > 0 ? (
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data.scoring_promedios}>
-                  <PolarGrid stroke="#e5e7eb" />
-                  <PolarAngleAxis dataKey="modulo" tick={{ fontSize: 10 }} />
-                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 10 }} />
-                  <Radar name="Score" dataKey="score" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.25} strokeWidth={2} />
-                  <Tooltip content={<CustomTooltip />} />
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
-              Sin datos de scoring aún
-            </div>
-          )}
-        </ChartCard>
-      </div>
-
       {/* ── Fila 4: Tendencia empresas + Actividad sistema ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         <ChartCard title="Empresas ingresadas — últimos 12 meses">
@@ -892,8 +939,8 @@ export default function AdminDashboard() {
         </ChartCard>
       </div>
 
-      {/* ── Fila 5: Actividad usuarios + Créditos por confianza ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+      {/* ── Fila 5: Actividad usuarios ── */}
+      <div className="grid grid-cols-1 gap-4 sm:gap-6">
         <ChartCard title="Actividad por Usuario — últimos 30 días">
           {(data.actividad_usuarios || []).length > 0 ? (
             <div className="h-64">
@@ -910,33 +957,6 @@ export default function AdminDashboard() {
           ) : (
             <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
               Sin actividad registrada
-            </div>
-          )}
-        </ChartCard>
-
-        <ChartCard title="Créditos Sugeridos por Nivel de Confianza">
-          {(data.creditos_por_confianza || []).length > 0 ? (
-            <div className="space-y-3 pt-2">
-              {data.creditos_por_confianza.map((c, i) => {
-                const total = data.creditos_por_confianza.reduce((a, b) => a + b.cantidad, 0)
-                const pct = total > 0 ? (c.cantidad / total * 100) : 0
-                const colors = { alta: 'bg-green-500', media: 'bg-amber-500', baja: 'bg-red-500', sin_dato: 'bg-gray-400' }
-                return (
-                  <div key={i}>
-                    <div className="flex items-center justify-between text-sm mb-1">
-                      <span className="font-medium text-gray-700 capitalize">{c.confianza === 'sin_dato' ? 'Sin dato' : c.confianza}</span>
-                      <span className="text-gray-500">{c.cantidad} empresas · Prom: ${Number(c.promedio).toLocaleString()}</span>
-                    </div>
-                    <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full ${colors[c.confianza] || 'bg-gray-400'}`} style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
-              Sin datos de crédito aún
             </div>
           )}
         </ChartCard>
