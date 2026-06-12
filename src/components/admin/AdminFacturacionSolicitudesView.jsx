@@ -44,6 +44,7 @@ export default function AdminFacturacionSolicitudesView() {
   
   // Moneda para el resumen general
   const [monedaResumen, setMonedaResumen] = useState('EUR')
+  const [eurUsdRate, setEurUsdRate] = useState(1.2)
   const [exporting, setExporting] = useState(false)
   
   // Tab activa: 'solicitudes' o 'historial'
@@ -145,7 +146,10 @@ export default function AdminFacturacionSolicitudesView() {
       if (filtros.proveedor_id) params.set('proveedor_id', filtros.proveedor_id)
       if (filtros.facturado) params.set('facturado', filtros.facturado)
 
-      const res = await axios.get(`/api/admin/facturacion-solicitudes?${params}`)
+      const [res, tasasRes] = await Promise.all([
+        axios.get(`/api/admin/facturacion-solicitudes?${params}`),
+        axios.get('/api/admin/precios-pais/tasas-cambio').catch(() => null),
+      ])
       if (res.data.success) {
         setData(res.data)
         setSelectedIds([])
@@ -159,11 +163,29 @@ export default function AdminFacturacionSolicitudesView() {
         })
         setMonedaPorCliente(prev => ({ ...prev, ...monedas }))
       }
+
+      if (tasasRes?.data?.success) {
+        const tasaEurUsd = tasasRes.data.tasas?.find(
+          t => t.moneda_origen === 'EUR' && t.moneda_destino === 'USD'
+        )
+        if (tasaEurUsd?.tasa) {
+          setEurUsdRate(Number(tasaEurUsd.tasa))
+        }
+      }
     } catch (err) {
       toast.error('Error al cargar datos')
     } finally {
       setLoading(false)
     }
+  }
+
+  const getPrecioEur = (sol) => Number(sol.precio_eur || sol.precio_calculado || 0)
+  const getPrecioUsd = (sol) => {
+    if (sol.precio_usd && Number(sol.precio_usd) > 0) return Number(sol.precio_usd)
+    return getPrecioEur(sol) * eurUsdRate
+  }
+  const getPrecioByMoneda = (sol, moneda) => {
+    return moneda === 'USD' ? getPrecioUsd(sol) : getPrecioEur(sol)
   }
 
   const loadHistorial = async () => {
@@ -317,7 +339,7 @@ export default function AdminFacturacionSolicitudesView() {
     const totalMonto = data.solicitudes
       .filter(s => selectedIds.includes(s.id))
       .reduce((sum, s) => {
-        const precio = monedaCliente === 'USD' ? (s.precio_usd || 0) : (s.precio_eur || s.precio_calculado || 0)
+        const precio = getPrecioByMoneda(s, monedaCliente)
         return sum + precio
       }, 0)
     
@@ -501,9 +523,10 @@ export default function AdminFacturacionSolicitudesView() {
         resumen[key] = {
           usuario_abono: sol.usuario_abono,
           usuario_nombre: sol.usuario_nombre,
-          proveedor_codigo: sol.proveedor_codigo,
+          proveedor_codigos: new Set(),
           qty_normal: 0,
           qty_urgente: 0,
+          qty_monitoreo: 0,
           qty_72h: 0,
           total_informes: 0,
           total_eur: 0,
@@ -512,34 +535,30 @@ export default function AdminFacturacionSolicitudesView() {
         }
       }
       const r = resumen[key]
+      if (sol.proveedor_codigo) r.proveedor_codigos.add(sol.proveedor_codigo)
       const prio = sol.prioridad || 'normal'
       if (prio === 'urgente') r.qty_urgente++
+      else if (prio === 'monitoreo') r.qty_monitoreo++
       else if (prio === '72h') r.qty_72h++
       else r.qty_normal++
       r.total_informes++
-      r.total_eur += (sol.precio_eur || sol.precio_calculado || 0)
-      r.total_usd += (sol.precio_usd || 0)
-      if (sol.precio_usd && sol.precio_usd > 0) r.tiene_usd = true
+      r.total_eur += getPrecioEur(sol)
+      r.total_usd += getPrecioUsd(sol)
+      if (sol.precio_usd && Number(sol.precio_usd) > 0) r.tiene_usd = true
     })
-    return Object.values(resumen)
-  }, [data.solicitudes])
-
-  // Filtrar resumen por moneda
-  const resumenFiltrado = useMemo(() => {
-    if (monedaResumen === 'USD') {
-      // Solo mostrar clientes que tienen precios en USD
-      return resumenCalculado.filter(r => r.tiene_usd)
-    }
-    // EUR: mostrar todos los que NO tienen USD (o mostrar en EUR)
-    return resumenCalculado.filter(r => !r.tiene_usd)
-  }, [resumenCalculado, monedaResumen])
+    return Object.values(resumen).map(r => ({
+      ...r,
+      proveedor_codigos: Array.from(r.proveedor_codigos).sort(),
+      proveedor_codigo: Array.from(r.proveedor_codigos).sort().join(', '),
+    }))
+  }, [data.solicitudes, eurUsdRate])
 
   // Total general según moneda
   const totalGeneralMonto = useMemo(() => {
-    return resumenFiltrado.reduce((sum, r) => {
+    return resumenCalculado.reduce((sum, r) => {
       return sum + (monedaResumen === 'USD' ? r.total_usd : r.total_eur)
     }, 0)
-  }, [resumenFiltrado, monedaResumen])
+  }, [resumenCalculado, monedaResumen])
 
   return (
     <div className="space-y-4 px-1 sm:px-0">
@@ -836,7 +855,7 @@ export default function AdminFacturacionSolicitudesView() {
             <h4 className="font-medium text-gray-900 flex items-center gap-2 min-w-0">
               <Euro className="h-4 w-4 text-emerald-600" />
               <span className="truncate">Resumen por Cliente</span>
-              <span className="text-sm font-normal text-gray-500 whitespace-nowrap">({resumenFiltrado.length} clientes)</span>
+              <span className="text-sm font-normal text-gray-500 whitespace-nowrap">({resumenCalculado.length} clientes)</span>
             </h4>
             <div className="flex items-center gap-3 shrink-0">
               <span className="font-bold text-emerald-700 text-sm sm:text-base">
@@ -856,7 +875,7 @@ export default function AdminFacturacionSolicitudesView() {
               </div>
               <div className="min-w-0">
                 <h4 className="font-medium text-gray-900">Resumen por Cliente</h4>
-                <p className="text-xs text-gray-500 mt-1">{resumenFiltrado.length} cliente(s)</p>
+                <p className="text-xs text-gray-500 mt-1">{resumenCalculado.length} cliente(s)</p>
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -897,20 +916,25 @@ export default function AdminFacturacionSolicitudesView() {
               </div>
 
               <div className="md:hidden space-y-3">
-                {resumenFiltrado.map((r, i) => (
+                {resumenCalculado.map((r, i) => (
                   <div key={i} className="border rounded-lg p-4 space-y-3 bg-white">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="font-mono text-sm text-blue-600">{r.usuario_abono}</p>
                         <p className="font-medium text-gray-900 break-words">{r.usuario_nombre}</p>
                       </div>
-                      <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-xs font-medium shrink-0">
-                        {r.proveedor_codigo}
-                      </span>
+                      <div className="flex flex-wrap items-center justify-end gap-1 shrink-0">
+                        {r.proveedor_codigos.map(code => (
+                          <span key={code} className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-xs font-medium">
+                            {code}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div><p className="text-xs text-gray-500">Normal</p><p className="font-medium">{r.qty_normal}</p></div>
                       <div><p className="text-xs text-gray-500">Urgente</p><p className="font-medium">{r.qty_urgente}</p></div>
+                      <div><p className="text-xs text-gray-500">Monitoreo</p><p className="font-medium">{r.qty_monitoreo}</p></div>
                       <div><p className="text-xs text-gray-500">72h</p><p className="font-medium">{r.qty_72h}</p></div>
                       <div><p className="text-xs text-gray-500">Total informes</p><p className="font-medium">{r.total_informes}</p></div>
                     </div>
@@ -923,10 +947,11 @@ export default function AdminFacturacionSolicitudesView() {
                   </div>
                 ))}
                 <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-4 grid grid-cols-2 gap-3 text-sm">
-                  <div><p className="text-xs text-gray-500">Normal</p><p className="font-bold">{resumenFiltrado.reduce((sum, r) => sum + r.qty_normal, 0)}</p></div>
-                  <div><p className="text-xs text-gray-500">Urgente</p><p className="font-bold">{resumenFiltrado.reduce((sum, r) => sum + r.qty_urgente, 0)}</p></div>
-                  <div><p className="text-xs text-gray-500">72h</p><p className="font-bold">{resumenFiltrado.reduce((sum, r) => sum + r.qty_72h, 0)}</p></div>
-                  <div><p className="text-xs text-gray-500">Total informes</p><p className="font-bold">{resumenFiltrado.reduce((sum, r) => sum + r.total_informes, 0)}</p></div>
+                  <div><p className="text-xs text-gray-500">Normal</p><p className="font-bold">{resumenCalculado.reduce((sum, r) => sum + r.qty_normal, 0)}</p></div>
+                  <div><p className="text-xs text-gray-500">Urgente</p><p className="font-bold">{resumenCalculado.reduce((sum, r) => sum + r.qty_urgente, 0)}</p></div>
+                  <div><p className="text-xs text-gray-500">Monitoreo</p><p className="font-bold">{resumenCalculado.reduce((sum, r) => sum + r.qty_monitoreo, 0)}</p></div>
+                  <div><p className="text-xs text-gray-500">72h</p><p className="font-bold">{resumenCalculado.reduce((sum, r) => sum + r.qty_72h, 0)}</p></div>
+                  <div><p className="text-xs text-gray-500">Total informes</p><p className="font-bold">{resumenCalculado.reduce((sum, r) => sum + r.total_informes, 0)}</p></div>
                   <div className="col-span-2 pt-2 border-t border-emerald-200 flex items-center justify-between">
                     <span className="font-semibold text-gray-900">Subtotal</span>
                     <span className="font-bold text-emerald-700 text-lg">
@@ -945,23 +970,29 @@ export default function AdminFacturacionSolicitudesView() {
                     <th className="px-3 py-2 text-left font-medium text-gray-600">Proveedor</th>
                     <th className="px-3 py-2 text-center font-medium text-gray-600">Normal</th>
                     <th className="px-3 py-2 text-center font-medium text-gray-600">Urgente</th>
+                    <th className="px-3 py-2 text-center font-medium text-gray-600">Monitoreo</th>
                     <th className="px-3 py-2 text-center font-medium text-gray-600">72h</th>
                     <th className="px-3 py-2 text-center font-medium text-gray-600">Total</th>
                     <th className="px-3 py-2 text-right font-medium text-gray-600">Monto {monedaResumen}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {resumenFiltrado.map((r, i) => (
+                  {resumenCalculado.map((r, i) => (
                     <tr key={i} className="hover:bg-gray-50">
                       <td className="px-3 py-2 font-mono text-blue-600">{r.usuario_abono}</td>
                       <td className="px-3 py-2">{r.usuario_nombre}</td>
                       <td className="px-3 py-2">
-                        <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium">
-                          {r.proveedor_codigo}
-                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {r.proveedor_codigos.map(code => (
+                            <span key={code} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium">
+                              {code}
+                            </span>
+                          ))}
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-center">{r.qty_normal}</td>
                       <td className="px-3 py-2 text-center">{r.qty_urgente}</td>
+                      <td className="px-3 py-2 text-center">{r.qty_monitoreo}</td>
                       <td className="px-3 py-2 text-center">{r.qty_72h}</td>
                       <td className="px-3 py-2 text-center font-medium">{r.total_informes}</td>
                       <td className="px-3 py-2 text-right font-medium text-emerald-600">
@@ -974,16 +1005,19 @@ export default function AdminFacturacionSolicitudesView() {
                   <tr className="border-t-2 border-emerald-200">
                     <td colSpan={3} className="px-3 py-2 text-right font-bold text-gray-900">SUBTOTALES:</td>
                     <td className="px-3 py-2 text-center font-bold text-gray-700">
-                      {resumenFiltrado.reduce((sum, r) => sum + r.qty_normal, 0)}
+                      {resumenCalculado.reduce((sum, r) => sum + r.qty_normal, 0)}
                     </td>
                     <td className="px-3 py-2 text-center font-bold text-gray-700">
-                      {resumenFiltrado.reduce((sum, r) => sum + r.qty_urgente, 0)}
+                      {resumenCalculado.reduce((sum, r) => sum + r.qty_urgente, 0)}
                     </td>
                     <td className="px-3 py-2 text-center font-bold text-gray-700">
-                      {resumenFiltrado.reduce((sum, r) => sum + r.qty_72h, 0)}
+                      {resumenCalculado.reduce((sum, r) => sum + r.qty_monitoreo, 0)}
+                    </td>
+                    <td className="px-3 py-2 text-center font-bold text-gray-700">
+                      {resumenCalculado.reduce((sum, r) => sum + r.qty_72h, 0)}
                     </td>
                     <td className="px-3 py-2 text-center font-bold text-gray-900">
-                      {resumenFiltrado.reduce((sum, r) => sum + r.total_informes, 0)}
+                      {resumenCalculado.reduce((sum, r) => sum + r.total_informes, 0)}
                     </td>
                     <td className="px-3 py-2 text-right font-bold text-emerald-700 text-lg">
                       {monedaResumen === 'USD' ? '$' : '€'}{totalGeneralMonto.toFixed(2)}
@@ -1065,17 +1099,12 @@ export default function AdminFacturacionSolicitudesView() {
               const isExpanded = expandedCliente === abono
               
               // Verificar si el cliente tiene precios en USD (al menos una solicitud con precio_usd > 0)
-              const tieneUSD = grupo.solicitudes.some(s => s.precio_usd && s.precio_usd > 0)
-              const tieneEUR = grupo.solicitudes.some(s => (s.precio_eur || s.precio_calculado) > 0)
-              const mostrarSelectorMoneda = tieneUSD && tieneEUR
-              
-              // Obtener la moneda seleccionada para este cliente (solo USD si tiene precios USD)
-              const monedaCliente = mostrarSelectorMoneda ? (monedaPorCliente[abono] || 'EUR') : 'EUR'
+              const monedaCliente = monedaPorCliente[abono] || 'EUR'
               const simboloMoneda = monedaCliente === 'USD' ? '$' : '€'
               
               // Calcular total usando la moneda seleccionada
               const totalGrupo = grupo.solicitudes.reduce((sum, s) => {
-                const precio = monedaCliente === 'USD' ? (s.precio_usd || 0) : (s.precio_eur || s.precio_calculado || 0)
+                const precio = getPrecioByMoneda(s, monedaCliente)
                 return sum + precio
               }, 0)
               
@@ -1178,21 +1207,18 @@ export default function AdminFacturacionSolicitudesView() {
                         </button>
                       )}
                       <span className="text-sm text-gray-500">{grupo.solicitudes.length} informes</span>
-                      {/* Selector de moneda - solo si tiene precios en ambas monedas */}
-                      {mostrarSelectorMoneda && (
-                        <select
-                          value={monedaCliente}
-                          onChange={(e) => {
-                            e.stopPropagation()
-                            setMonedaPorCliente(prev => ({ ...prev, [abono]: e.target.value }))
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="px-2 py-1 text-xs border rounded bg-white hover:bg-gray-50 cursor-pointer"
-                        >
-                          <option value="EUR">€ EUR</option>
-                          <option value="USD">$ USD</option>
-                        </select>
-                      )}
+                      <select
+                        value={monedaCliente}
+                        onChange={(e) => {
+                          e.stopPropagation()
+                          setMonedaPorCliente(prev => ({ ...prev, [abono]: e.target.value }))
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="px-2 py-1 text-xs border rounded bg-white hover:bg-gray-50 cursor-pointer"
+                      >
+                        <option value="EUR">€ EUR</option>
+                        <option value="USD">$ USD</option>
+                      </select>
                       <span className="font-medium text-emerald-600">{simboloMoneda}{totalGrupo.toFixed(2)}</span>
                     </div>
                   </div>
@@ -1249,17 +1275,18 @@ export default function AdminFacturacionSolicitudesView() {
                                 </div>
                               </div>
                               <span className="font-semibold text-emerald-600 shrink-0">
-                                {simboloMoneda}{(monedaCliente === 'USD' ? (sol.precio_usd || 0) : (sol.precio_eur || sol.precio_calculado || 0)).toFixed(2)}
+                                {simboloMoneda}{getPrecioByMoneda(sol, monedaCliente).toFixed(2)}
                               </span>
                             </div>
 
                             <div className="flex flex-wrap items-center gap-2">
                               <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                                 sol.prioridad === 'urgente' ? 'bg-red-100 text-red-700' :
+                                sol.prioridad === 'monitoreo' ? 'bg-violet-100 text-violet-700' :
                                 sol.prioridad === '72h' ? 'bg-orange-100 text-orange-700' :
                                 'bg-blue-100 text-blue-700'
                               }`}>
-                                {sol.prioridad === 'urgente' ? 'Urgente' : sol.prioridad === '72h' ? '72h' : 'Normal'}
+                                {sol.prioridad === 'urgente' ? 'Urgente' : sol.prioridad === 'monitoreo' ? 'Monitoreo' : sol.prioridad === '72h' ? '72h' : 'Normal'}
                               </span>
                               {sol.facturado ? (
                                 (() => {
@@ -1354,14 +1381,15 @@ export default function AdminFacturacionSolicitudesView() {
                               <td className="px-3 py-2 text-center">
                                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                                   sol.prioridad === 'urgente' ? 'bg-red-100 text-red-700' :
+                                  sol.prioridad === 'monitoreo' ? 'bg-violet-100 text-violet-700' :
                                   sol.prioridad === '72h' ? 'bg-orange-100 text-orange-700' :
                                   'bg-blue-100 text-blue-700'
                                 }`}>
-                                  {sol.prioridad === 'urgente' ? 'Urgente' : sol.prioridad === '72h' ? '72h' : 'Normal'}
+                                  {sol.prioridad === 'urgente' ? 'Urgente' : sol.prioridad === 'monitoreo' ? 'Monitoreo' : sol.prioridad === '72h' ? '72h' : 'Normal'}
                                 </span>
                               </td>
                               <td className="px-3 py-2 text-right font-medium">
-                                {simboloMoneda}{(monedaCliente === 'USD' ? (sol.precio_usd || 0) : (sol.precio_eur || sol.precio_calculado || 0)).toFixed(2)}
+                                {simboloMoneda}{getPrecioByMoneda(sol, monedaCliente).toFixed(2)}
                               </td>
                               <td className="px-3 py-2 text-center text-xs text-gray-500">{sol.updated_at}</td>
                               <td className="px-3 py-2 text-center">

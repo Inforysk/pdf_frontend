@@ -5,7 +5,6 @@ import toast from 'react-hot-toast'
 
 const ESTADO_CONFIG = {
   consulta: { label: 'Consulta', color: 'bg-purple-100 text-purple-800 border-purple-200', icon: Search },
-  precarga: { label: 'Precarga', color: 'bg-cyan-100 text-cyan-800 border-cyan-200', icon: Database },
   pendiente: { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: Clock },
   en_proceso: { label: 'En Proceso', color: 'bg-blue-100 text-blue-800 border-blue-200', icon: Search },
   completada: { label: 'Completada', color: 'bg-green-100 text-green-800 border-green-200', icon: CheckCircle2 },
@@ -71,6 +70,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
   const [showFiltrosAvanzados, setShowFiltrosAvanzados] = useState(false)
   const [filtroSolicitante, setFiltroSolicitante] = useState('')
   const [filtroCliente, setFiltroCliente] = useState('')
+  const [solicitantesFiltro, setSolicitantesFiltro] = useState([])
   const [clientesFiltro, setClientesFiltro] = useState([])
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
   const [filtroFechaInicio, setFiltroFechaInicio] = useState('')
@@ -85,7 +85,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null)
   const [clienteSearch, setClienteSearch] = useState('')
   const [empresaSearch, setEmpresaSearch] = useState('')
-  const [empresaData, setEmpresaData] = useState({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT' })
+  const [empresaData, setEmpresaData] = useState({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT', referencia_cliente: '' })
   const [empresaExistente, setEmpresaExistente] = useState(false) // true si viene de BD (no editable)
   const [searchingEmpresa, setSearchingEmpresa] = useState(false)
   const [empresasEncontradas, setEmpresasEncontradas] = useState([])
@@ -153,6 +153,62 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
     return sol.pais || 'Argentina'
   }
 
+  const normalizarMesInput = (value) => {
+    const raw = String(value || '').trim().toLowerCase()
+    if (!raw) return ''
+
+    const ymMatch = raw.match(/^(\d{4})-(\d{1,2})$/)
+    if (ymMatch) {
+      const year = Number(ymMatch[1])
+      const month = Number(ymMatch[2])
+      if (month >= 1 && month <= 12) return `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}`
+    }
+
+    const meses = {
+      enero: 1,
+      febrero: 2,
+      marzo: 3,
+      abril: 4,
+      mayo: 5,
+      junio: 6,
+      julio: 7,
+      agosto: 8,
+      septiembre: 9,
+      setiembre: 9,
+      octubre: 10,
+      noviembre: 11,
+      diciembre: 12,
+    }
+
+    const ascii = raw
+      .replaceAll('á', 'a')
+      .replaceAll('é', 'e')
+      .replaceAll('í', 'i')
+      .replaceAll('ó', 'o')
+      .replaceAll('ú', 'u')
+
+    const textoMatch = ascii.match(/^([a-z]+)\s+de\s+(\d{4})$/)
+    if (textoMatch) {
+      const month = meses[textoMatch[1]]
+      const year = Number(textoMatch[2])
+      if (month) return `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}`
+    }
+
+    return raw
+  }
+
+  const formatFechaHora = (fecha) => {
+    if (!fecha) return '-'
+    return new Date(fecha).toLocaleString('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+  }
+
   // Key para forzar recargas
   const [reloadKey, setReloadKey] = useState(0)
   const reload = () => setReloadKey(k => k + 1)
@@ -161,9 +217,15 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
   useEffect(() => {
     const loadClientesFiltro = async () => {
       try {
-        const res = await axios.get('/api/admin/usuarios-pedidos', { params: { per_page: 500 } })
-        if (res.data.success && res.data.usuarios) {
-          setClientesFiltro(res.data.usuarios)
+        const [resClientes, resSolicitantes] = await Promise.all([
+          axios.get('/api/admin/usuarios-pedidos', { params: { per_page: 500 } }),
+          axios.get('/api/admin/usuarios-pedidos', { params: { per_page: 500, include_staff: 'true' } }),
+        ])
+        if (resClientes.data.success && resClientes.data.usuarios) {
+          setClientesFiltro(resClientes.data.usuarios)
+        }
+        if (resSolicitantes.data.success && resSolicitantes.data.usuarios) {
+          setSolicitantesFiltro(resSolicitantes.data.usuarios)
         }
       } catch { /* ignore */ }
     }
@@ -201,9 +263,17 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
         params.set('page', page)
         params.set('per_page', PER_PAGE)
 
-        // Stats params (solo origen)
+        // Stats params (mismos filtros, excepto estado/paginación)
         const statsParams = new URLSearchParams()
         if (origenFilter !== 'all') statsParams.set('origen', origenFilter)
+        if (busqueda.trim()) statsParams.set('q', busqueda.trim())
+        if (paisFilter !== 'all') statsParams.set('pais', paisFilter)
+        if (filtroSolicitante.trim()) statsParams.set('solicitante', filtroSolicitante.trim())
+        if (filtroCliente) statsParams.set('cliente_id', filtroCliente)
+        if (filtroEmpresa.trim()) statsParams.set('empresa', filtroEmpresa.trim())
+        if (filtroFechaInicio) statsParams.set('fecha_inicio', filtroFechaInicio)
+        if (filtroFechaFin) statsParams.set('fecha_fin', filtroFechaFin)
+        if (filtroMes) statsParams.set('mes', filtroMes)
 
         const responses = await Promise.all([
           axios.get(`/api/solicitudes?${params}`),
@@ -369,7 +439,8 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
       razon_social: '',
       cuit: '',
       pais: modalCountryFilter !== 'all' ? modalCountryFilter : 'Argentina',
-      tipo_identificacion: PAIS_TIPO_ID[modalCountryFilter] || 'CUIT'
+      tipo_identificacion: PAIS_TIPO_ID[modalCountryFilter] || 'CUIT',
+      referencia_cliente: ''
     })
     setEmpresaExistente(false)
     try {
@@ -404,7 +475,8 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
           razon_social: searchValue.trim(),
           cuit: '',
           pais: modalCountryFilter !== 'all' ? modalCountryFilter : 'Argentina',
-          tipo_identificacion: PAIS_TIPO_ID[modalCountryFilter] || 'ID'
+          tipo_identificacion: PAIS_TIPO_ID[modalCountryFilter] || 'ID',
+          referencia_cliente: ''
         })
         setEmpresaExistente(false)
       }
@@ -446,7 +518,8 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
       razon_social: emp.razon_social || '',
       cuit: emp.cuit || '',
       pais: paisResuelto,
-      tipo_identificacion: emp.tipo_identificacion || PAIS_TIPO_ID[paisResuelto] || 'ID'
+      tipo_identificacion: emp.tipo_identificacion || PAIS_TIPO_ID[paisResuelto] || 'ID',
+      referencia_cliente: ''
     })
     setEmpresaExistente(true) // Viene de BD, no editable
     setEmpresasEncontradas([])
@@ -477,6 +550,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
         razon_social: empresaData.razon_social,
         pais: empresaData.pais || 'Argentina',
         tipo_identificacion: empresaData.tipo_identificacion || PAIS_TIPO_ID[empresaData.pais] || 'ID',
+        referencia_cliente: (empresaData.referencia_cliente || '').trim() || null,
         tipo_solicitud: 'informe',
         prioridad: prioridadSeleccionada,
         notas: `Solicitud creada por analista para cliente: ${clienteSeleccionado.numero_abono || clienteSeleccionado.id} - ${clienteSeleccionado.nombre_completo}`,
@@ -503,7 +577,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
     setClienteSeleccionado(null)
     setClienteSearch('')
     setEmpresaSearch('')
-    setEmpresaData({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT' })
+    setEmpresaData({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT', referencia_cliente: '' })
     setEmpresaExistente(false)
     setEmpresasEncontradas([])
     setModalSearchType('all')
@@ -557,7 +631,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
           <button
             onClick={openNuevaSolicitudModal}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 border border-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
-            title="Nueva solicitud para un cliente"
+            title="Crear nueva solicitud manual"
           >
             <UserPlus className="h-3.5 w-3.5" />
             Nueva Solicitud
@@ -658,7 +732,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
         <button
           onClick={() => setShowFiltrosAvanzados(!showFiltrosAvanzados)}
           className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm border rounded-xl transition-colors ${
-            showFiltrosAvanzados || filtroSolicitante || filtroEmpresa || filtroFechaInicio || filtroFechaFin || filtroMes
+            showFiltrosAvanzados || filtroSolicitante || filtroCliente || filtroEmpresa || filtroFechaInicio || filtroFechaFin || filtroMes
               ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
               : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
           }`}
@@ -704,75 +778,147 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
             {/* Solicitante */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Solicitado por</label>
-              <select
-                value={filtroSolicitante}
-                onChange={(e) => { setFiltroSolicitante(e.target.value); setPage(1) }}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
-              >
-                <option value="">Todos</option>
-                {clientesFiltro.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre_completo} {c.numero_abono ? `(${c.numero_abono})` : c.id_interno ? `(${c.id_interno})` : ''}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={filtroSolicitante}
+                  onChange={(e) => { setFiltroSolicitante(e.target.value); setPage(1) }}
+                  className="w-full px-3 py-2 pr-9 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">Todos</option>
+                  {solicitantesFiltro.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.nombre_completo} {c.numero_abono ? `(${c.numero_abono})` : c.id_interno ? `(${c.id_interno})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {filtroSolicitante && (
+                  <button
+                    type="button"
+                    onClick={() => { setFiltroSolicitante(''); setPage(1) }}
+                    className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Limpiar filtro"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
             {/* Cliente */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Cliente</label>
-              <select
-                value={filtroCliente}
-                onChange={(e) => { setFiltroCliente(e.target.value); setPage(1) }}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
-              >
-                <option value="">Todos</option>
-                {clientesFiltro.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre_completo} {c.numero_abono ? `(${c.numero_abono})` : c.id_interno ? `(${c.id_interno})` : ''}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={filtroCliente}
+                  onChange={(e) => { setFiltroCliente(e.target.value); setPage(1) }}
+                  className="w-full px-3 py-2 pr-9 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">Todos</option>
+                  {clientesFiltro.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.nombre_completo} {c.numero_abono ? `(${c.numero_abono})` : c.id_interno ? `(${c.id_interno})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {filtroCliente && (
+                  <button
+                    type="button"
+                    onClick={() => { setFiltroCliente(''); setPage(1) }}
+                    className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Limpiar filtro"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
             {/* Empresa */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Empresa</label>
-              <input
-                type="text"
-                value={filtroEmpresa}
-                onChange={(e) => { setFiltroEmpresa(e.target.value); setPage(1) }}
-                placeholder="Razón social..."
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={filtroEmpresa}
+                  onChange={(e) => { setFiltroEmpresa(e.target.value); setPage(1) }}
+                  placeholder="Razón social..."
+                  className="w-full px-3 py-2 pr-9 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                />
+                {filtroEmpresa && (
+                  <button
+                    type="button"
+                    onClick={() => { setFiltroEmpresa(''); setPage(1) }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Limpiar filtro"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
             {/* Fecha Inicio */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Fecha Desde</label>
-              <input
-                type="date"
-                value={filtroFechaInicio}
-                onChange={(e) => { setFiltroFechaInicio(e.target.value); setPage(1) }}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
-              />
+              <div className="relative">
+                <input
+                  type="date"
+                  value={filtroFechaInicio}
+                  onChange={(e) => { setFiltroFechaInicio(e.target.value); setPage(1) }}
+                  className="w-full px-3 py-2 pr-14 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                />
+                {filtroFechaInicio && (
+                  <button
+                    type="button"
+                    onClick={() => { setFiltroFechaInicio(''); setPage(1) }}
+                    className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Limpiar filtro"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
             {/* Fecha Fin */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Fecha Hasta</label>
-              <input
-                type="date"
-                value={filtroFechaFin}
-                onChange={(e) => { setFiltroFechaFin(e.target.value); setPage(1) }}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
-              />
+              <div className="relative">
+                <input
+                  type="date"
+                  value={filtroFechaFin}
+                  onChange={(e) => { setFiltroFechaFin(e.target.value); setPage(1) }}
+                  className="w-full px-3 py-2 pr-14 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                />
+                {filtroFechaFin && (
+                  <button
+                    type="button"
+                    onClick={() => { setFiltroFechaFin(''); setPage(1) }}
+                    className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Limpiar filtro"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
             {/* Mes */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Mes</label>
-              <input
-                type="month"
-                value={filtroMes}
-                onChange={(e) => { setFiltroMes(e.target.value); setPage(1) }}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
-              />
+              <div className="relative">
+                <input
+                  type="month"
+                  value={filtroMes}
+                  onChange={(e) => { setFiltroMes(normalizarMesInput(e.target.value)); setPage(1) }}
+                  className="w-full px-3 py-2 pr-14 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                />
+                {filtroMes && (
+                  <button
+                    type="button"
+                    onClick={() => { setFiltroMes(''); setPage(1) }}
+                    className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Limpiar filtro"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -814,11 +960,6 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                   const pais = inferPaisDisplay(sol)
                   const esApi = sol.tipo_solicitud === 'api' || (sol.notas || '').toLowerCase().includes('solicitar api')
                   const puedeCompletar = Boolean(sol.empresa_id || sol.empresa_modelo_id)
-
-                  const formatFecha = (fecha) => {
-                    if (!fecha) return '-'
-                    return new Date(fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                  }
 
                   const fechaFin = sol.fecha_fin || (sol.estado === 'completada' || sol.estado === 'cancelada' ? sol.updated_at : null)
 
@@ -903,11 +1044,11 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                       </td>
                       {/* Fecha Inicio */}
                       <td className="px-4 py-3 text-gray-600">
-                        {formatFecha(sol.created_at)}
+                        {formatFechaHora(sol.created_at)}
                       </td>
                       {/* Fecha Fin */}
                       <td className="px-4 py-3 text-gray-600">
-                        {formatFecha(fechaFin)}
+                        {formatFechaHora(fechaFin)}
                       </td>
                       {/* Estado */}
                       <td className="px-4 py-3">
@@ -1171,14 +1312,14 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                 <div>
                   <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Fecha Solicitud</p>
                   <p className="font-medium text-gray-900">
-                    {detalle.created_at ? new Date(detalle.created_at).toLocaleDateString('es-AR') : '—'}
+                    {detalle.created_at ? formatFechaHora(detalle.created_at) : '—'}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Fecha Finalización</p>
                   <p className="font-medium text-gray-900">
                     {(detalle.fecha_fin || ((detalle.estado === 'completada' || detalle.estado === 'cancelada') ? detalle.updated_at : null))
-                      ? new Date(detalle.fecha_fin || detalle.updated_at).toLocaleDateString('es-AR')
+                      ? formatFechaHora(detalle.fecha_fin || detalle.updated_at)
                       : '—'}
                   </p>
                 </div>
@@ -1577,7 +1718,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                             setModalCountryFilter('all')
                             setEmpresaSearch('')
                             setEmpresasEncontradas([])
-                            setEmpresaData({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT' })
+                            setEmpresaData({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT', referencia_cliente: '' })
                             setEmpresaExistente(false)
                           }}
                           className="ml-auto px-3 py-1.5 border border-gray-300 rounded-lg bg-white text-xs text-gray-700 hover:bg-gray-50"
@@ -1677,6 +1818,17 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                             <option value="Antigua & Barbuda">Antigua & Barbuda</option>
                           </select>
                         </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Referencia (opcional)</label>
+                          <input
+                            type="text"
+                            value={empresaData.referencia_cliente || ''}
+                            onChange={(e) => setEmpresaData(prev => ({ ...prev, referencia_cliente: e.target.value }))}
+                            className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm mt-1"
+                            placeholder="Ej: OC-2026-001"
+                            maxLength={120}
+                          />
+                        </div>
                         {/* Selector de Prioridad */}
                         <div>
                           <label className="text-xs text-gray-500">Prioridad</label>
@@ -1756,6 +1908,10 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-500">País:</span>
                   <span className="text-sm text-gray-700">{empresaData.pais}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-500">Referencia:</span>
+                  <span className="text-sm text-gray-700">{empresaData.referencia_cliente?.trim() || 'No especificada'}</span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t">
                   <span className="text-xs text-gray-500 font-medium">Prioridad:</span>

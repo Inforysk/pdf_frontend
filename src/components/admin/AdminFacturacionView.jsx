@@ -25,6 +25,9 @@ const ESTADO_PAGO_PROV = {
 }
 
 export default function AdminFacturacionView() {
+  const currencySymbol = (moneda) => (moneda === 'USD' ? '$' : '€')
+  const formatByCurrency = (amount, moneda) => `${currencySymbol(moneda)}${parseFloat(amount || 0).toFixed(2)}`
+
   const [facturas, setFacturas] = useState([])
   const [stats, setStats] = useState(null)
   const [filters, setFilters] = useState({ empresas: [], periodos: [] })
@@ -726,7 +729,7 @@ export default function AdminFacturacionView() {
           {Object.keys(proveedoresStats).length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {Object.entries(ESTADO_PAGO_PROV).map(([key, cfg]) => {
-                const stat = proveedoresStats[key] || { cantidad: 0, total: 0 }
+                const stat = proveedoresStats[key] || { cantidad: 0, total_eur: 0, total_usd: 0 }
                 return (
                   <div key={key} className={`${cfg.color} rounded-xl p-3 sm:p-4 min-w-0`}>
                     <div className="flex items-center gap-2 min-w-0">
@@ -734,7 +737,9 @@ export default function AdminFacturacionView() {
                       <span className="font-medium">{cfg.label}</span>
                     </div>
                     <p className="text-xl sm:text-2xl font-bold mt-2 leading-none">{stat.cantidad || 0}</p>
-                    <p className="text-xs sm:text-sm opacity-75 break-words">€{(stat.total || 0).toFixed(2)}</p>
+                    <p className="text-xs sm:text-sm opacity-75 break-words">
+                      €{parseFloat(stat.total_eur || 0).toFixed(2)} | ${parseFloat(stat.total_usd || 0).toFixed(2)}
+                    </p>
                   </div>
                 )
               })}
@@ -759,6 +764,7 @@ export default function AdminFacturacionView() {
                   {facturasProveedores.map(f => {
                     const estadoKey = f.estado_pago || 'pendiente'
                     const estadoCfg = ESTADO_PAGO_PROV[estadoKey] || ESTADO_PAGO_PROV.pendiente
+                    const monedaFactura = f.moneda || 'EUR'
                     return (
                       <div key={f.id} className="p-4 space-y-3">
                         <div className="flex items-start justify-between gap-2">
@@ -792,8 +798,8 @@ export default function AdminFacturacionView() {
                             <p className="text-gray-700">{f.cantidad_solicitudes}</p>
                           </div>
                           <div>
-                            <p className="text-gray-400 mb-1">Total EUR</p>
-                            <p className="font-medium text-gray-900">€{parseFloat(f.total_eur || 0).toFixed(2)}</p>
+                            <p className="text-gray-400 mb-1">Total {monedaFactura}</p>
+                            <p className="font-medium text-gray-900">{formatByCurrency(f.total_eur, monedaFactura)}</p>
                           </div>
                         </div>
 
@@ -828,7 +834,7 @@ export default function AdminFacturacionView() {
                       <th className="px-4 py-3 text-left">N° Factura</th>
                       <th className="px-4 py-3 text-left">Cliente</th>
                       <th className="px-4 py-3 text-center">Cant.</th>
-                      <th className="px-4 py-3 text-right">Total EUR</th>
+                      <th className="px-4 py-3 text-right">Total</th>
                       <th className="px-4 py-3 text-center">Estado</th>
                       <th className="px-4 py-3 text-center">Acciones</th>
                     </tr>
@@ -837,6 +843,7 @@ export default function AdminFacturacionView() {
                     {facturasProveedores.map(f => {
                       const estadoKey = f.estado_pago || 'pendiente'
                       const estadoCfg = ESTADO_PAGO_PROV[estadoKey] || ESTADO_PAGO_PROV.pendiente
+                      const monedaFactura = f.moneda || 'EUR'
                       return (
                         <tr key={f.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 text-sm">
@@ -859,7 +866,7 @@ export default function AdminFacturacionView() {
                           </td>
                           <td className="px-4 py-3 text-center">{f.cantidad_solicitudes}</td>
                           <td className="px-4 py-3 text-right font-medium">
-                            €{parseFloat(f.total_eur || 0).toFixed(2)}
+                            {formatByCurrency(f.total_eur, monedaFactura)}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${estadoCfg.color}`}>
@@ -969,8 +976,8 @@ export default function AdminFacturacionView() {
                   </div>
                 )}
                 <div className="p-4 flex justify-between bg-gray-50 font-semibold text-lg">
-                  <span>Total EUR</span>
-                  <span className="text-emerald-600">€{parseFloat(showProveedorDetail.total_eur || 0).toFixed(2)}</span>
+                  <span>Total {showProveedorDetail.moneda || 'EUR'}</span>
+                  <span className="text-emerald-600">{formatByCurrency(showProveedorDetail.total_eur, showProveedorDetail.moneda || 'EUR')}</span>
                 </div>
               </div>
 

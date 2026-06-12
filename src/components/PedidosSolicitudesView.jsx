@@ -14,6 +14,7 @@ const ESTADO_CONFIG = {
 
 const PRIORIDAD_CONFIG = {
   normal: { label: 'Normal', color: 'text-blue-600' },
+  monitoreo: { label: 'Monitoreo', color: 'text-violet-600 font-semibold' },
   '72h': { label: '72 Horas', color: 'text-orange-600' },
   urgente: { label: 'Urgente', color: 'text-red-600 font-bold' },
 }
@@ -70,6 +71,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
   const [showFiltrosAvanzados, setShowFiltrosAvanzados] = useState(false)
   const [filtroSolicitante, setFiltroSolicitante] = useState('')
   const [filtroCliente, setFiltroCliente] = useState('')
+  const [solicitantesFiltro, setSolicitantesFiltro] = useState([])
   const [clientesFiltro, setClientesFiltro] = useState([])
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
   const [filtroFechaInicio, setFiltroFechaInicio] = useState('')
@@ -84,7 +86,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null)
   const [clienteSearch, setClienteSearch] = useState('')
   const [empresaSearch, setEmpresaSearch] = useState('')
-  const [empresaData, setEmpresaData] = useState({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT' })
+  const [empresaData, setEmpresaData] = useState({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT', referencia_cliente: '' })
   const [empresaExistente, setEmpresaExistente] = useState(false) // true si viene de BD (no editable)
   const [searchingEmpresa, setSearchingEmpresa] = useState(false)
   const [empresasEncontradas, setEmpresasEncontradas] = useState([])
@@ -152,6 +154,62 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     return sol.pais || 'Argentina'
   }
 
+  const normalizarMesInput = (value) => {
+    const raw = String(value || '').trim().toLowerCase()
+    if (!raw) return ''
+
+    const ymMatch = raw.match(/^(\d{4})-(\d{1,2})$/)
+    if (ymMatch) {
+      const year = Number(ymMatch[1])
+      const month = Number(ymMatch[2])
+      if (month >= 1 && month <= 12) return `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}`
+    }
+
+    const meses = {
+      enero: 1,
+      febrero: 2,
+      marzo: 3,
+      abril: 4,
+      mayo: 5,
+      junio: 6,
+      julio: 7,
+      agosto: 8,
+      septiembre: 9,
+      setiembre: 9,
+      octubre: 10,
+      noviembre: 11,
+      diciembre: 12,
+    }
+
+    const ascii = raw
+      .replaceAll('á', 'a')
+      .replaceAll('é', 'e')
+      .replaceAll('í', 'i')
+      .replaceAll('ó', 'o')
+      .replaceAll('ú', 'u')
+
+    const textoMatch = ascii.match(/^([a-z]+)\s+de\s+(\d{4})$/)
+    if (textoMatch) {
+      const month = meses[textoMatch[1]]
+      const year = Number(textoMatch[2])
+      if (month) return `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}`
+    }
+
+    return raw
+  }
+
+  const formatFechaHora = (fecha) => {
+    if (!fecha) return '-'
+    return new Date(fecha).toLocaleString('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+  }
+
   // Key para forzar recargas
   const [reloadKey, setReloadKey] = useState(0)
   const reload = () => setReloadKey(k => k + 1)
@@ -160,9 +218,15 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
   useEffect(() => {
     const loadClientesFiltro = async () => {
       try {
-        const res = await axios.get('/api/admin/usuarios-pedidos', { params: { per_page: 500 } })
-        if (res.data.success && res.data.usuarios) {
-          setClientesFiltro(res.data.usuarios)
+        const [resClientes, resSolicitantes] = await Promise.all([
+          axios.get('/api/admin/usuarios-pedidos', { params: { per_page: 500 } }),
+          axios.get('/api/admin/usuarios-pedidos', { params: { per_page: 500, include_staff: 'true' } }),
+        ])
+        if (resClientes.data.success && resClientes.data.usuarios) {
+          setClientesFiltro(resClientes.data.usuarios)
+        }
+        if (resSolicitantes.data.success && resSolicitantes.data.usuarios) {
+          setSolicitantesFiltro(resSolicitantes.data.usuarios)
         }
       } catch { /* ignore */ }
     }
@@ -200,9 +264,17 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
         params.set('page', page)
         params.set('per_page', PER_PAGE)
 
-        // Stats params (solo origen)
+        // Stats params (mismos filtros, excepto estado/paginación)
         const statsParams = new URLSearchParams()
         if (origenFilter !== 'all') statsParams.set('origen', origenFilter)
+        if (busqueda.trim()) statsParams.set('q', busqueda.trim())
+        if (paisFilter !== 'all') statsParams.set('pais', paisFilter)
+        if (filtroSolicitante.trim()) statsParams.set('solicitante', filtroSolicitante.trim())
+        if (filtroCliente) statsParams.set('cliente_id', filtroCliente)
+        if (filtroEmpresa.trim()) statsParams.set('empresa', filtroEmpresa.trim())
+        if (filtroFechaInicio) statsParams.set('fecha_inicio', filtroFechaInicio)
+        if (filtroFechaFin) statsParams.set('fecha_fin', filtroFechaFin)
+        if (filtroMes) statsParams.set('mes', filtroMes)
 
         const responses = await Promise.all([
           axios.get(`/api/pedidos-solicitudes?${params}`),
@@ -364,7 +436,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     
     setSearchingEmpresa(true)
     setEmpresasEncontradas([])
-    setEmpresaData({ razon_social: '', cuit: '', pais: modalCountryFilter !== 'all' ? modalCountryFilter : 'Argentina', tipo_identificacion: PAIS_TIPO_ID[modalCountryFilter] || 'CUIT' })
+    setEmpresaData({ razon_social: '', cuit: '', pais: modalCountryFilter !== 'all' ? modalCountryFilter : 'Argentina', tipo_identificacion: PAIS_TIPO_ID[modalCountryFilter] || 'CUIT', referencia_cliente: '' })
     setEmpresaExistente(false)
     try {
       // Buscar en nuestra BD con filtros
@@ -399,7 +471,8 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
           razon_social: searchValue.trim(),
           cuit: '',
           pais: paisNuevo,
-          tipo_identificacion: PAIS_TIPO_ID[paisNuevo] || 'ID'
+          tipo_identificacion: PAIS_TIPO_ID[paisNuevo] || 'ID',
+          referencia_cliente: ''
         })
         setEmpresaExistente(false)
       }
@@ -441,7 +514,8 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
       razon_social: emp.razon_social || '',
       cuit: emp.cuit || '',
       pais: paisResuelto,
-      tipo_identificacion: emp.tipo_identificacion || PAIS_TIPO_ID[paisResuelto] || 'ID'
+      tipo_identificacion: emp.tipo_identificacion || PAIS_TIPO_ID[paisResuelto] || 'ID',
+      referencia_cliente: ''
     })
     setEmpresaExistente(true) // Viene de BD, no editable
     setEmpresasEncontradas([])
@@ -472,6 +546,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
         razon_social: empresaData.razon_social,
         pais: empresaData.pais || 'Argentina',
         tipo_identificacion: empresaData.tipo_identificacion || PAIS_TIPO_ID[empresaData.pais] || 'ID',
+        referencia_cliente: (empresaData.referencia_cliente || '').trim() || null,
         tipo_informe: 'completo',
         prioridad: prioridadSeleccionada,
         notas: `Solicitud creada por analista para cliente: ${clienteSeleccionado.numero_abono || clienteSeleccionado.id} - ${clienteSeleccionado.nombre_completo}`,
@@ -498,7 +573,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     setClienteSeleccionado(null)
     setClienteSearch('')
     setEmpresaSearch('')
-    setEmpresaData({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT' })
+    setEmpresaData({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT', referencia_cliente: '' })
     setEmpresaExistente(false)
     setEmpresasEncontradas([])
     setModalSearchType('all')
@@ -698,75 +773,147 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
             {/* Solicitante */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Solicitado por</label>
-              <select
-                value={filtroSolicitante}
-                onChange={(e) => { setFiltroSolicitante(e.target.value); setPage(1) }}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
-              >
-                <option value="">Todos</option>
-                {clientesFiltro.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre_completo} {c.numero_abono ? `(${c.numero_abono})` : c.id_interno ? `(${c.id_interno})` : ''}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={filtroSolicitante}
+                  onChange={(e) => { setFiltroSolicitante(e.target.value); setPage(1) }}
+                  className="w-full px-3 py-2 pr-9 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">Todos</option>
+                  {solicitantesFiltro.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.nombre_completo} {c.numero_abono ? `(${c.numero_abono})` : c.id_interno ? `(${c.id_interno})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {filtroSolicitante && (
+                  <button
+                    type="button"
+                    onClick={() => { setFiltroSolicitante(''); setPage(1) }}
+                    className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Limpiar filtro"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
             {/* Cliente */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Cliente</label>
-              <select
-                value={filtroCliente}
-                onChange={(e) => { setFiltroCliente(e.target.value); setPage(1) }}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
-              >
-                <option value="">Todos</option>
-                {clientesFiltro.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre_completo} {c.numero_abono ? `(${c.numero_abono})` : c.id_interno ? `(${c.id_interno})` : ''}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={filtroCliente}
+                  onChange={(e) => { setFiltroCliente(e.target.value); setPage(1) }}
+                  className="w-full px-3 py-2 pr-9 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">Todos</option>
+                  {clientesFiltro.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.nombre_completo} {c.numero_abono ? `(${c.numero_abono})` : c.id_interno ? `(${c.id_interno})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {filtroCliente && (
+                  <button
+                    type="button"
+                    onClick={() => { setFiltroCliente(''); setPage(1) }}
+                    className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Limpiar filtro"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
             {/* Empresa */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Empresa</label>
-              <input
-                type="text"
-                value={filtroEmpresa}
-                onChange={(e) => { setFiltroEmpresa(e.target.value); setPage(1) }}
-                placeholder="Razón social..."
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={filtroEmpresa}
+                  onChange={(e) => { setFiltroEmpresa(e.target.value); setPage(1) }}
+                  placeholder="Razón social..."
+                  className="w-full px-3 py-2 pr-9 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                />
+                {filtroEmpresa && (
+                  <button
+                    type="button"
+                    onClick={() => { setFiltroEmpresa(''); setPage(1) }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Limpiar filtro"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
             {/* Fecha Inicio */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Fecha Desde</label>
-              <input
-                type="date"
-                value={filtroFechaInicio}
-                onChange={(e) => { setFiltroFechaInicio(e.target.value); setPage(1) }}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
-              />
+              <div className="relative">
+                <input
+                  type="date"
+                  value={filtroFechaInicio}
+                  onChange={(e) => { setFiltroFechaInicio(e.target.value); setPage(1) }}
+                  className="w-full px-3 py-2 pr-14 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                />
+                {filtroFechaInicio && (
+                  <button
+                    type="button"
+                    onClick={() => { setFiltroFechaInicio(''); setPage(1) }}
+                    className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Limpiar filtro"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
             {/* Fecha Fin */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Fecha Hasta</label>
-              <input
-                type="date"
-                value={filtroFechaFin}
-                onChange={(e) => { setFiltroFechaFin(e.target.value); setPage(1) }}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
-              />
+              <div className="relative">
+                <input
+                  type="date"
+                  value={filtroFechaFin}
+                  onChange={(e) => { setFiltroFechaFin(e.target.value); setPage(1) }}
+                  className="w-full px-3 py-2 pr-14 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                />
+                {filtroFechaFin && (
+                  <button
+                    type="button"
+                    onClick={() => { setFiltroFechaFin(''); setPage(1) }}
+                    className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Limpiar filtro"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
             {/* Mes */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Mes</label>
-              <input
-                type="month"
-                value={filtroMes}
-                onChange={(e) => { setFiltroMes(e.target.value); setPage(1) }}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
-              />
+              <div className="relative">
+                <input
+                  type="month"
+                  value={filtroMes}
+                  onChange={(e) => { setFiltroMes(normalizarMesInput(e.target.value)); setPage(1) }}
+                  className="w-full px-3 py-2 pr-14 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                />
+                {filtroMes && (
+                  <button
+                    type="button"
+                    onClick={() => { setFiltroMes(''); setPage(1) }}
+                    className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Limpiar filtro"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -809,11 +956,6 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                   const esApi = sol.tipo_solicitud === 'api' || (sol.notas || '').toLowerCase().includes('solicitar api')
                   const puedeCompletar = Boolean(sol.empresa_id || sol.empresa_modelo_id)
 
-                  const formatFecha = (fecha) => {
-                    if (!fecha) return '-'
-                    return new Date(fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                  }
-
                   const fechaFin = sol.fecha_fin || (sol.estado === 'completada' || sol.estado === 'cancelada' ? sol.updated_at : null)
 
                   return (
@@ -847,11 +989,13 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                         <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
                           sol.prioridad === 'urgente'
                             ? 'bg-red-100 text-red-700 border border-red-200'
+                            : sol.prioridad === 'monitoreo'
+                              ? 'bg-violet-100 text-violet-700 border border-violet-200'
                             : sol.prioridad === '72h'
                               ? 'bg-orange-100 text-orange-700 border border-orange-200'
                               : 'bg-blue-50 text-blue-700 border border-blue-200'
                         }`}>
-                          {sol.prioridad === 'urgente' ? '🔴 Urgente' : sol.prioridad === '72h' ? '🟠 72 Horas' : '🔵 Normal'}
+                          {sol.prioridad === 'urgente' ? '🔴 Urgente' : sol.prioridad === 'monitoreo' ? '🟣 Monitoreo' : sol.prioridad === '72h' ? '🟠 72 Horas' : '🔵 Normal'}
                         </span>
                       </td>
                       {/* Solicitado por */}
@@ -895,11 +1039,11 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                       </td>
                       {/* Fecha Inicio */}
                       <td className="px-4 py-3 text-gray-600">
-                        {formatFecha(sol.created_at)}
+                        {formatFechaHora(sol.created_at)}
                       </td>
                       {/* Fecha Fin */}
                       <td className="px-4 py-3 text-gray-600">
-                        {formatFecha(fechaFin)}
+                        {formatFechaHora(fechaFin)}
                       </td>
                       {/* Estado */}
                       <td className="px-4 py-3">
@@ -1107,6 +1251,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                 {detalle.prioridad && detalle.prioridad !== 'normal' && (
                   <span className={`text-xs px-2 py-0.5 rounded-full ${
                     detalle.prioridad === 'urgente' ? 'bg-red-100 text-red-700' :
+                    detalle.prioridad === 'monitoreo' ? 'bg-violet-100 text-violet-700' :
                     detalle.prioridad === '72h' ? 'bg-orange-100 text-orange-700' :
                     'bg-gray-100 text-gray-600'
                   }`}>
@@ -1153,23 +1298,24 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                   <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Prioridad</p>
                   <p className={`font-medium ${
                     detalle.prioridad === 'urgente' ? 'text-red-600' :
+                    detalle.prioridad === 'monitoreo' ? 'text-violet-600' :
                     detalle.prioridad === '72h' ? 'text-orange-600' :
                     'text-blue-600'
                   }`}>
-                    {detalle.prioridad === 'urgente' ? '🔴 Urgente' : detalle.prioridad === '72h' ? '🟠 72 Horas' : '🔵 Normal'}
+                    {detalle.prioridad === 'urgente' ? '🔴 Urgente' : detalle.prioridad === 'monitoreo' ? '🟣 Monitoreo' : detalle.prioridad === '72h' ? '🟠 72 Horas' : '🔵 Normal'}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Fecha Solicitud</p>
                   <p className="font-medium text-gray-900">
-                    {detalle.created_at ? new Date(detalle.created_at).toLocaleDateString('es-AR') : '—'}
+                    {detalle.created_at ? formatFechaHora(detalle.created_at) : '—'}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Fecha Finalización</p>
                   <p className="font-medium text-gray-900">
                     {(detalle.fecha_fin || ((detalle.estado === 'completada' || detalle.estado === 'cancelada') ? detalle.updated_at : null))
-                      ? new Date(detalle.fecha_fin || detalle.updated_at).toLocaleDateString('es-AR')
+                      ? formatFechaHora(detalle.fecha_fin || detalle.updated_at)
                       : '—'}
                   </p>
                 </div>
@@ -1595,7 +1741,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                             setModalCountryFilter('all')
                             setEmpresaSearch('')
                             setEmpresasEncontradas([])
-                            setEmpresaData({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT' })
+                            setEmpresaData({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT', referencia_cliente: '' })
                             setEmpresaExistente(false)
                           }}
                           className="ml-auto px-3 py-1.5 border border-gray-300 rounded-lg bg-white text-xs text-gray-700 hover:bg-gray-50"
@@ -1695,6 +1841,17 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                             <option value="Antigua & Barbuda">Antigua & Barbuda</option>
                           </select>
                         </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Referencia (opcional)</label>
+                          <input
+                            type="text"
+                            value={empresaData.referencia_cliente || ''}
+                            onChange={(e) => setEmpresaData(prev => ({ ...prev, referencia_cliente: e.target.value }))}
+                            className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm mt-1"
+                            placeholder="Ej: OC-2026-001"
+                            maxLength={120}
+                          />
+                        </div>
                         {/* Selector de Prioridad */}
                         <div>
                           <label className="text-xs text-gray-500">Prioridad</label>
@@ -1704,6 +1861,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                             className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm mt-1"
                           >
                             <option value="normal">Normal</option>
+                            <option value="monitoreo">Monitoreo</option>
                             <option value="72h">72 Horas</option>
                             <option value="urgente">Urgente</option>
                           </select>
@@ -1768,14 +1926,20 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                   <span className="text-xs text-gray-500">País:</span>
                   <span className="text-sm text-gray-700">{empresaData.pais}</span>
                 </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-500">Referencia:</span>
+                  <span className="text-sm text-gray-700">{empresaData.referencia_cliente?.trim() || 'No especificada'}</span>
+                </div>
                 <div className="flex justify-between items-center pt-2 border-t">
                   <span className="text-xs text-gray-500 font-medium">Prioridad:</span>
                   <span className={`px-3 py-1 rounded-lg text-sm font-bold ${
                     prioridadSeleccionada === 'urgente' ? 'bg-red-100 text-red-700' :
+                    prioridadSeleccionada === 'monitoreo' ? 'bg-violet-100 text-violet-700' :
                     prioridadSeleccionada === '72h' ? 'bg-orange-100 text-orange-700' :
                     'bg-blue-100 text-blue-700'
                   }`}>
                     {prioridadSeleccionada === 'urgente' ? '🔴 URGENTE' : 
+                     prioridadSeleccionada === 'monitoreo' ? '🟣 MONITOREO' :
                      prioridadSeleccionada === '72h' ? '🟠 72 HORAS' : 
                      '🔵 NORMAL'}
                   </span>
@@ -1785,10 +1949,20 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
               {/* Advertencia de prioridad */}
               {prioridadSeleccionada !== 'normal' && (
                 <div className={`p-3 rounded-lg mb-4 ${
-                  prioridadSeleccionada === 'urgente' ? 'bg-red-50 border border-red-200' : 'bg-orange-50 border border-orange-200'
+                  prioridadSeleccionada === 'urgente'
+                    ? 'bg-red-50 border border-red-200'
+                    : prioridadSeleccionada === 'monitoreo'
+                      ? 'bg-violet-50 border border-violet-200'
+                      : 'bg-orange-50 border border-orange-200'
                 }`}>
-                  <p className={`text-xs ${prioridadSeleccionada === 'urgente' ? 'text-red-700' : 'text-orange-700'}`}>
-                    ⚠️ Esta solicitud tiene prioridad <strong>{prioridadSeleccionada === 'urgente' ? 'URGENTE' : '72 HORAS'}</strong>. 
+                  <p className={`text-xs ${
+                    prioridadSeleccionada === 'urgente'
+                      ? 'text-red-700'
+                      : prioridadSeleccionada === 'monitoreo'
+                        ? 'text-violet-700'
+                        : 'text-orange-700'
+                  }`}>
+                    ⚠️ Esta solicitud tiene prioridad <strong>{prioridadSeleccionada === 'urgente' ? 'URGENTE' : prioridadSeleccionada === 'monitoreo' ? 'MONITOREO' : '72 HORAS'}</strong>. 
                     Se aplicarán los costos correspondientes.
                   </p>
                 </div>
