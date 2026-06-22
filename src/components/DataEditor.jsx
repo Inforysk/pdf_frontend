@@ -1218,9 +1218,8 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
         originalDataRef.current = { ...empresaData }
         // Si viene de solicitud, aplicar datos del pedido sobre los de la empresa
         if (fromSolicitud) {
-          if (fromSolicitud.abonado) {
-            empresaData.abonado = String(fromSolicitud.abonado)
-          }
+          // Regla: cuando viene desde solicitud, el abonado debe respetar ese flujo (vacío si no viene cliente).
+          empresaData.abonado = fromSolicitud.abonado ? String(fromSolicitud.abonado) : ''
           if (fromSolicitud.expediente) {
             empresaData.expediente = String(fromSolicitud.expediente)
           }

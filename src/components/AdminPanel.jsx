@@ -2680,6 +2680,29 @@ function AprobacionesTab({ onAprobacionChange }) {
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(null)
 
+  const formatRiesgoFlags = (flagsRaw) => {
+    if (!flagsRaw) return []
+    const map = {
+      email_personal: 'email personal',
+      sin_telefono: 'sin telefono',
+      alta_masiva: 'alta masiva',
+      registro_sin_invitacion: 'registro sin invitacion'
+    }
+
+    return String(flagsRaw)
+      .split(',')
+      .map(f => f.trim())
+      .filter(Boolean)
+      .map(f => map[f] || f)
+  }
+
+  const getRiesgoMeta = (u) => {
+    const score = Number.isFinite(Number(u?.riesgo_score)) ? Number(u.riesgo_score) : null
+    const flags = formatRiesgoFlags(u?.riesgo_flags)
+    const escaladoPorRiesgo = Boolean(u?.requiere_aprobacion_admin) || (score !== null && score >= 50)
+    return { score, flags, escaladoPorRiesgo }
+  }
+
   useEffect(() => { loadPendientes() }, [])
 
   const loadPendientes = async () => {
@@ -2796,6 +2819,24 @@ function AprobacionesTab({ onAprobacionChange }) {
                       ✓ Aprobado por empresa: {u.aprobado_empresa_por_nombre} ({new Date(u.fecha_aprobacion_empresa).toLocaleDateString()})
                     </p>
                   )}
+                  {u.estado_aprobacion === 'pendiente_admin' && (() => {
+                    const { score, flags, escaladoPorRiesgo } = getRiesgoMeta(u)
+
+                    if (escaladoPorRiesgo) {
+                      return (
+                        <p className="text-xs text-amber-700 mt-1">
+                          Riesgo detectado: score {score ?? '-'}
+                          {flags.length > 0 ? ` (${flags.join(', ')})` : ''}
+                        </p>
+                      )
+                    }
+
+                    return (
+                      <p className="text-xs text-slate-500 mt-1">
+                        Pendiente por flujo anterior (no marcado como riesgo en la validacion actual).
+                      </p>
+                    )
+                  })()}
                   {u.motivo_rechazo && (
                     <p className="text-xs text-red-600 mt-1">Motivo: {u.motivo_rechazo}</p>
                   )}

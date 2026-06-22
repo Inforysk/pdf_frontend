@@ -65,6 +65,12 @@ export default function AdminFacturacionView() {
   const [changingEstado, setChangingEstado] = useState(false)
   const [showProveedorDetail, setShowProveedorDetail] = useState(null) // factura seleccionada para detalle
   const [confirmEstadoChange, setConfirmEstadoChange] = useState(null) // { facturaId, nuevoEstado } para confirmación
+  const [selectedFacturas, setSelectedFacturas] = useState([]) // IDs seleccionados para bulk
+  const [bulkEstado, setBulkEstado] = useState('') // estado para cambio masivo
+  const [bulkFecha, setBulkFecha] = useState('') // fecha opcional para cambio masivo
+  const [bulkChanging, setBulkChanging] = useState(false)
+  const [showBulkConfirm, setShowBulkConfirm] = useState(false) // modal confirmación bulk
+  const [eurUsdRate, setEurUsdRate] = useState(1.2)
 
   // Función para descargar PDF con autenticación
   const handleDownloadPdf = async (facturaId) => {
@@ -116,10 +122,17 @@ export default function AdminFacturacionView() {
   const loadFacturasProveedores = async () => {
     setLoadingProveedores(true)
     try {
-      const res = await axios.get('/api/admin/facturas-proveedores/historial')
+      const [res, tasasRes] = await Promise.all([
+        axios.get('/api/admin/facturas-proveedores/historial'),
+        axios.get('/api/admin/precios-pais/tasas-cambio').catch(() => null),
+      ])
       if (res.data.success) {
         setFacturasProveedores(res.data.facturas || [])
         setProveedoresStats(res.data.stats || {})
+      }
+      if (tasasRes?.data?.success) {
+        const t = tasasRes.data.tasas?.find(t => t.moneda_origen === 'EUR' && t.moneda_destino === 'USD')
+        if (t?.tasa) setEurUsdRate(Number(t.tasa))
       }
     } catch (err) {
       toast.error('Error cargando facturas a proveedores')
@@ -155,6 +168,52 @@ export default function AdminFacturacionView() {
       toast.error('Error al cambiar estado')
     }
     setChangingEstado(false)
+  }
+
+  // Seleccionar/deseleccionar todas las facturas
+  const toggleSelectAll = () => {
+    if (selectedFacturas.length === facturasProveedores.length) {
+      setSelectedFacturas([])
+    } else {
+      setSelectedFacturas(facturasProveedores.map(f => f.id))
+    }
+  }
+
+  const toggleSelectFactura = (id) => {
+    setSelectedFacturas(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
+  // Cambio masivo de estado - mostrar confirmación
+  const handleBulkChangeEstado = () => {
+    if (!bulkEstado || selectedFacturas.length === 0) return
+    setShowBulkConfirm(true)
+  }
+
+  // Confirmar y ejecutar cambio masivo
+  const confirmarBulkChangeEstado = async () => {
+    setBulkChanging(true)
+    try {
+      const res = await axios.post('/api/admin/facturas-proveedores/bulk-change-status', {
+        factura_ids: selectedFacturas,
+        estado: bulkEstado,
+        fecha: bulkFecha || undefined
+      })
+      if (res.data.success) {
+        toast.success(res.data.message)
+        setSelectedFacturas([])
+        setBulkEstado('')
+        setBulkFecha('')
+        setShowBulkConfirm(false)
+        loadFacturasProveedores()
+      } else {
+        toast.error(res.data.error || 'Error al cambiar estados')
+      }
+    } catch (err) {
+      toast.error('Error al cambiar estados')
+    }
+    setBulkChanging(false)
   }
 
   // Descargar PDF de factura a proveedor
@@ -738,7 +797,7 @@ export default function AdminFacturacionView() {
                     </div>
                     <p className="text-xl sm:text-2xl font-bold mt-2 leading-none">{stat.cantidad || 0}</p>
                     <p className="text-xs sm:text-sm opacity-75 break-words">
-                      €{parseFloat(stat.total_eur || 0).toFixed(2)} | ${parseFloat(stat.total_usd || 0).toFixed(2)}
+                      €{parseFloat(stat.total_eur || 0).toFixed(2)} | ${Math.round(parseFloat(stat.total_eur || 0) * eurUsdRate).toLocaleString()}
                     </p>
                   </div>
                 )
@@ -827,9 +886,59 @@ export default function AdminFacturacionView() {
                 </div>
 
                 <div className="hidden md:block overflow-x-auto">
+
+                {/* Barra de acciones masivas */}
+                {selectedFacturas.length > 0 && (
+                  <div className="flex items-center gap-3 px-4 py-3 bg-indigo-50 border border-indigo-200 rounded-lg mb-3">
+                    <span className="text-sm font-medium text-indigo-700">
+                      {selectedFacturas.length} seleccionada{selectedFacturas.length > 1 ? 's' : ''}
+                    </span>
+                    <select
+                      value={bulkEstado}
+                      onChange={(e) => setBulkEstado(e.target.value)}
+                      className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm"
+                    >
+                      <option value="">Cambiar estado a...</option>
+                      <option value="pendiente">Pendiente</option>
+                      <option value="facturada">Facturada</option>
+                      <option value="pagada">Pagada</option>
+                      <option value="cancelada">Cancelada</option>
+                    </select>
+                    <input
+                      type="date"
+                      value={bulkFecha}
+                      onChange={(e) => setBulkFecha(e.target.value)}
+                      className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm"
+                      title="Fecha (opcional, por defecto hoy)"
+                    />
+                    <button
+                      onClick={handleBulkChangeEstado}
+                      disabled={!bulkEstado || bulkChanging}
+                      className="px-4 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {bulkChanging ? 'Aplicando...' : 'Aplicar'}
+                    </button>
+                    <button
+                      onClick={() => { setSelectedFacturas([]); setBulkEstado(''); setBulkFecha('') }}
+                      className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                )}
+
                 <table className="min-w-[920px] w-full">
                   <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                     <tr>
+                      <th className="px-3 py-3 w-10">
+                        <input
+                          type="checkbox"
+                          checked={facturasProveedores.length > 0 && selectedFacturas.length === facturasProveedores.length}
+                          onChange={toggleSelectAll}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          title={selectedFacturas.length === facturasProveedores.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                        />
+                      </th>
                       <th className="px-4 py-3 text-left">Fecha</th>
                       <th className="px-4 py-3 text-left">N° Factura</th>
                       <th className="px-4 py-3 text-left">Cliente</th>
@@ -845,7 +954,15 @@ export default function AdminFacturacionView() {
                       const estadoCfg = ESTADO_PAGO_PROV[estadoKey] || ESTADO_PAGO_PROV.pendiente
                       const monedaFactura = f.moneda || 'EUR'
                       return (
-                        <tr key={f.id} className="hover:bg-gray-50">
+                        <tr key={f.id} className={`hover:bg-gray-50 ${selectedFacturas.includes(f.id) ? 'bg-indigo-50/50' : ''}`}>
+                          <td className="px-3 py-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedFacturas.includes(f.id)}
+                              onChange={() => toggleSelectFactura(f.id)}
+                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                          </td>
                           <td className="px-4 py-3 text-sm">
                             <div className="flex items-center gap-1 text-gray-600">
                               <Clock className="h-3 w-3" />
@@ -873,6 +990,11 @@ export default function AdminFacturacionView() {
                               <estadoCfg.icon className="h-3 w-3" />
                               {estadoCfg.label}
                             </span>
+                            {estadoKey === 'pagada' && f.fecha_pago && (
+                              <div className="text-[10px] text-gray-400 mt-0.5">
+                                Pago: {(() => { const d = new Date(f.fecha_pago); return `${d.getUTCDate()}/${d.getUTCMonth()+1}/${d.getUTCFullYear()}`; })()}
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-center gap-1">
@@ -985,7 +1107,7 @@ export default function AdminFacturacionView() {
               {showProveedorDetail.fecha_pago && (
                 <div className="p-4 bg-green-50 rounded-lg">
                   <p className="text-xs text-green-600">Fecha de pago</p>
-                  <p className="font-medium text-green-700">{new Date(showProveedorDetail.fecha_pago).toLocaleDateString('es-AR')}</p>
+                  <p className="font-medium text-green-700">{(() => { const d = new Date(showProveedorDetail.fecha_pago); return `${d.getUTCDate()}/${d.getUTCMonth()+1}/${d.getUTCFullYear()}`; })()}</p>
                 </div>
               )}
 
@@ -1059,6 +1181,75 @@ export default function AdminFacturacionView() {
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Cambiando...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Confirmar
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Confirmación Cambio Masivo */}
+      {showBulkConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 bg-amber-100 rounded-full">
+                <AlertTriangle className="w-6 h-6 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Confirmar cambio masivo</h3>
+                <p className="text-sm text-gray-500">Esta acción afectará múltiples facturas</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-gray-50 rounded-lg mb-4 space-y-2">
+              <p className="text-sm text-gray-600">
+                Se cambiará el estado de <span className="font-bold text-gray-900">{selectedFacturas.length} factura{selectedFacturas.length > 1 ? 's' : ''}</span> a{' '}
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                  ESTADO_PAGO_PROV[bulkEstado]?.color || 'bg-gray-100'
+                }`}>
+                  {ESTADO_PAGO_PROV[bulkEstado]?.label || bulkEstado}
+                </span>
+              </p>
+              {bulkFecha && (
+                <p className="text-sm text-gray-600">
+                  Fecha: <span className="font-medium text-gray-900">{new Date(bulkFecha + 'T12:00:00').toLocaleDateString('es-AR')}</span>
+                </p>
+              )}
+              {!bulkFecha && (
+                <p className="text-sm text-gray-400 italic">
+                  Fecha: se usará la fecha de hoy ({new Date().toLocaleDateString('es-AR')})
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowBulkConfirm(false)}
+                disabled={bulkChanging}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarBulkChangeEstado}
+                disabled={bulkChanging}
+                className={`px-4 py-2 text-white rounded-lg disabled:opacity-50 flex items-center gap-2 ${
+                  bulkEstado === 'pagada' ? 'bg-green-600 hover:bg-green-700' :
+                  bulkEstado === 'cancelada' ? 'bg-gray-600 hover:bg-gray-700' :
+                  'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                {bulkChanging ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Aplicando...
                   </>
                 ) : (
                   <>

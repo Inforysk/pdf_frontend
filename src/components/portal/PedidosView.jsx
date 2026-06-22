@@ -23,6 +23,12 @@ const ESTADO_CONFIG = {
   cancelada: { key: 'cancelled', bg: 'bg-red-100 text-red-700', dot: 'bg-red-500' },
 }
 
+const PRIORIDAD_CONFIG = {
+  normal: { label: 'Normal', bg: 'bg-blue-50 text-blue-700 border-blue-200' },
+  '72h': { label: '72 Horas', bg: 'bg-orange-50 text-orange-700 border-orange-200' },
+  urgente: { label: 'Urgente', bg: 'bg-red-50 text-red-700 border-red-200' },
+}
+
 const extractTipoInforme = (notas) => {
   if (!notas) return null
   const match = notas.match(/Tipo:\s*(Informe \w+|Solicitar API)/i)
@@ -82,7 +88,19 @@ export default function PedidosView({ onViewEmpresa }) {
     setOpenPdfDrop(null)
     try {
       toast.loading('Generando PDF...', { id: 'pdf-gen' })
-      const res = await axios.get(`/api/empresas/${pedido.empresa_id}/pdf?lang=${lang}`, { responseType: 'blob' })
+      const params = new URLSearchParams({ lang })
+      if (pedido.expediente) params.append('expediente', pedido.expediente)
+      if (pedido.cliente_abono) params.append('abonado', pedido.cliente_abono)
+      params.append('referencia', pedido.referencia || '')
+      if (pedido.fecha_informe) {
+        const fechaInforme = String(pedido.fecha_informe).split('T')[0]
+        if (fechaInforme) params.append('fecha', fechaInforme)
+      } else if (pedido.updated_at) {
+        const fechaActualizacion = String(pedido.updated_at).split('T')[0]
+        if (fechaActualizacion) params.append('fecha', fechaActualizacion)
+      }
+
+      const res = await axios.get(`/api/empresas/${pedido.empresa_id}/pdf?${params.toString()}`, { responseType: 'blob' })
       const url = window.URL.createObjectURL(new Blob([res.data]))
       const a = document.createElement('a')
       a.href = url
@@ -286,6 +304,7 @@ export default function PedidosView({ onViewEmpresa }) {
                   const pais = TIPO_TO_PAIS[pedido.tipo_identificacion] || null
                   const iso = pais ? COUNTRY_ISO[pais] : null
                   const estadoCfg = ESTADO_CONFIG[pedido.estado] || { key: pedido.estado, bg: 'bg-gray-100 text-gray-700', dot: 'bg-gray-500' }
+                  const prioridadCfg = PRIORIDAD_CONFIG[pedido.prioridad] || PRIORIDAD_CONFIG.normal
                   // Usar tipo_informe del campo dedicado, fallback a extraer de notas para compatibilidad
                   const tipoInforme = pedido.tipo_informe || extractTipoInforme(pedido.notas)
                   const paisNombre = pais ? t(`countries.${pais}`) : null
@@ -306,13 +325,18 @@ export default function PedidosView({ onViewEmpresa }) {
                         {paisNombre && <p className="text-xs text-gray-500">{paisNombre}</p>}
                       </td>
                       <td className="px-4 py-3.5">
-                        {tipoInforme ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold">
-                            {translateReportType(tipoInforme, t)}
+                        <div className="flex flex-col items-start gap-1">
+                          {tipoInforme ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold">
+                              {translateReportType(tipoInforme, t)}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border text-xs font-semibold ${prioridadCfg.bg}`}>
+                            {prioridadCfg.label}
                           </span>
-                        ) : (
-                          <span className="text-xs text-gray-400">—</span>
-                        )}
+                        </div>
                       </td>
                       <td className="px-4 py-3.5 text-center">
                         {pedido.score !== undefined && pedido.score !== null ? (
@@ -378,6 +402,7 @@ export default function PedidosView({ onViewEmpresa }) {
               const pais = TIPO_TO_PAIS[pedido.tipo_identificacion] || null
               const iso = pais ? COUNTRY_ISO[pais] : null
               const estadoCfg = ESTADO_CONFIG[pedido.estado] || { key: pedido.estado, bg: 'bg-gray-100 text-gray-700', dot: 'bg-gray-500' }
+              const prioridadCfg = PRIORIDAD_CONFIG[pedido.prioridad] || PRIORIDAD_CONFIG.normal
               const tipoInforme = pedido.tipo_informe || extractTipoInforme(pedido.notas)
 
               return (
@@ -398,6 +423,7 @@ export default function PedidosView({ onViewEmpresa }) {
                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-gray-500">
                     <span>{formatDate(pedido.created_at)}</span>
                     {tipoInforme && <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold text-[9px] sm:text-[10px]">{translateReportType(tipoInforme, t)}</span>}
+                    <span className={`px-1.5 sm:px-2 py-0.5 rounded-full border font-semibold text-[9px] sm:text-[10px] ${prioridadCfg.bg}`}>{prioridadCfg.label}</span>
                     {pedido.score != null && (
                       <span className={`px-1.5 sm:px-2 py-0.5 rounded-full font-bold border text-[9px] sm:text-[10px] ${getScoreColor(pedido.score)}`}>
                         {Math.round(pedido.score)}
@@ -467,6 +493,7 @@ export default function PedidosView({ onViewEmpresa }) {
         if (!p) return null
         const pais = TIPO_TO_PAIS[p.tipo_identificacion] || null
         const estadoCfg = ESTADO_CONFIG[p.estado] || { key: p.estado, bg: 'bg-gray-100 text-gray-700' }
+        const prioridadCfg = PRIORIDAD_CONFIG[p.prioridad] || PRIORIDAD_CONFIG.normal
         const tipoInforme = p.tipo_informe || extractTipoInforme(p.notas)
         const paisNombre = pais ? t(`countries.${pais}`) : null
 
@@ -497,6 +524,12 @@ export default function PedidosView({ onViewEmpresa }) {
                     <div>
                       <p className="text-xs text-gray-500 uppercase font-semibold mb-1">{t('orders.detailLabels.reportType')}</p>
                       <p className="text-sm text-gray-700">{translateReportType(tipoInforme, t) || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase font-semibold mb-1">{t('orders.detailLabels.priority')}</p>
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${prioridadCfg.bg}`}>
+                        {prioridadCfg.label}
+                      </span>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 uppercase font-semibold mb-1">{t('orders.columns.status')}</p>

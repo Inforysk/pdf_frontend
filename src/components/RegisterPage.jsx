@@ -117,6 +117,10 @@ function RegisterPage({ onBack }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+  const [inviteToken, setInviteToken] = useState('')
+  const [inviteInfo, setInviteInfo] = useState(null)
+  const [inviteLoading, setInviteLoading] = useState(false)
+  const [inviteError, setInviteError] = useState('')
   
   // País y empresa
   const [paises, setPaises] = useState([])
@@ -156,6 +160,60 @@ function RegisterPage({ onBack }) {
     }
     loadPaises()
   }, [])
+
+  // Leer y validar token de invitación desde query string
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const token = (params.get('invite_token') || '').trim()
+    if (!token) return
+
+    setInviteToken(token)
+    setInviteError('')
+    setForm(prev => ({ ...prev, rol: 'cliente_usuario' }))
+
+    const validateInvite = async () => {
+      setInviteLoading(true)
+      try {
+        const res = await axios.get(`/api/registro/cliente/invitacion/${encodeURIComponent(token)}`)
+        if (res.data?.success && res.data?.invite) {
+          const invite = res.data.invite
+          setInviteInfo(invite)
+          setForm(prev => ({
+            ...prev,
+            email: invite.email_invitado || prev.email,
+            pais: invite.pais_cliente || prev.pais,
+            cuit_cliente: invite.cuit_cliente || prev.cuit_cliente,
+          }))
+          if (invite.tipo_identificacion) {
+            setTipoIdentificador(invite.tipo_identificacion)
+          }
+        } else {
+          setInviteError(res.data?.error || t('register.inviteInvalidOrExpired'))
+        }
+      } catch (err) {
+        setInviteError(err.response?.data?.error || t('register.inviteInvalidOrExpired'))
+      } finally {
+        setInviteLoading(false)
+      }
+    }
+
+    validateInvite()
+  }, [])
+
+  useEffect(() => {
+    if (!inviteInfo?.pais_cliente || paises.length === 0) return
+    const paisInvitacion = paises.find(p => p.codigo === inviteInfo.pais_cliente)
+    if (!paisInvitacion) return
+    setPaisSeleccionado(paisInvitacion)
+    setForm(prev => ({
+      ...prev,
+      pais: inviteInfo.pais_cliente,
+      codigo_telefono: paisInvitacion.codigo_telefono || prev.codigo_telefono,
+    }))
+    if (inviteInfo.tipo_identificacion) {
+      setTipoIdentificador(inviteInfo.tipo_identificacion)
+    }
+  }, [inviteInfo, paises])
 
   // Validar formato del identificador fiscal en tiempo real
   useEffect(() => {
@@ -260,6 +318,10 @@ function RegisterPage({ onBack }) {
     setError('')
 
     // Validaciones
+    if (inviteToken && !inviteInfo) {
+      setError(inviteError || t('register.inviteNotValidOrExpired'))
+      return
+    }
     if (!form.rol) {
       setError('Debe seleccionar un tipo de cuenta')
       return
@@ -268,7 +330,7 @@ function RegisterPage({ onBack }) {
       setError('Email y nombre completo son requeridos')
       return
     }
-    if (!form.cuit_cliente) {
+    if (!inviteToken && !form.cuit_cliente) {
       setError(`Debe ingresar el ${tipoIdentificador}`)
       return
     }
@@ -308,7 +370,7 @@ function RegisterPage({ onBack }) {
     }
 
     // Si es cliente_usuario, validar que exista cliente_admin
-    if (form.rol === 'cliente_usuario' && !adminExiste) {
+    if (form.rol === 'cliente_usuario' && !inviteToken && !adminExiste) {
       setError('No existe un administrador registrado para esta empresa. El administrador debe registrarse primero.')
       return
     }
@@ -324,13 +386,14 @@ function RegisterPage({ onBack }) {
         password: form.password,
         nombre_completo: form.nombre_completo,
         rol: form.rol,
-        pais_cliente: form.pais,
-        cuit_cliente: form.cuit_cliente,
+        pais_cliente: inviteInfo?.pais_cliente || form.pais,
+        cuit_cliente: inviteInfo?.cuit_cliente || form.cuit_cliente,
         razon_social_cliente: razonSocialFinal,
         telefono: form.telefono || null,
         codigo_telefono: form.codigoTelManual ? form.codigo_telefono : (paisSeleccionado?.codigo_telefono || form.codigo_telefono || null),
         telefono2: mostrarTelefono2 ? (form.telefono2 || null) : null,
         codigo_telefono2: mostrarTelefono2 ? (form.codigo_telefono2 || null) : null,
+        invite_token: inviteToken || null,
       })
 
       if (res.data.success) {
@@ -372,6 +435,16 @@ function RegisterPage({ onBack }) {
                 ? t('register.successMessageAdmin')
                 : t('register.successMessageUser')}
             </p>
+            {inviteToken && inviteInfo?.empresa_nombre && (
+              <div className="mb-6 p-3 rounded-xl border text-left" style={{ backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }}>
+                <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: colors.navyLight }}>
+                  {t('register.invitationRegistrationTitle')}
+                </p>
+                <p className="text-sm" style={{ color: colors.navy }}>
+                  {t('register.invitationSuccessMessage', { company: inviteInfo.empresa_nombre })}
+                </p>
+              </div>
+            )}
             <button
               onClick={onBack}
               className="w-full py-3.5 rounded-xl text-white font-semibold transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
@@ -419,17 +492,54 @@ function RegisterPage({ onBack }) {
             </div>
           )}
 
+          {/* Info de invitación */}
+          {inviteToken && (
+            <div
+              className="p-3 rounded-xl border"
+              style={{
+                backgroundColor: inviteError ? '#FEF2F2' : '#EFF6FF',
+                borderColor: inviteError ? `${colors.crimson}50` : '#BFDBFE'
+              }}
+            >
+              {inviteLoading ? (
+                <div className="flex items-center gap-2 text-sm text-blue-700">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t('register.validatingInvitation')}
+                </div>
+              ) : inviteError ? (
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 mt-0.5" style={{ color: colors.crimson }} />
+                  <p className="text-sm" style={{ color: colors.crimson }}>{inviteError}</p>
+                </div>
+              ) : (
+                <div className="text-sm" style={{ color: colors.navy }}>
+                  <p className="font-semibold">{t('register.invitationRegistrationTitle')}</p>
+                  <p>
+                    {t('register.invitationCompanyLabel')}: {inviteInfo?.empresa_nombre || t('register.notAvailable')}
+                    {inviteInfo?.email_invitado ? ` | ${t('register.invitedEmailLabel')}: ${inviteInfo.email_invitado}` : ''}
+                  </p>
+                  <p>
+                    {t('register.country')}: {inviteInfo?.pais_cliente || t('register.notAvailable')}
+                    {inviteInfo?.cuit_cliente ? ` | ${inviteInfo?.tipo_identificacion || 'ID Fiscal'}: ${inviteInfo.cuit_cliente}` : ''}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Selector de rol */}
           <div>
             <label className="block text-sm font-medium mb-2" style={{ color: colors.navy }}>{t('register.accountType')} *</label>
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
+                disabled={Boolean(inviteToken)}
                 onClick={() => setForm({...form, rol: 'cliente_admin'})}
                 className="p-4 rounded-xl border-2 transition-all text-left"
                 style={{
                   borderColor: form.rol === 'cliente_admin' ? colors.crimson : '#e2e8f0',
                   backgroundColor: form.rol === 'cliente_admin' ? `${colors.crimson}10` : 'white',
+                  opacity: inviteToken ? 0.6 : 1,
                 }}
               >
                 <UserCheck className="h-6 w-6 mb-2" style={{ color: form.rol === 'cliente_admin' ? colors.crimson : colors.navyLight }} />
@@ -440,11 +550,13 @@ function RegisterPage({ onBack }) {
               </button>
               <button
                 type="button"
+                disabled={Boolean(inviteToken)}
                 onClick={() => setForm({...form, rol: 'cliente_usuario'})}
                 className="p-4 rounded-xl border-2 transition-all text-left"
                 style={{
                   borderColor: form.rol === 'cliente_usuario' ? colors.crimson : '#e2e8f0',
                   backgroundColor: form.rol === 'cliente_usuario' ? `${colors.crimson}10` : 'white',
+                  opacity: inviteToken ? 0.9 : 1,
                 }}
               >
                 <Users className="h-6 w-6 mb-2" style={{ color: form.rol === 'cliente_usuario' ? colors.crimson : colors.navyLight }} />
@@ -454,11 +566,17 @@ function RegisterPage({ onBack }) {
                 <p className="text-xs mt-1" style={{ color: colors.navyLight }}>{t('register.userDescription')}</p>
               </button>
             </div>
+            {inviteToken && !inviteError && (
+              <p className="text-xs mt-2" style={{ color: colors.navyLight }}>
+                {t('register.accountTypeLockedByInvitation')}
+              </p>
+            )}
           </div>
 
           {form.rol && (
             <>
               {/* País y CUIT */}
+              {!inviteToken && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Selector de país */}
                 <div className="relative">
@@ -555,6 +673,7 @@ function RegisterPage({ onBack }) {
                   )}
                 </div>
               </div>
+              )}
 
               {/* Para cliente_admin: Empresa encontrada o ingresar manualmente */}
               {form.rol === 'cliente_admin' && (
@@ -594,7 +713,7 @@ function RegisterPage({ onBack }) {
               )}
 
               {/* Para cliente_usuario: SOLO validar si existe admin */}
-              {form.rol === 'cliente_usuario' && form.cuit_cliente && form.cuit_cliente.length >= 8 && (
+              {form.rol === 'cliente_usuario' && !inviteToken && form.cuit_cliente && form.cuit_cliente.length >= 8 && (
                 <div className={`p-3 rounded-xl border flex items-center gap-2 ${
                   validandoAdmin 
                     ? 'bg-blue-50 border-blue-200'
@@ -926,8 +1045,8 @@ function RegisterPage({ onBack }) {
                   !form.rol ||
                   !form.email?.trim() ||
                   !form.nombre_completo?.trim() ||
-                  !form.cuit_cliente?.trim() ||
-                  !taxIdValidation.valid ||
+                  (!inviteToken && !form.cuit_cliente?.trim()) ||
+                  (!inviteToken && !taxIdValidation.valid) ||
                   !form.telefono?.trim() ||
                   (form.codigoTelManual && (!form.codigo_telefono || !form.codigo_telefono.startsWith('+'))) ||
                   !form.password ||
@@ -936,8 +1055,10 @@ function RegisterPage({ onBack }) {
                   !/[A-Z]/.test(form.password) ||
                   !/[0-9]/.test(form.password) ||
                   !/[!@#$%^&*(),.?":{}|<>]/.test(form.password) ||
+                  inviteLoading ||
+                  (inviteToken && !inviteInfo) ||
                   (form.rol === 'cliente_admin' && !empresaEncontrada && !form.razon_social_manual?.trim()) ||
-                  (form.rol === 'cliente_usuario' && !adminExiste)
+                  (form.rol === 'cliente_usuario' && !inviteToken && !adminExiste)
                 }
                 className="w-full py-3.5 rounded-xl text-white font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
                 style={{ 

@@ -8,6 +8,8 @@ import SearchView from './components/SearchView'
 import HistorialView from './components/HistorialView'
 import LoginPage from './components/LoginPage'
 import RegisterPage from './components/RegisterPage'
+import ForgotPasswordPage from './components/ForgotPasswordPage'
+import ResetPasswordPage from './components/ResetPasswordPage'
 import ChangePasswordModal from './components/ChangePasswordModal'
 import AdminPanel from './components/AdminPanel'
 import ClienteAdminPanel from './components/ClienteAdminPanel'
@@ -68,8 +70,35 @@ function App() {
   const [aprobacionesEmpresaCount, setAprobacionesEmpresaCount] = useState(0) // Contador para cliente_admin
   const [boAlertasCount, setBoAlertasCount] = useState(0) // Contador de alertas críticas BO (quiebra/concurso/liquidación)
   const [showRegister, setShowRegister] = useState(false) // Mostrar página de registro
+  const [routePath, setRoutePath] = useState(window.location.pathname)
   const [loadingSolicitudView, setLoadingSolicitudView] = useState(false)
   const prevUserRef = useRef(user?.id)
+
+  useEffect(() => {
+    const onPopState = () => setRoutePath(window.location.pathname)
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
+  const handleBackToLoginFromRegister = () => {
+    setShowRegister(false)
+    const isRegisterPath = window.location.pathname.toLowerCase().startsWith('/register')
+    if (isRegisterPath) {
+      window.history.replaceState({}, '', '/')
+      setRoutePath('/')
+    }
+  }
+
+  const navigateToPath = (path) => {
+    window.history.pushState({}, '', path)
+    setRoutePath(path)
+  }
+
+  const handleBackToLoginPublic = () => {
+    window.history.replaceState({}, '', '/')
+    setRoutePath('/')
+    setShowRegister(false)
+  }
 
   // Fetch contador de alertas para admin
   useEffect(() => {
@@ -277,7 +306,11 @@ function App() {
       // Marcar como en_proceso en backend y obtener datos del pedido
       let pedidoInfo = null
       try {
-        const putRes = await axios.put(`/api/pedidos-solicitudes/${solicitud.id}`, { estado: 'en_proceso' })
+        const source = solicitud?.solicitud_source || 'pedidos-solicitudes'
+        const updateUrl = source === 'solicitudes_investigacion'
+          ? `/api/solicitudes/${solicitud.id}`
+          : `/api/pedidos-solicitudes/${solicitud.id}`
+        const putRes = await axios.put(updateUrl, { estado: 'en_proceso' })
         console.log('[handleIniciarInformeSolicitud] PUT response:', putRes.data)
         if (putRes.data.pedido) {
           pedidoInfo = putRes.data.pedido
@@ -287,8 +320,8 @@ function App() {
         console.error('[handleIniciarInformeSolicitud] Error en PUT:', err)
       }
       
-      const abonadoFinal = solicitud.cliente_abono || solicitud.solicitante_abono || pedidoInfo?.usuario_id_interno || ''
-      console.log('[handleIniciarInformeSolicitud] Abonado final:', abonadoFinal, 'cliente_abono:', solicitud.cliente_abono, 'solicitante_abono:', solicitud.solicitante_abono)
+      const abonadoFinal = solicitud.cliente_abono || pedidoInfo?.usuario_id_interno || ''
+      console.log('[handleIniciarInformeSolicitud] Abonado final:', abonadoFinal, 'cliente_abono:', solicitud.cliente_abono)
       
       const solicitudEnriquecida = {
         ...solicitud,
@@ -568,6 +601,10 @@ function App() {
   }
 
   const totalProcessed = bulkResults.success.length + bulkResults.warnings.length
+  const isRegisterRoute = routePath.toLowerCase().startsWith('/register')
+  const isForgotRoute = routePath.toLowerCase().startsWith('/forgot-password')
+  const isResetRoute = routePath.toLowerCase().startsWith('/reset-password')
+  const resetToken = new URLSearchParams(window.location.search).get('token') || ''
 
   // Auth loading spinner
   if (authLoading) {
@@ -580,10 +617,22 @@ function App() {
 
   // Not authenticated → login or register
   if (!user) {
-    if (showRegister) {
-      return <RegisterPage onBack={() => setShowRegister(false)} />
+    if (isResetRoute) {
+      return <ResetPasswordPage token={resetToken} onBackToLogin={handleBackToLoginPublic} />
     }
-    return <LoginPage onLogin={login} onRegister={() => setShowRegister(true)} />
+    if (isForgotRoute) {
+      return <ForgotPasswordPage onBackToLogin={handleBackToLoginPublic} />
+    }
+    if (showRegister || isRegisterRoute) {
+      return <RegisterPage onBack={handleBackToLoginFromRegister} />
+    }
+    return (
+      <LoginPage
+        onLogin={login}
+        onRegister={() => setShowRegister(true)}
+        onForgotPassword={() => navigateToPath('/forgot-password')}
+      />
+    )
   }
 
   // Must change password

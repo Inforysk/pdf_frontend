@@ -376,6 +376,8 @@ export default function AdminDashboard() {
   }
 
   const { kpis } = data
+  const eurUsd = data?.eur_usd || 1.20
+  const fmtDual = (eur) => { const e = parseFloat(eur || 0); return `€${e.toLocaleString()} | $${Math.round(e * eurUsd).toLocaleString()}` }
 
   // Preparar datos de solicitudes por estado con labels legibles
   const solEstado = (data.solicitudes_por_estado || []).map(s => ({
@@ -424,7 +426,7 @@ export default function AdminDashboard() {
         />
         <KpiCard icon={TrendingUp} label="Score promedio" value={kpis.score_promedio} sub="/ 100" color="purple" />
         <KpiCard
-          icon={Database} label="Facturación" value={`€${(kpis.facturacion_mes || 0).toLocaleString()}`} color="rose"
+          icon={Database} label="Facturación" value={fmtDual(kpis.facturacion_mes)} color="rose"
           description="Este mes"
         />
       </div>
@@ -443,20 +445,20 @@ export default function AdminDashboard() {
                 <div className="bg-amber-50 rounded-lg p-3 text-center">
                   <div className="text-xl font-bold text-amber-600">{data.facturas_proveedores.pendientes}</div>
                   <div className="text-xs text-amber-700">Pendientes</div>
-                  <div className="text-xs text-amber-500 mt-0.5">€{data.facturas_proveedores.total_pendiente?.toLocaleString()}</div>
+                  <div className="text-xs text-amber-500 mt-0.5">{fmtDual(data.facturas_proveedores.total_pendiente)}</div>
                 </div>
                 <div className="bg-blue-50 rounded-lg p-3 text-center">
                   <div className="text-xl font-bold text-blue-600">{data.facturas_proveedores.facturadas}</div>
                   <div className="text-xs text-blue-700">Facturadas</div>
-                  <div className="text-xs text-blue-500 mt-0.5">€{data.facturas_proveedores.total_facturado?.toLocaleString()}</div>
+                  <div className="text-xs text-blue-500 mt-0.5">{fmtDual(data.facturas_proveedores.total_facturado)}</div>
                 </div>
                 <div className="bg-green-50 rounded-lg p-3 text-center">
                   <div className="text-xl font-bold text-green-600">{data.facturas_proveedores.pagadas}</div>
                   <div className="text-xs text-green-700">Pagadas</div>
-                  <div className="text-xs text-green-500 mt-0.5">€{data.facturas_proveedores.total_pagado?.toLocaleString()}</div>
+                  <div className="text-xs text-green-500 mt-0.5">{fmtDual(data.facturas_proveedores.total_pagado)}</div>
                 </div>
                 <div className="bg-emerald-50 rounded-lg p-3 text-center">
-                  <div className="text-xl font-bold text-emerald-600">€{data.facturas_proveedores.pagado_mes?.toLocaleString()}</div>
+                  <div className="text-xl font-bold text-emerald-600">{fmtDual(data.facturas_proveedores.pagado_mes)}</div>
                   <div className="text-xs text-emerald-700">Pagado este mes</div>
                 </div>
               </div>
@@ -474,7 +476,7 @@ export default function AdminDashboard() {
                 <div className="bg-amber-50 rounded-lg p-3 text-center">
                   <div className="text-xl font-bold text-amber-600">{data.facturas_clientes.pendientes}</div>
                   <div className="text-xs text-amber-700">Pendientes</div>
-                  <div className="text-xs text-amber-500 mt-0.5">€{data.facturas_clientes.total_pendiente?.toLocaleString()}</div>
+                  <div className="text-xs text-amber-500 mt-0.5">{fmtDual(data.facturas_clientes.total_pendiente)}</div>
                 </div>
                 <div className="bg-red-50 rounded-lg p-3 text-center">
                   <div className="text-xl font-bold text-red-600">{data.facturas_clientes.vencidas}</div>
@@ -483,10 +485,10 @@ export default function AdminDashboard() {
                 <div className="bg-green-50 rounded-lg p-3 text-center">
                   <div className="text-xl font-bold text-green-600">{data.facturas_clientes.pagadas}</div>
                   <div className="text-xs text-green-700">Pagadas</div>
-                  <div className="text-xs text-green-500 mt-0.5">€{data.facturas_clientes.total_pagado?.toLocaleString()}</div>
+                  <div className="text-xs text-green-500 mt-0.5">{fmtDual(data.facturas_clientes.total_pagado)}</div>
                 </div>
                 <div className="bg-emerald-50 rounded-lg p-3 text-center">
-                  <div className="text-xl font-bold text-emerald-600">€{data.facturas_clientes.pagado_mes?.toLocaleString()}</div>
+                  <div className="text-xl font-bold text-emerald-600">{fmtDual(data.facturas_clientes.pagado_mes)}</div>
                   <div className="text-xs text-emerald-700">Cobrado este mes</div>
                 </div>
               </div>
@@ -540,7 +542,7 @@ export default function AdminDashboard() {
                 >
                   <option value="">Toda Prioridad</option>
                   <option value="urgente">Urgente</option>
-                  <option value="alta">Alta</option>
+                  <option value="72h">72 Horas</option>
                   <option value="normal">Normal</option>
                 </select>
               </div>
@@ -591,8 +593,8 @@ export default function AdminDashboard() {
                         {sol.prioridad === 'urgente' && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">Urgente</span>
                         )}
-                        {sol.prioridad === 'alta' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium">Alta</span>
+                        {sol.prioridad === '72h' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-medium">72 Horas</span>
                         )}
                       </div>
                       <p className="text-xs text-gray-500">
@@ -741,6 +743,10 @@ export default function AdminDashboard() {
               </BarChart>
             </ResponsiveContainer>
           </div>
+          <div className="pt-2 border-t mt-3 flex justify-between text-sm">
+            <span className="text-gray-500">Total {RESUMEN_LABELS[periodoResumenEmpresas]?.toLowerCase() || 'período'}</span>
+            <span className="font-bold">{(data.empresas_por_pais || []).reduce((a, b) => a + (b.cantidad || 0), 0)}</span>
+          </div>
         </ChartCard>
 
         <ChartCard
@@ -841,6 +847,12 @@ export default function AdminDashboard() {
               </div>
             )}
           </div>
+          {(data.top_clientes || []).length > 0 && (
+            <div className="pt-2 border-t mt-3 flex justify-between text-sm">
+              <span className="text-gray-500">Total solicitudes {RESUMEN_LABELS[periodoResumenClientes]?.toLowerCase() || 'período'}</span>
+              <span className="font-bold">{(data.top_clientes || []).reduce((a, b) => a + (b.solicitudes || 0), 0)}</span>
+            </div>
+          )}
         </ChartCard>
 
         <div className="bg-white rounded-xl border p-4 sm:p-5">

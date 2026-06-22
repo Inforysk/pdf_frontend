@@ -4,7 +4,7 @@ import { Lock, User, Eye, EyeOff, Loader2, AlertCircle, Shield } from 'lucide-re
 import LanguageSelector from './LanguageSelector'
 import logo from '../assets/logo.png'
 
-function LoginPage({ onLogin, onRegister }) {
+function LoginPage({ onLogin, onRegister, onForgotPassword }) {
   const { t } = useTranslation()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -143,6 +143,18 @@ function LoginPage({ onLogin, onRegister }) {
                 {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
               </button>
             </div>
+            {onForgotPassword && (
+              <div className="mt-2 text-right">
+                <button
+                  type="button"
+                  onClick={onForgotPassword}
+                  className="text-sm font-medium hover:underline underline-offset-4"
+                  style={{ color: colors.navy }}
+                >
+                  Olvide mi contrasena
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Submit con gradiente */}

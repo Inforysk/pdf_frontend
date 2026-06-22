@@ -59,12 +59,285 @@ function ClienteAdminPanel({ onBack }) {
             <UserCheck className="h-4 w-4" />
             <span>Aprobaciones</span>
           </button>
+          <button
+            onClick={() => setActiveTab('invitaciones')}
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${
+              activeTab === 'invitaciones'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Mail className="h-4 w-4" />
+            <span>Invitaciones</span>
+          </button>
         </div>
       </div>
 
       {/* Content */}
       {activeTab === 'equipo' && <EquipoTab />}
       {activeTab === 'pendientes' && <PendientesTab />}
+      {activeTab === 'invitaciones' && <InvitacionesTab />}
+    </div>
+  )
+}
+
+// ============================================
+// TAB: INVITACIONES
+// ============================================
+function InvitacionesTab() {
+  const [email, setEmail] = useState('')
+  const [expiresHours, setExpiresHours] = useState(72)
+  const [loading, setLoading] = useState(false)
+  const [loadingHistorial, setLoadingHistorial] = useState(false)
+  const [regeneratingId, setRegeneratingId] = useState(null)
+  const [invitaciones, setInvitaciones] = useState([])
+  const [recentLinks, setRecentLinks] = useState([])
+
+  useEffect(() => {
+    loadHistorial()
+  }, [])
+
+  const loadHistorial = async () => {
+    setLoadingHistorial(true)
+    try {
+      const res = await axios.get('/api/cliente-admin/invitaciones?limit=100')
+      if (res.data?.success) {
+        setInvitaciones(res.data.invitaciones || [])
+      } else {
+        toast.error(res.data?.error || 'No se pudo cargar el historial')
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al cargar historial de invitaciones')
+    } finally {
+      setLoadingHistorial(false)
+    }
+  }
+
+  const getEstadoBadgeClass = (estado) => {
+    if (estado === 'usada') return 'bg-green-100 text-green-700'
+    if (estado === 'expirada') return 'bg-amber-100 text-amber-700'
+    return 'bg-blue-100 text-blue-700'
+  }
+
+  const generarInvitacion = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+
+    try {
+      const payload = {
+        expires_hours: Number(expiresHours) || 72,
+      }
+      if (email.trim()) payload.email = email.trim().toLowerCase()
+
+      const res = await axios.post('/api/cliente-admin/invitaciones', payload)
+
+      if (!res.data?.success || !res.data?.invitation) {
+        toast.error(res.data?.error || 'No se pudo generar la invitación')
+        return
+      }
+
+      const inv = res.data.invitation
+      setRecentLinks(prev => [{
+        token: inv.token,
+        invite_url: inv.invite_url,
+        empresa_nombre: inv.empresa_nombre,
+        email_invitado: inv.email_invitado,
+        expires_hours: inv.expires_hours,
+        created_at: new Date().toISOString(),
+      }, ...prev.slice(0, 19)])
+
+      toast.success('Invitación generada')
+      setEmail('')
+      loadHistorial()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al generar invitación')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const copiar = async (texto) => {
+    try {
+      await navigator.clipboard.writeText(texto)
+      toast.success('Link copiado')
+    } catch {
+      toast.error('No se pudo copiar automáticamente')
+    }
+  }
+
+  const regenerarInvitacion = async (inv) => {
+    if (!inv?.email_invitado) {
+      toast.error('Esta invitación no tiene email asociado para regenerar')
+      return
+    }
+
+    setRegeneratingId(inv.id)
+    try {
+      const res = await axios.post('/api/cliente-admin/invitaciones', {
+        email: inv.email_invitado,
+        expires_hours: Number(expiresHours) || 72,
+      })
+
+      if (!res.data?.success || !res.data?.invitation) {
+        toast.error(res.data?.error || 'No se pudo regenerar la invitación')
+        return
+      }
+
+      const nueva = res.data.invitation
+      setRecentLinks(prev => [{
+        token: nueva.token,
+        invite_url: nueva.invite_url,
+        empresa_nombre: nueva.empresa_nombre,
+        email_invitado: nueva.email_invitado,
+        expires_hours: nueva.expires_hours,
+        created_at: new Date().toISOString(),
+      }, ...prev.slice(0, 19)])
+
+      toast.success('Invitación regenerada')
+      loadHistorial()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al regenerar invitación')
+    } finally {
+      setRegeneratingId(null)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-lg border p-4">
+        <h3 className="text-base font-semibold text-gray-900 mb-1">Generar invitación</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Crea enlaces para que usuarios de tu empresa se registren como cliente_usuario.
+        </p>
+
+        <form onSubmit={generarInvitacion} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="sm:col-span-2">
+            <label className="block text-xs text-gray-500 mb-1">Email invitado (opcional)</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="usuario@empresa.com"
+              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Expira en horas</label>
+            <input
+              type="number"
+              min={1}
+              max={168}
+              value={expiresHours}
+              onChange={(e) => setExpiresHours(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="sm:col-span-3">
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-primary text-sm flex items-center gap-2"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+              Generar link
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className="bg-white rounded-lg border p-4">
+        <div className="flex items-center justify-between mb-3 gap-2">
+          <h4 className="font-semibold text-gray-900">Historial de invitaciones</h4>
+          <button onClick={loadHistorial} className="btn-secondary text-xs flex items-center gap-1" disabled={loadingHistorial}>
+            {loadingHistorial ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Actualizar
+          </button>
+        </div>
+
+        {loadingHistorial ? (
+          <div className="flex justify-center py-6">
+            <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+          </div>
+        ) : invitaciones.length === 0 ? (
+          <div className="text-sm text-gray-500 border border-dashed rounded-lg p-4">
+            No hay invitaciones registradas para tu empresa.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {invitaciones.map((inv, idx) => (
+              <div key={`${inv.id || idx}`} className="border rounded-lg p-3">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">Invitación #{inv.id}</p>
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${getEstadoBadgeClass(inv.estado_efectivo)}`}>
+                        {inv.estado_efectivo}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      {inv.email_invitado ? `Email: ${inv.email_invitado}` : 'Sin email fijo'}
+                    </p>
+                    {inv.created_at && <p className="text-xs text-gray-400 mt-1">Creada: {new Date(inv.created_at).toLocaleString('es-AR')}</p>}
+                    {inv.expires_at && <p className="text-xs text-gray-400">Expira: {new Date(inv.expires_at).toLocaleString('es-AR')}</p>}
+                    {inv.used_at && <p className="text-xs text-gray-400">Usada: {new Date(inv.used_at).toLocaleString('es-AR')}</p>}
+                  </div>
+                  {(inv.estado_efectivo === 'usada' || inv.estado_efectivo === 'expirada') && (
+                    <button
+                      type="button"
+                      onClick={() => regenerarInvitacion(inv)}
+                      disabled={regeneratingId === inv.id}
+                      className="btn-secondary text-xs flex items-center gap-1"
+                    >
+                      {regeneratingId === inv.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                      Regenerar
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-lg border p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-semibold text-gray-900">Links recién generados (sesión actual)</h4>
+          <span className="text-xs text-gray-500">{recentLinks.length} links</span>
+        </div>
+
+        {recentLinks.length === 0 ? (
+          <div className="text-sm text-gray-500 border border-dashed rounded-lg p-4">
+            Genera una invitación para copiar su link aquí.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {recentLinks.map((inv, idx) => (
+              <div key={`${inv.token}-${idx}`} className="border rounded-lg p-3">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{inv.empresa_nombre || 'Tu empresa'}</p>
+                    <p className="text-xs text-gray-500">
+                      {inv.email_invitado ? `Email: ${inv.email_invitado}` : 'Sin email fijo'} | Expira en {inv.expires_hours}h
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => copiar(inv.invite_url)}
+                    className="btn-secondary text-xs"
+                  >
+                    Copiar link
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-blue-700 break-all bg-blue-50 border border-blue-100 rounded p-2">
+                  {inv.invite_url}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -17,6 +17,12 @@ const COUNTRY_ISO = {
   'Union Europea': 'eu', 'Internacional': null, 'Desconocido': null,
 }
 
+const CLIENT_PRIORITY_OPTIONS = [
+  { val: 'normal', labelKey: 'search.priorityNormal', color: 'border-blue-200 text-blue-700 bg-blue-50', active: 'border-blue-500 bg-blue-100 ring-1 ring-blue-400' },
+  { val: '72h', labelKey: 'search.priority72h', color: 'border-orange-200 text-orange-700 bg-orange-50', active: 'border-orange-500 bg-orange-100 ring-1 ring-orange-400' },
+  { val: 'urgente', labelKey: 'search.priorityUrgent', color: 'border-red-200 text-red-700 bg-red-50', active: 'border-red-500 bg-red-100 ring-1 ring-red-400' },
+]
+
 function SearchView({ onSelectEmpresa, refreshKey }) {
     const { t, i18n } = useTranslation()
     const cleanDisplayRazonSocial = (value) => {
@@ -1462,8 +1468,8 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                           <input type="email" value={solicitudEmail} onChange={e => setSolicitudEmail(e.target.value)} placeholder="tu@empresa.com" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white" />
                         </div>
                         <div>
-                          <label className="text-xs font-medium text-gray-600 mb-1 block">{t('search.referenceOptional') || 'Referencia (opcional)'}</label>
-                          <input type="text" value={solicitudReferencia} onChange={e => setSolicitudReferencia(e.target.value)} placeholder={t('search.referencePlaceholder') || 'Tu referencia interna'} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white" />
+                          <label className="text-xs font-medium text-gray-600 mb-1 block">{t('search.referenceOptional')}</label>
+                          <input type="text" value={solicitudReferencia} onChange={e => setSolicitudReferencia(e.target.value)} placeholder={t('search.referencePlaceholder')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white" />
                         </div>
                         <div>
                           <label className="text-xs font-medium text-gray-600 mb-1 block">{t('search.additionalNotesOptional')}</label>
@@ -1472,12 +1478,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                         <div>
                           <label className="text-xs font-medium text-gray-600 mb-1 block">{t('search.priority')}</label>
                           <div className="flex gap-2">
-                            {[
-                              { val: 'baja', labelKey: 'search.priorityLow', color: 'border-gray-300 text-gray-600 bg-gray-50', active: 'border-gray-500 bg-gray-100 ring-1 ring-gray-400' },
-                              { val: 'normal', labelKey: 'search.priorityNormal', color: 'border-blue-200 text-blue-700 bg-blue-50', active: 'border-blue-500 bg-blue-100 ring-1 ring-blue-400' },
-                              { val: 'alta', labelKey: 'search.priorityHigh', color: 'border-orange-200 text-orange-700 bg-orange-50', active: 'border-orange-500 bg-orange-100 ring-1 ring-orange-400' },
-                              { val: 'urgente', labelKey: 'search.priorityUrgent', color: 'border-red-200 text-red-700 bg-red-50', active: 'border-red-500 bg-red-100 ring-1 ring-red-400' },
-                            ].map(p => (
+                            {CLIENT_PRIORITY_OPTIONS.map(p => (
                               <button key={p.val} type="button" onClick={() => setSolicitudPrioridad(p.val)}
                                 className={`flex-1 px-2 py-1.5 border rounded-lg text-xs font-medium transition-all ${solicitudPrioridad === p.val ? p.active : p.color + ' hover:opacity-80'}`}>
                                 {t(p.labelKey)}
@@ -1909,12 +1910,23 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                               <input type="email" value={solicitudEmail} onChange={e => setSolicitudEmail(e.target.value)} placeholder="tu@empresa.com" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white" />
                             </div>
                             <div>
-                              <label className="text-xs font-medium text-gray-600 mb-1 block">{t('search.referenceOptional') || 'Referencia (opcional)'}</label>
-                              <input type="text" value={solicitudReferencia} onChange={e => setSolicitudReferencia(e.target.value)} placeholder={t('search.referencePlaceholder') || 'Tu referencia interna'} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white" />
+                              <label className="text-xs font-medium text-gray-600 mb-1 block">{t('search.referenceOptional')}</label>
+                              <input type="text" value={solicitudReferencia} onChange={e => setSolicitudReferencia(e.target.value)} placeholder={t('search.referencePlaceholder')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white" />
                             </div>
                             <div>
                               <label className="text-xs font-medium text-gray-600 mb-1 block">{t('search.additionalNotesOptional')}</label>
                               <textarea value={solicitudNotas} onChange={e => setSolicitudNotas(e.target.value)} placeholder={t('search.additionalNotesPlaceholder')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white" rows={2} />
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-gray-600 mb-1 block">{t('search.priority')}</label>
+                              <div className="flex gap-2">
+                                {CLIENT_PRIORITY_OPTIONS.map(p => (
+                                  <button key={p.val} type="button" onClick={() => setSolicitudPrioridad(p.val)}
+                                    className={`flex-1 px-2 py-1.5 border rounded-lg text-xs font-medium transition-all ${solicitudPrioridad === p.val ? p.active : p.color + ' hover:opacity-80'}`}>
+                                    {t(p.labelKey)}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
                             <div className="flex gap-2">
                               <button onClick={handleConfirmarSolicitud} disabled={enviandoSolicitud} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-semibold disabled:opacity-50">
@@ -2433,12 +2445,7 @@ function ExternalSearchResult({ result, onSolicitar, solicitando }) {
                 <div>
                   <label className="text-xs font-medium text-gray-600 mb-1 block">{t('search.priority')}</label>
                   <div className="flex gap-2">
-                    {[
-                      { val: 'baja', labelKey: 'search.priorityLow', color: 'border-gray-300 text-gray-600 bg-gray-50', active: 'border-gray-500 bg-gray-100 ring-1 ring-gray-400' },
-                      { val: 'normal', labelKey: 'search.priorityNormal', color: 'border-blue-200 text-blue-700 bg-blue-50', active: 'border-blue-500 bg-blue-100 ring-1 ring-blue-400' },
-                      { val: 'alta', labelKey: 'search.priorityHigh', color: 'border-orange-200 text-orange-700 bg-orange-50', active: 'border-orange-500 bg-orange-100 ring-1 ring-orange-400' },
-                      { val: 'urgente', labelKey: 'search.priorityUrgent', color: 'border-red-200 text-red-700 bg-red-50', active: 'border-red-500 bg-red-100 ring-1 ring-red-400' },
-                    ].map(p => (
+                    {CLIENT_PRIORITY_OPTIONS.map(p => (
                       <button key={p.val} type="button" onClick={() => setPrioridadExt(p.val)}
                         className={`flex-1 px-2 py-1.5 border rounded-lg text-xs font-medium transition-all ${prioridadExt === p.val ? p.active : p.color + ' hover:opacity-80'}`}>
                         {t(p.labelKey)}

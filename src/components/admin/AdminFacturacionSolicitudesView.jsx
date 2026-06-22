@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { 
   FileText, Download, Filter, RefreshCw, Loader2, Calendar, Users, 
   Building2, ChevronDown, ChevronRight, Check, Euro, Receipt, FileSpreadsheet,
-  X, Printer, CheckCircle, History, Clock, DollarSign, AlertCircle, MoreVertical
+  X, Printer, CheckCircle, History, Clock, DollarSign, AlertCircle, MoreVertical, Pencil
 } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
@@ -73,6 +73,11 @@ export default function AdminFacturacionSolicitudesView() {
   const [showEstadoModal, setShowEstadoModal] = useState(null) // factura object
   const [changingEstado, setChangingEstado] = useState(false)
   const [historialStats, setHistorialStats] = useState({})
+
+  // Edición inline de precio (admin only)
+  const [editingPrecio, setEditingPrecio] = useState(null) // sol.id
+  const [editPrecioValue, setEditPrecioValue] = useState('')
+  const [savingPrecio, setSavingPrecio] = useState(false)
 
   // Filtros
   const now = new Date()
@@ -186,6 +191,30 @@ export default function AdminFacturacionSolicitudesView() {
   }
   const getPrecioByMoneda = (sol, moneda) => {
     return moneda === 'USD' ? getPrecioUsd(sol) : getPrecioEur(sol)
+  }
+
+  // Guardar precio editado (admin only)
+  const handleSavePrecio = async (solId) => {
+    const newPrecio = parseFloat(editPrecioValue)
+    if (isNaN(newPrecio) || newPrecio < 0) {
+      toast.error('Precio inválido')
+      return
+    }
+    setSavingPrecio(true)
+    try {
+      const res = await axios.put(`/api/pedidos-solicitudes/${solId}`, { precio_eur: newPrecio })
+      if (res.data.success) {
+        toast.success(newPrecio === 0 ? 'Solicitud marcada como no facturable' : `Precio actualizado a €${newPrecio.toFixed(2)}`)
+        setEditingPrecio(null)
+        loadData()
+      } else {
+        toast.error(res.data.error || 'Error al actualizar precio')
+      }
+    } catch {
+      toast.error('Error al guardar precio')
+    } finally {
+      setSavingPrecio(false)
+    }
   }
 
   const loadHistorial = async () => {
@@ -1274,9 +1303,20 @@ export default function AdminFacturacionSolicitudesView() {
                                   </div>
                                 </div>
                               </div>
-                              <span className="font-semibold text-emerald-600 shrink-0">
-                                {simboloMoneda}{getPrecioByMoneda(sol, monedaCliente).toFixed(2)}
-                              </span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <span className="font-semibold text-emerald-600">
+                                  {simboloMoneda}{getPrecioByMoneda(sol, monedaCliente).toFixed(2)}
+                                </span>
+                                {isAdmin && !sol.facturado && (
+                                  <button
+                                    onClick={() => { setEditingPrecio(sol.id); setEditPrecioValue(getPrecioEur(sol).toString()) }}
+                                    className="text-gray-300 hover:text-blue-500 transition-colors"
+                                    title="Editar precio"
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
 
                             <div className="flex flex-wrap items-center gap-2">
@@ -1389,7 +1429,41 @@ export default function AdminFacturacionSolicitudesView() {
                                 </span>
                               </td>
                               <td className="px-3 py-2 text-right font-medium">
-                                {simboloMoneda}{getPrecioByMoneda(sol, monedaCliente).toFixed(2)}
+                                {editingPrecio === sol.id ? (
+                                  <div className="flex items-center gap-1 justify-end">
+                                    <span className="text-gray-400">€</span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={editPrecioValue}
+                                      onChange={e => setEditPrecioValue(e.target.value)}
+                                      onKeyDown={e => { if (e.key === 'Enter') handleSavePrecio(sol.id); if (e.key === 'Escape') setEditingPrecio(null) }}
+                                      className="w-20 px-1 py-0.5 text-right text-sm border rounded focus:ring-1 focus:ring-blue-400"
+                                      autoFocus
+                                      disabled={savingPrecio}
+                                    />
+                                    <button onClick={() => handleSavePrecio(sol.id)} disabled={savingPrecio} className="text-green-600 hover:text-green-800" title="Guardar">
+                                      {savingPrecio ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                                    </button>
+                                    <button onClick={() => setEditingPrecio(null)} className="text-gray-400 hover:text-gray-600" title="Cancelar">
+                                      <X className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1">
+                                    {simboloMoneda}{getPrecioByMoneda(sol, monedaCliente).toFixed(2)}
+                                    {isAdmin && !sol.facturado && (
+                                      <button
+                                        onClick={() => { setEditingPrecio(sol.id); setEditPrecioValue(getPrecioEur(sol).toString()) }}
+                                        className="text-gray-300 hover:text-blue-500 transition-colors"
+                                        title="Editar precio"
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                      </button>
+                                    )}
+                                  </span>
+                                )}
                               </td>
                               <td className="px-3 py-2 text-center text-xs text-gray-500">{sol.updated_at}</td>
                               <td className="px-3 py-2 text-center">
@@ -1457,7 +1531,7 @@ export default function AdminFacturacionSolicitudesView() {
                       <span className="text-xs font-medium">{cfg.label}</span>
                     </div>
                     <p className="text-lg font-bold mt-1">{stat.cantidad || 0}</p>
-                    <p className="text-xs opacity-75">€{(stat.total || 0).toFixed(2)}</p>
+                    <p className="text-xs opacity-75">€{(stat.total || 0).toFixed(2)} | ${Math.round((stat.total || 0) * eurUsdRate).toLocaleString()}</p>
                   </div>
                 )
               })}

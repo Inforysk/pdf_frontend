@@ -5,7 +5,8 @@ import { toast } from 'react-hot-toast'
 import {
   Users, UserCheck, UserX, Search, RefreshCw, Loader2,
   Check, X, Clock, Mail, Phone, Briefcase, Calendar, Code, ToggleLeft, ToggleRight,
-  CreditCard, Edit2, Save, FileText, Zap, History, Package, BarChart3, Code2, ShoppingCart
+  CreditCard, Edit2, Save, FileText, Zap, History, Package, BarChart3, Code2, ShoppingCart, Copy,
+  ChevronDown, ChevronUp
 } from 'lucide-react'
 
 const REPORT_TYPES = {
@@ -18,7 +19,9 @@ const REPORT_TYPES = {
 
 export default function EquipoView() {
   const { user, hasPermission } = useAuth()
-  const [activeSubTab, setActiveSubTab] = useState('aprobar') // 'aprobar', 'consumo' o 'creditos'
+  const empresaAprobadora = user?.empresa_nombre || user?.empresa_razon_social || user?.empresa || 'tu empresa'
+  const [activeSubTab, setActiveSubTab] = useState('aprobar') // 'aprobar', 'consumo', 'creditos' o 'invitaciones'
+  const [detalleUsuarioId, setDetalleUsuarioId] = useState(null)
   const [usuarios, setUsuarios] = useState([])
   const [plan, setPlan] = useState({ nombre: '', creditos_mes: 75 })
   const [loading, setLoading] = useState(true)
@@ -45,6 +48,15 @@ export default function EquipoView() {
   const [editingInforme, setEditingInforme] = useState(null) // {userId, reportType}
   const [limiteInforme, setLimiteInforme] = useState('')
   const [savingInforme, setSavingInforme] = useState(false)
+
+  // Estados para Invitaciones
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteExpiresHours, setInviteExpiresHours] = useState(72)
+  const [inviteLoading, setInviteLoading] = useState(false)
+  const [inviteHistoryLoading, setInviteHistoryLoading] = useState(false)
+  const [inviteHistory, setInviteHistory] = useState([])
+  const [inviteRecentLinks, setInviteRecentLinks] = useState([])
+  const [regeneratingInviteId, setRegeneratingInviteId] = useState(null)
   
   // Estados para periodos de facturación
   const [periodoActivo, setPeriodoActivo] = useState('')
@@ -137,7 +149,113 @@ export default function EquipoView() {
     if (activeSubTab === 'creditos') {
       cargarCreditosInformes()
     }
+    if (activeSubTab === 'invitaciones') {
+      cargarInvitaciones()
+    }
   }, [activeSubTab])
+
+  const cargarInvitaciones = async () => {
+    setInviteHistoryLoading(true)
+    try {
+      const res = await axios.get('/api/cliente-admin/invitaciones?limit=100')
+      if (res.data.success) {
+        setInviteHistory(res.data.invitaciones || [])
+      } else {
+        toast.error(res.data.error || 'Error al cargar invitaciones')
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al cargar invitaciones')
+    } finally {
+      setInviteHistoryLoading(false)
+    }
+  }
+
+  const generarInvitacion = async (e) => {
+    e.preventDefault()
+    setInviteLoading(true)
+    try {
+      const payload = {
+        expires_hours: Number(inviteExpiresHours) || 72,
+      }
+      if (inviteEmail.trim()) payload.email = inviteEmail.trim().toLowerCase()
+
+      const res = await axios.post('/api/cliente-admin/invitaciones', payload)
+      if (!res.data?.success || !res.data?.invitation) {
+        toast.error(res.data?.error || 'No se pudo generar la invitación')
+        return
+      }
+
+      const inv = res.data.invitation
+      setInviteRecentLinks(prev => [{
+        token: inv.token,
+        invite_url: inv.invite_url,
+        empresa_nombre: inv.empresa_nombre,
+        email_invitado: inv.email_invitado,
+        expires_hours: inv.expires_hours,
+        created_at: new Date().toISOString(),
+      }, ...prev.slice(0, 19)])
+
+      toast.success('Invitación generada')
+      setInviteEmail('')
+      cargarInvitaciones()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al generar invitación')
+    } finally {
+      setInviteLoading(false)
+    }
+  }
+
+  const regenerarInvitacion = async (inv) => {
+    if (!inv?.email_invitado) {
+      toast.error('Esta invitación no tiene email asociado')
+      return
+    }
+
+    setRegeneratingInviteId(inv.id)
+    try {
+      const res = await axios.post('/api/cliente-admin/invitaciones', {
+        email: inv.email_invitado,
+        expires_hours: Number(inviteExpiresHours) || 72,
+      })
+
+      if (!res.data?.success || !res.data?.invitation) {
+        toast.error(res.data?.error || 'No se pudo regenerar la invitación')
+        return
+      }
+
+      const nueva = res.data.invitation
+      setInviteRecentLinks(prev => [{
+        token: nueva.token,
+        invite_url: nueva.invite_url,
+        empresa_nombre: nueva.empresa_nombre,
+        email_invitado: nueva.email_invitado,
+        expires_hours: nueva.expires_hours,
+        created_at: new Date().toISOString(),
+      }, ...prev.slice(0, 19)])
+
+      toast.success('Invitación regenerada')
+      cargarInvitaciones()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al regenerar invitación')
+    } finally {
+      setRegeneratingInviteId(null)
+    }
+  }
+
+  const copiarLinkInvitacion = async (link) => {
+    try {
+      await navigator.clipboard.writeText(link)
+      toast.success('Link copiado')
+    } catch {
+      toast.error('No se pudo copiar automáticamente')
+    }
+  }
+
+  const badgeEstadoInvitacion = (estado) => {
+    if (estado === 'usada') return 'bg-green-100 text-green-700'
+    if (estado === 'expirada') return 'bg-amber-100 text-amber-700'
+    return 'bg-blue-100 text-blue-700'
+  }
 
   const cargarCreditosInformes = async () => {
     setLoadingCreditos(true)
@@ -206,7 +324,7 @@ export default function EquipoView() {
     try {
       const res = await axios.post('/api/cliente-admin/aprobar-usuario', { usuario_id: usuarioId })
       if (res.data.success) {
-        toast.success('Usuario aprobado')
+        toast.success(res.data.message || 'Usuario aprobado')
         cargarEquipo()
       } else {
         toast.error(res.data.error || 'Error al aprobar')
@@ -368,6 +486,28 @@ export default function EquipoView() {
     </span>
   }
 
+  const formatFechaHora = (fecha) => {
+    if (!fecha) return '-'
+    const d = new Date(fecha)
+    return d.toLocaleString('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  const getRiesgoFlagLabel = (flag) => {
+    const labels = {
+      email_personal: 'Email personal',
+      sin_telefono: 'Sin telefono',
+      alta_masiva: 'Alta masiva',
+      registro_sin_invitacion: 'Registro sin invitacion'
+    }
+    return labels[flag] || flag
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -444,6 +584,19 @@ export default function EquipoView() {
             Créditos Informes
           </span>
         </button>
+        <button
+          onClick={() => setActiveSubTab('invitaciones')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition whitespace-nowrap ${
+            activeSubTab === 'invitaciones'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <Mail className="h-4 w-4" />
+            Invitaciones
+          </span>
+        </button>
       </div>
 
       {/* Tab: Aprobar Usuarios */}
@@ -460,6 +613,30 @@ export default function EquipoView() {
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
               />
+            </div>
+          </div>
+
+          {/* Leyenda de reglas de riesgo */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                <FileText className="h-4 w-4 text-blue-700" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-blue-900">
+                  Reglas de riesgo para aprobación
+                </p>
+                <p className="text-xs text-blue-800 mt-1">
+                  Transparencia del proceso: si el score es menor a 50, la aprobación es final por {empresaAprobadora}. Si el score es 50 o más, el usuario se escala a revisión de Inforysk.
+                </p>
+                <div className="mt-3 grid gap-1.5 text-xs text-blue-900">
+                  <p>1. Email personal (gmail, hotmail, outlook, yahoo, etc.): +40</p>
+                  <p>2. Usuario sin teléfono: +20</p>
+                  <p>3. Alta masiva (5 o más registros pendientes en 15 minutos): +40</p>
+                  <p>4. Registro sin invitación: +20</p>
+                  <p className="font-semibold mt-1">Umbral de escalamiento: score mayor o igual a 50.</p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -514,13 +691,38 @@ export default function EquipoView() {
                         </div>
                         <div className="mt-1 text-xs text-gray-400 flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
-                          Registrado: {new Date(usuario.created_at).toLocaleDateString('es-AR')}
+                          Registrado: {formatFechaHora(usuario.created_at)}
                         </div>
                       </div>
                     </div>
 
                     {/* Acciones */}
                     <div className="flex gap-2 sm:flex-shrink-0">
+                      {usuario.riesgo_estimado_score !== null && usuario.riesgo_estimado_score !== undefined && (
+                        <div className={`px-3 py-2 rounded-lg text-xs font-semibold border flex items-center ${
+                          usuario.riesgo_estimado_requires_admin
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        }`}>
+                          {usuario.riesgo_estimado_requires_admin ? 'Se escalará a admin' : 'Riesgo bajo'} · Score {usuario.riesgo_estimado_score}
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setDetalleUsuarioId(detalleUsuarioId === usuario.id ? null : usuario.id)}
+                        className="flex items-center gap-1 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
+                      >
+                        {detalleUsuarioId === usuario.id ? (
+                          <>
+                            Ocultar detalle
+                            <ChevronUp className="h-4 w-4" />
+                          </>
+                        ) : (
+                          <>
+                            Ver detalle
+                            <ChevronDown className="h-4 w-4" />
+                          </>
+                        )}
+                      </button>
                       <button
                         onClick={() => aprobarUsuario(usuario.id)}
                         disabled={procesando === usuario.id}
@@ -548,6 +750,25 @@ export default function EquipoView() {
                       </button>
                     </div>
                   </div>
+
+                  {detalleUsuarioId === usuario.id && (
+                    <div className="mt-3 pt-3 border-t border-amber-200 grid gap-2 text-sm">
+                      <div className="text-gray-700">
+                        <span className="font-medium">Resultado estimado:</span>{' '}
+                        {usuario.riesgo_estimado_requires_admin ? 'Se escalará a revisión de Inforysk' : `Aprobación final por ${empresaAprobadora}`}
+                      </div>
+                      <div className="text-gray-700">
+                        <span className="font-medium">Score estimado:</span>{' '}
+                        {usuario.riesgo_estimado_score ?? 0}
+                      </div>
+                      <div className="text-gray-700">
+                        <span className="font-medium">Señales detectadas:</span>{' '}
+                        {usuario.riesgo_estimado_flags?.length
+                          ? usuario.riesgo_estimado_flags.map(getRiesgoFlagLabel).join(', ')
+                          : 'Sin señales de riesgo relevantes'}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -822,6 +1043,141 @@ export default function EquipoView() {
             </div>
           )}
         </>
+      )}
+
+      {/* Tab: Invitaciones */}
+      {activeSubTab === 'invitaciones' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <h3 className="text-base font-semibold text-gray-900 mb-1">Generar invitación</h3>
+            <p className="text-sm text-gray-500 mb-4">Crea enlaces para registrar usuarios en tu empresa.</p>
+
+            <form onSubmit={generarInvitacion} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="sm:col-span-2">
+                <label className="block text-xs text-gray-500 mb-1">Email invitado (opcional)</label>
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="usuario@empresa.com"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Expira en horas</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={168}
+                  value={inviteExpiresHours}
+                  onChange={(e) => setInviteExpiresHours(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div className="sm:col-span-3">
+                <button
+                  type="submit"
+                  disabled={inviteLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {inviteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                  Generar link
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-3 gap-2">
+              <h4 className="font-semibold text-gray-900">Historial de invitaciones</h4>
+              <button
+                onClick={cargarInvitaciones}
+                className="flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50"
+                disabled={inviteHistoryLoading}
+              >
+                {inviteHistoryLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Actualizar
+              </button>
+            </div>
+
+            {inviteHistoryLoading ? (
+              <div className="flex justify-center py-6">
+                <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+              </div>
+            ) : inviteHistory.length === 0 ? (
+              <div className="text-sm text-gray-500 border border-dashed rounded-lg p-4">No hay invitaciones registradas aún.</div>
+            ) : (
+              <div className="space-y-3">
+                {inviteHistory.map((inv) => (
+                  <div key={inv.id} className="border rounded-lg p-3">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-sm font-medium text-gray-900 truncate">Invitación #{inv.id}</p>
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${badgeEstadoInvitacion(inv.estado_efectivo)}`}>
+                            {inv.estado_efectivo}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          {inv.email_invitado ? `Email: ${inv.email_invitado}` : 'Sin email fijo'}
+                        </p>
+                        {inv.created_at && <p className="text-xs text-gray-400 mt-1">Creada: {new Date(inv.created_at).toLocaleString('es-AR')}</p>}
+                        {inv.expires_at && <p className="text-xs text-gray-400">Expira: {new Date(inv.expires_at).toLocaleString('es-AR')}</p>}
+                        {inv.used_at && <p className="text-xs text-gray-400">Usada: {new Date(inv.used_at).toLocaleString('es-AR')}</p>}
+                      </div>
+                      {(inv.estado_efectivo === 'usada' || inv.estado_efectivo === 'expirada') && (
+                        <button
+                          type="button"
+                          onClick={() => regenerarInvitacion(inv)}
+                          disabled={regeneratingInviteId === inv.id}
+                          className="flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          {regeneratingInviteId === inv.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                          Regenerar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-semibold text-gray-900">Links recién generados</h4>
+              <span className="text-xs text-gray-500">{inviteRecentLinks.length} links</span>
+            </div>
+
+            {inviteRecentLinks.length === 0 ? (
+              <div className="text-sm text-gray-500 border border-dashed rounded-lg p-4">Genera una invitación para copiar su link aquí.</div>
+            ) : (
+              <div className="space-y-3">
+                {inviteRecentLinks.map((inv, idx) => (
+                  <div key={`${inv.token}-${idx}`} className="border rounded-lg p-3">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{inv.empresa_nombre || 'Tu empresa'}</p>
+                        <p className="text-xs text-gray-500">
+                          {inv.email_invitado ? `Email: ${inv.email_invitado}` : 'Sin email fijo'} | Expira en {inv.expires_hours}h
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => copiarLinkInvitacion(inv.invite_url)}
+                        className="flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        Copiar
+                      </button>
+                    </div>
+                    <p className="mt-2 text-xs text-blue-700 break-all bg-blue-50 border border-blue-100 rounded p-2">{inv.invite_url}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Tab: Créditos Informes */}

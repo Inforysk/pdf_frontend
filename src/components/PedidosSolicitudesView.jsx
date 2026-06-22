@@ -92,6 +92,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
   const [empresasEncontradas, setEmpresasEncontradas] = useState([])
   const [creandoSolicitud, setCreandoSolicitud] = useState(false)
   const [prioridadSeleccionada, setPrioridadSeleccionada] = useState('normal')
+  const [monitoreoFacturar, setMonitoreoFacturar] = useState(true) // true = facturar con precio configurado, false = precio 0
   const [modalSearchType, setModalSearchType] = useState('all') // 'all', 'cuit', 'nombre'
   const [modalCountryFilter, setModalCountryFilter] = useState('all')
   const [modalCountryOpen, setModalCountryOpen] = useState(false)
@@ -549,6 +550,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
         referencia_cliente: (empresaData.referencia_cliente || '').trim() || null,
         tipo_informe: 'completo',
         prioridad: prioridadSeleccionada,
+        facturar_monitoreo: prioridadSeleccionada === 'monitoreo' ? monitoreoFacturar : undefined,
         notas: `Solicitud creada por analista para cliente: ${clienteSeleccionado.numero_abono || clienteSeleccionado.id} - ${clienteSeleccionado.nombre_completo}`,
         cliente_id: clienteSeleccionado.id
       })
@@ -580,6 +582,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     setModalCountryFilter('all')
     setModalCountryOpen(false)
     setPrioridadSeleccionada('normal')
+    setMonitoreoFacturar(true)
     setShowConfirmacion(false)
   }
 
@@ -599,6 +602,12 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
       (c.razon_social_cliente || '').toLowerCase().includes(search) ||
       (c.email || '').toLowerCase().includes(search)
     )
+  }).sort((a, b) => {
+    // Abonados (con numero_abono) primero
+    const aHas = a.numero_abono ? 0 : 1
+    const bHas = b.numero_abono ? 0 : 1
+    if (aHas !== bHas) return aHas - bHas
+    return (a.nombre_completo || '').localeCompare(b.nombre_completo || '')
   })
 
   // Total para "Todas" es la suma de todos los estados relevantes
@@ -1553,11 +1562,11 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                       <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
                     </div>
                   ) : (
-                    <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-xl">
+                    <div className="max-h-72 overflow-y-auto border border-gray-200 rounded-xl">
                       {clientesFiltrados.length === 0 ? (
                         <p className="text-center text-gray-400 py-4 text-sm">No hay clientes disponibles</p>
                       ) : (
-                        clientesFiltrados.slice(0, 20).map(cliente => (
+                        clientesFiltrados.map(cliente => (
                           <label
                             key={cliente.id}
                             className={`flex items-center gap-3 p-3 border-b border-gray-100 last:border-0 cursor-pointer hover:bg-gray-50 ${clienteSeleccionado?.id === cliente.id ? 'bg-indigo-50' : ''}`}
@@ -1857,7 +1866,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                           <label className="text-xs text-gray-500">Prioridad</label>
                           <select
                             value={prioridadSeleccionada}
-                            onChange={(e) => setPrioridadSeleccionada(e.target.value)}
+                            onChange={(e) => { setPrioridadSeleccionada(e.target.value); if (e.target.value !== 'monitoreo') setMonitoreoFacturar(true) }}
                             className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm mt-1"
                           >
                             <option value="normal">Normal</option>
@@ -1866,6 +1875,26 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                             <option value="urgente">Urgente</option>
                           </select>
                         </div>
+                        {/* Sub-opción de facturación para Monitoreo */}
+                        {prioridadSeleccionada === 'monitoreo' && (
+                          <div className="col-span-2 mt-1">
+                            <label className="text-xs text-gray-500">¿Se debe facturar este monitoreo?</label>
+                            <div className="flex gap-3 mt-1">
+                              <label className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer text-sm ${
+                                monitoreoFacturar ? 'border-indigo-500 bg-indigo-50 text-indigo-700 font-medium' : 'border-gray-200 text-gray-600'
+                              }`}>
+                                <input type="radio" name="facturarMonitoreo" checked={monitoreoFacturar} onChange={() => setMonitoreoFacturar(true)} className="hidden" />
+                                Sí, facturar (precio configurado)
+                              </label>
+                              <label className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer text-sm ${
+                                !monitoreoFacturar ? 'border-indigo-500 bg-indigo-50 text-indigo-700 font-medium' : 'border-gray-200 text-gray-600'
+                              }`}>
+                                <input type="radio" name="facturarMonitoreo" checked={!monitoreoFacturar} onChange={() => setMonitoreoFacturar(false)} className="hidden" />
+                                No, ya pagado (monto $0)
+                              </label>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}

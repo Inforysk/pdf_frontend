@@ -12,9 +12,8 @@ const ESTADO_CONFIG = {
 }
 
 const PRIORIDAD_CONFIG = {
-  baja: { label: 'Baja', color: 'text-gray-500' },
   normal: { label: 'Normal', color: 'text-blue-600' },
-  alta: { label: 'Alta', color: 'text-orange-600' },
+  '72h': { label: '72 Horas', color: 'text-orange-600' },
   urgente: { label: 'Urgente', color: 'text-red-600 font-bold' },
 }
 
@@ -604,6 +603,11 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
       (c.razon_social_cliente || '').toLowerCase().includes(search) ||
       (c.email || '').toLowerCase().includes(search)
     )
+  }).sort((a, b) => {
+    const aHas = a.numero_abono ? 0 : 1
+    const bHas = b.numero_abono ? 0 : 1
+    if (aHas !== bHas) return aHas - bHas
+    return (a.nombre_completo || '').localeCompare(b.nombre_completo || '')
   })
 
   // Total para "Todas" es la suma de todos los estados relevantes
@@ -994,13 +998,11 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                         <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
                           sol.prioridad === 'urgente'
                             ? 'bg-red-100 text-red-700 border border-red-200'
-                            : sol.prioridad === 'alta'
+                            : sol.prioridad === '72h'
                               ? 'bg-orange-100 text-orange-700 border border-orange-200'
-                              : sol.prioridad === 'baja'
-                                ? 'bg-gray-100 text-gray-600 border border-gray-200'
-                                : 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'bg-blue-50 text-blue-700 border border-blue-200'
                         }`}>
-                          {sol.prioridad === 'urgente' ? '🔴 Urgente' : sol.prioridad === 'alta' ? '🟠 Alta' : sol.prioridad === 'baja' ? '⚪ Baja' : '🔵 Normal'}
+                          {sol.prioridad === 'urgente' ? '🔴 Urgente' : sol.prioridad === '72h' ? '🟠 72 Horas' : '🔵 Normal'}
                         </span>
                       </td>
                       {/* Solicitado por */}
@@ -1256,8 +1258,8 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                 {detalle.prioridad && detalle.prioridad !== 'normal' && (
                   <span className={`text-xs px-2 py-0.5 rounded-full ${
                     detalle.prioridad === 'urgente' ? 'bg-red-100 text-red-700' :
-                    detalle.prioridad === 'alta' ? 'bg-orange-100 text-orange-700' :
-                    'bg-gray-100 text-gray-600'
+                    detalle.prioridad === '72h' ? 'bg-orange-100 text-orange-700' :
+                    'bg-blue-100 text-blue-700'
                   }`}>
                     {PRIORIDAD_CONFIG[detalle.prioridad]?.label || detalle.prioridad}
                   </span>
@@ -1302,11 +1304,10 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                   <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Prioridad</p>
                   <p className={`font-medium ${
                     detalle.prioridad === 'urgente' ? 'text-red-600' :
-                    detalle.prioridad === 'alta' ? 'text-orange-600' :
-                    detalle.prioridad === 'baja' ? 'text-gray-500' :
+                    detalle.prioridad === '72h' ? 'text-orange-600' :
                     'text-blue-600'
                   }`}>
-                    {detalle.prioridad === 'urgente' ? '🔴 Urgente' : detalle.prioridad === 'alta' ? '🟠 Alta' : detalle.prioridad === 'baja' ? '⚪ Baja' : '🔵 Normal'}
+                    {detalle.prioridad === 'urgente' ? '🔴 Urgente' : detalle.prioridad === '72h' ? '🟠 72 Horas' : '🔵 Normal'}
                   </p>
                 </div>
                 <div>
@@ -1537,11 +1538,11 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                       <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
                     </div>
                   ) : (
-                    <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-xl">
+                    <div className="max-h-72 overflow-y-auto border border-gray-200 rounded-xl">
                       {clientesFiltrados.length === 0 ? (
                         <p className="text-center text-gray-400 py-4 text-sm">No hay clientes disponibles</p>
                       ) : (
-                        clientesFiltrados.slice(0, 20).map(cliente => (
+                        clientesFiltrados.map(cliente => (
                           <label
                             key={cliente.id}
                             className={`flex items-center gap-3 p-3 border-b border-gray-100 last:border-0 cursor-pointer hover:bg-gray-50 ${clienteSeleccionado?.id === cliente.id ? 'bg-indigo-50' : ''}`}
