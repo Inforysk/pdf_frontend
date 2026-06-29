@@ -151,7 +151,7 @@ function LoginPage({ onLogin, onRegister, onForgotPassword }) {
                   className="text-sm font-medium hover:underline underline-offset-4"
                   style={{ color: colors.navy }}
                 >
-                  Olvide mi contrasena
+                  Olvidé mi contraseña
                 </button>
               </div>
             )}

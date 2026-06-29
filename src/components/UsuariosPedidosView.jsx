@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   Loader2, Search, Users, ChevronLeft, ChevronRight, RefreshCw,
-  Plus, X, Eye, EyeOff
+  Plus, X, Eye, EyeOff, User, Building2, Globe, Phone, Shield, Hash
 } from 'lucide-react'
 import axios from 'axios'
 import { useTranslation } from 'react-i18next'
@@ -217,15 +217,15 @@ export default function UsuariosPedidosView() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
-  const perPage = 25
+  const perPage = 10
 
   // Modal nuevo cliente
   const [showModal, setShowModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [passwordErrors, setPasswordErrors] = useState([])
+  const [formErrors, setFormErrors] = useState({})
   const [form, setForm] = useState({
     nombre_completo: '',
     username: '',
@@ -240,17 +240,38 @@ export default function UsuariosPedidosView() {
     id_interno: ''
   })
 
+  // Tabs
+  const [activeTab, setActiveTab] = useState('proveedores')
+
+  // Modal nuevo cliente proveedor
+  const [showProveedorModal, setShowProveedorModal] = useState(false)
+  const [savingProveedor, setSavingProveedor] = useState(false)
+  const [showPasswordProv, setShowPasswordProv] = useState(false)
+  const [passwordErrorsProv, setPasswordErrorsProv] = useState([])
+  const [formErrorsProv, setFormErrorsProv] = useState({})
+  const [proveedores, setProveedores] = useState([])
+  const [formProv, setFormProv] = useState({
+    nombre_completo: '',
+    username: '',
+    email: '',
+    password: '',
+    razon_social_cliente: '',
+    cuit_cliente: '',
+    pais_cliente: 'AR',
+    codigo_telefono: '54',
+    telefono: '',
+    id_interno: ''
+  })
+
   const loadData = async (pageNum = 1, searchTerm = '') => {
     setLoading(true)
     try {
       const res = await axios.get('/api/admin/usuarios-pedidos', {
-        params: { page: pageNum, per_page: perPage, search: searchTerm }
+        params: { page: 1, per_page: 500, search: searchTerm }
       })
       if (res.data.success) {
         setUsuarios(res.data.usuarios)
         setTotal(res.data.total)
-        setTotalPages(res.data.total_pages)
-        setPage(res.data.page)
       }
     } catch (err) {
       console.error('Error loading usuarios-pedidos:', err)
@@ -258,8 +279,23 @@ export default function UsuariosPedidosView() {
     setLoading(false)
   }
 
+  const loadProveedores = async () => {
+    try {
+      const res = await axios.get('/api/admin/usuarios-pedidos', {
+        params: { page: 1, per_page: 500, search: '' }
+      })
+      if (res.data.success) {
+        const provs = res.data.usuarios.filter(u => u.rol === 'cliente_presentacion' && u.numero_abono)
+        setProveedores(provs)
+      }
+    } catch (err) {
+      console.error('Error loading proveedores:', err)
+    }
+  }
+
   useEffect(() => {
     loadData(1, '')
+    loadProveedores()
   }, [])
 
   const handleSearch = (e) => {
@@ -297,6 +333,7 @@ export default function UsuariosPedidosView() {
     })
     setShowPassword(false)
     setPasswordErrors([])
+    setFormErrors({})
   }
 
   const handlePaisChange = (code) => {
@@ -323,9 +360,20 @@ export default function UsuariosPedidosView() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setPasswordErrors([])
-    
-    if (!form.nombre_completo || !form.username || !form.email || !form.password) {
-      toast.error('Completá los campos obligatorios')
+    const errors = {}
+
+    if (!form.nombre_completo.trim()) errors.nombre_completo = 'Nombre es obligatorio'
+    if (!form.username.trim()) errors.username = 'Username es obligatorio'
+    if (!form.email.trim()) errors.email = 'Email es obligatorio'
+    if (!form.password) errors.password = 'Contraseña es obligatoria'
+    if (['cliente_admin', 'cliente_usuario'].includes(form.rol) && !form.cuit_cliente?.trim()) {
+      errors.cuit_cliente = 'CUIT / ID Fiscal es obligatorio para este rol'
+    }
+
+    setFormErrors(errors)
+    if (Object.keys(errors).length > 0) {
+      const missing = Object.values(errors)
+      toast.error(missing[0])
       return
     }
     
@@ -375,10 +423,110 @@ export default function UsuariosPedidosView() {
     setSaving(false)
   }
 
+  // --- Proveedor helpers ---
+  const resetFormProv = () => {
+    setFormProv({
+      nombre_completo: '',
+      username: '',
+      email: '',
+      password: '',
+      razon_social_cliente: '',
+      cuit_cliente: '',
+      pais_cliente: 'AR',
+      codigo_telefono: '54',
+      telefono: '',
+      id_interno: ''
+    })
+    setShowPasswordProv(false)
+    setPasswordErrorsProv([])
+    setFormErrorsProv({})
+  }
+
+  const handlePaisChangeProv = (code) => {
+    const pais = PAISES.find(p => p.code === code)
+    setFormProv({ ...formProv, pais_cliente: code, codigo_telefono: pais?.phoneCode || '' })
+  }
+
+  const handlePasswordChangeProv = (pwd) => {
+    setFormProv({ ...formProv, password: pwd })
+    setPasswordErrorsProv(validatePasswordLocal(pwd))
+  }
+
+  const handleSubmitProveedor = async (e) => {
+    e.preventDefault()
+    setPasswordErrorsProv([])
+    const errors = {}
+
+    if (!formProv.nombre_completo.trim()) errors.nombre_completo = 'Nombre es obligatorio'
+    if (!formProv.username.trim()) errors.username = 'Username es obligatorio'
+    if (!formProv.email.trim()) errors.email = 'Email es obligatorio'
+    if (!formProv.password) errors.password = 'Contraseña es obligatoria'
+    if (!formProv.id_interno.trim()) errors.id_interno = 'Nº Abono es obligatorio'
+    if (!formProv.razon_social_cliente?.trim()) errors.razon_social_cliente = 'Razón Social es obligatoria'
+
+    setFormErrorsProv(errors)
+    if (Object.keys(errors).length > 0) {
+      toast.error(Object.values(errors)[0])
+      return
+    }
+
+    const pwdErrors = validatePasswordLocal(formProv.password)
+    if (pwdErrors.length > 0) {
+      setPasswordErrorsProv(pwdErrors)
+      toast.error('La contraseña no cumple los requisitos')
+      return
+    }
+
+    setSavingProveedor(true)
+    try {
+      const res = await axios.post('/api/admin/usuarios', {
+        username: formProv.username,
+        email: formProv.email,
+        password: formProv.password,
+        nombre_completo: formProv.nombre_completo,
+        rol: 'cliente_presentacion',
+        razon_social_cliente: formProv.razon_social_cliente || null,
+        cuit_cliente: formProv.cuit_cliente || null,
+        pais_cliente: formProv.pais_cliente || null,
+        codigo_telefono: formProv.codigo_telefono || null,
+        telefono: formProv.telefono || null,
+        id_interno: formProv.id_interno
+      })
+
+      if (res.data.success) {
+        toast.success('Cliente Proveedor creado exitosamente')
+        setShowProveedorModal(false)
+        resetFormProv()
+        loadData(1, search)
+        loadProveedores()
+      } else {
+        if (res.data.password_errors) {
+          setPasswordErrorsProv(res.data.password_errors)
+        }
+        toast.error(res.data.error || 'Error al crear cliente proveedor')
+      }
+    } catch (err) {
+      const errData = err.response?.data
+      if (errData?.password_errors) {
+        setPasswordErrorsProv(errData.password_errors)
+      }
+      toast.error(errData?.error || 'Error al crear cliente proveedor')
+    }
+    setSavingProveedor(false)
+  }
+
+  const filteredAll = usuarios.filter(u =>
+    activeTab === 'proveedores'
+      ? u.rol === 'cliente_presentacion'
+      : u.rol !== 'cliente_presentacion'
+  )
+  const tabTotalPages = Math.ceil(filteredAll.length / perPage) || 1
+  const filteredUsuarios = filteredAll.slice((page - 1) * perPage, page * perPage)
+
   return (
-    <div className="max-w-7xl mx-auto space-y-6 px-1 sm:px-0">
+    <div className="w-full space-y-4 px-1 sm:px-0">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
             <Users className="h-5 w-5 text-indigo-600" />
@@ -389,10 +537,10 @@ export default function UsuariosPedidosView() {
           </p>
         </div>
 
-        {/* Search */}
-        <div className="w-full sm:w-auto space-y-2">
-          <form onSubmit={handleSearch} className="grid grid-cols-1 sm:flex sm:flex-nowrap gap-2 w-full sm:w-auto">
-            <div className="relative w-full sm:w-auto">
+        {/* Search + Refresh + Action button — single row */}
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <form onSubmit={handleSearch} className="flex flex-1 sm:flex-none gap-2">
+            <div className="relative flex-1 sm:flex-none">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 type="text"
@@ -404,45 +552,89 @@ export default function UsuariosPedidosView() {
             </div>
             <button
               type="submit"
-              className="w-full sm:w-auto px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+              className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
             >
               Buscar
             </button>
           </form>
-          <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => { setSearch(''); loadData(1, '') }}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+            title="Refrescar"
+          >
+            <RefreshCw className="h-5 w-5" />
+          </button>
+          {activeTab === 'proveedores' ? (
             <button
-              type="button"
-              onClick={() => { setSearch(''); loadData(1, '') }}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-              title="Refrescar"
+              onClick={() => setShowProveedorModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors whitespace-nowrap"
             >
-              <RefreshCw className="h-5 w-5" />
+              <Plus className="h-4 w-4" />
+              Nuevo Cliente Proveedor
             </button>
+          ) : (
             <button
               onClick={() => setShowModal(true)}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors whitespace-nowrap"
             >
               <Plus className="h-4 w-4" />
               Nuevo Cliente
             </button>
-          </div>
+          )}
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="border-b border-gray-200">
+        <nav className="flex gap-0 -mb-px">
+          <button
+            onClick={() => { setActiveTab('proveedores'); setPage(1) }}
+            className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'proveedores'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Proveedores
+            <span className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              activeTab === 'proveedores' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
+            }`}>
+              {usuarios.filter(u => u.rol === 'cliente_presentacion').length}
+            </span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('usuarios'); setPage(1) }}
+            className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'usuarios'
+                ? 'border-green-600 text-green-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Usuarios
+            <span className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              activeTab === 'usuarios' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+            }`}>
+              {usuarios.filter(u => u.rol !== 'cliente_presentacion').length}
+            </span>
+          </button>
+        </nav>
+      </div>
+
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden min-h-[600px]">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
           </div>
-        ) : usuarios.length === 0 ? (
+        ) : filteredUsuarios.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
-            No se encontraron usuarios
+            {activeTab === 'proveedores' ? 'No se encontraron proveedores' : 'No se encontraron usuarios'}
           </div>
         ) : (
           <>
             <div className="md:hidden divide-y divide-gray-100">
-              {usuarios.map((u) => (
+              {filteredUsuarios.map((u) => (
                 <div key={u.id} className="p-3 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -513,7 +705,7 @@ export default function UsuariosPedidosView() {
             </div>
 
             <div className="hidden md:block overflow-x-auto">
-              <table className="min-w-[1100px] divide-y divide-gray-200">
+              <table className="w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-12">
@@ -552,7 +744,7 @@ export default function UsuariosPedidosView() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-100">
-                {usuarios.map((u) => (
+                {filteredUsuarios.map((u) => (
                   <tr key={u.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-3 py-2 whitespace-nowrap">
                       <span className="text-xs font-mono text-gray-500">{u.id}</span>
@@ -615,22 +807,22 @@ export default function UsuariosPedidosView() {
         )}
 
         {/* Pagination */}
-        {totalPages > 1 && (
+        {tabTotalPages > 1 && (
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50">
             <div className="text-xs sm:text-sm text-gray-500">
-              Página {page} de {totalPages} ({total} registros)
+              Página {page} de {tabTotalPages} ({filteredAll.length} registros)
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => loadData(page - 1, search)}
+                onClick={() => setPage(page - 1)}
                 disabled={page <= 1}
                 className="p-2 rounded-lg border border-gray-300 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
               <button
-                onClick={() => loadData(page + 1, search)}
-                disabled={page >= totalPages}
+                onClick={() => setPage(page + 1)}
+                disabled={page >= tabTotalPages}
                 className="p-2 rounded-lg border border-gray-300 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ChevronRight className="h-4 w-4" />
@@ -643,184 +835,435 @@ export default function UsuariosPedidosView() {
       {/* Modal Nuevo Cliente */}
       {showModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="fixed inset-0 bg-black/50" onClick={() => setShowModal(false)} />
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowModal(false)} />
           <div className="flex min-h-full items-center justify-center p-4">
-            <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg">
-              <div className="flex items-center justify-between px-5 py-4 border-b">
-                <h3 className="text-lg font-semibold text-gray-900">Nuevo Cliente</h3>
-                <button onClick={() => { setShowModal(false); resetForm() }} className="p-1 hover:bg-gray-100 rounded">
-                  <X className="h-5 w-5 text-gray-500" />
-                </button>
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+              {/* Header con gradiente verde */}
+              <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-white/20 rounded-lg">
+                      <User className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-white">Nuevo Cliente</h3>
+                      <p className="text-green-100 text-xs">Crear usuario afiliado a un proveedor</p>
+                    </div>
+                  </div>
+                  <button onClick={() => { setShowModal(false); resetForm() }} className="p-1.5 hover:bg-white/20 rounded-lg transition-colors">
+                    <X className="h-5 w-5 text-white" />
+                  </button>
+                </div>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-5 space-y-4">
-                {/* Datos personales */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Nombre completo *</label>
-                    <input
-                      type="text"
-                      value={form.nombre_completo}
-                      onChange={(e) => setForm({ ...form, nombre_completo: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Juan Pérez"
-                    />
+              <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                {/* Sección: Datos de acceso */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Shield className="h-4 w-4 text-green-600" />
+                    <span className="text-xs font-semibold text-green-700 uppercase tracking-wider">Datos de acceso</span>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Username *</label>
-                    <input
-                      type="text"
-                      value={form.username}
-                      onChange={(e) => setForm({ ...form, username: e.target.value.toLowerCase().replace(/\s/g, '') })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                      placeholder="jperez"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Email *</label>
-                    <input
-                      type="email"
-                      value={form.email}
-                      onChange={(e) => setForm({ ...form, email: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                      placeholder="email@empresa.com"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Contraseña *</label>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={form.password}
-                        onChange={(e) => handlePasswordChange(e.target.value)}
-                        className={`w-full px-3 py-2 pr-10 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 ${
-                          passwordErrors.length > 0 && form.password ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        placeholder="Ej: Clave@123"
-                      />
-                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    {/* Requisitos de contraseña */}
-                    {form.password && passwordErrors.length > 0 && (
-                      <div className="mt-1 text-[10px] text-red-500">
-                        Falta: {passwordErrors.join(', ')}
-                      </div>
-                    )}
-                    {!form.password && (
-                      <div className="mt-1 text-[10px] text-gray-400">
-                        8+ chars, mayúscula, minúscula, número, símbolo
-                      </div>
-                    )}
-                    {form.password && passwordErrors.length === 0 && (
-                      <div className="mt-1 text-[10px] text-green-600">
-                        ✓ Contraseña válida
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Empresa */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Empresa / Razón Social</label>
-                    <input
-                      type="text"
-                      value={form.razon_social_cliente}
-                      onChange={(e) => setForm({ ...form, razon_social_cliente: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Empresa S.A."
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">CUIT / ID Fiscal</label>
-                    <input
-                      type="text"
-                      value={form.cuit_cliente}
-                      onChange={(e) => setForm({ ...form, cuit_cliente: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                      placeholder="30-12345678-9"
-                    />
-                  </div>
-                </div>
-
-                {/* País y Teléfono */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">País</label>
-                    <select
-                      value={form.pais_cliente}
-                      onChange={(e) => handlePaisChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                    >
-                      {PAISES.map(p => (
-                        <option key={p.code} value={p.code}>{p.name} (+{p.phoneCode})</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Teléfono</label>
-                    <div className="flex gap-2">
-                      <span className="inline-flex items-center px-2.5 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm text-gray-600">
-                        +{form.codigo_telefono}
-                      </span>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Nombre completo <span className="text-red-500">*</span></label>
                       <input
                         type="text"
-                        value={form.telefono}
-                        onChange={(e) => setForm({ ...form, telefono: e.target.value.replace(/\D/g, '') })}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                        placeholder="1155551234"
+                        value={form.nombre_completo}
+                        onChange={(e) => { setForm({ ...form, nombre_completo: e.target.value }); setFormErrors(prev => ({...prev, nombre_completo: ''})) }}
+                        className={`w-full px-3 py-2.5 border rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all ${formErrors.nombre_completo ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
+                        placeholder="Juan Pérez"
                       />
+                      {formErrors.nombre_completo && <p className="mt-1 text-[10px] text-red-500">{formErrors.nombre_completo}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Username <span className="text-red-500">*</span></label>
+                      <input
+                        type="text"
+                        value={form.username}
+                        onChange={(e) => { setForm({ ...form, username: e.target.value.toLowerCase().replace(/\s/g, '') }); setFormErrors(prev => ({...prev, username: ''})) }}
+                        className={`w-full px-3 py-2.5 border rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all ${formErrors.username ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
+                        placeholder="jperez"
+                      />
+                      {formErrors.username && <p className="mt-1 text-[10px] text-red-500">{formErrors.username}</p>}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Email <span className="text-red-500">*</span></label>
+                      <input
+                        type="email"
+                        value={form.email}
+                        onChange={(e) => { setForm({ ...form, email: e.target.value }); setFormErrors(prev => ({...prev, email: ''})) }}
+                        className={`w-full px-3 py-2.5 border rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all ${formErrors.email ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
+                        placeholder="email@empresa.com"
+                      />
+                      {formErrors.email && <p className="mt-1 text-[10px] text-red-500">{formErrors.email}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Contraseña <span className="text-red-500">*</span></label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={form.password}
+                          onChange={(e) => { handlePasswordChange(e.target.value); setFormErrors(prev => ({...prev, password: ''})) }}
+                          className={`w-full px-3 py-2.5 pr-10 border rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all ${
+                            (passwordErrors.length > 0 && form.password) || formErrors.password ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                          }`}
+                          placeholder="Ej: Clave@123"
+                        />
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      {form.password && passwordErrors.length > 0 && (
+                        <div className="mt-1 text-[10px] text-red-500">Falta: {passwordErrors.join(', ')}</div>
+                      )}
+                      {!form.password && (
+                        <div className="mt-1 text-[10px] text-gray-400">8+ chars, mayúscula, minúscula, número, símbolo</div>
+                      )}
+                      {form.password && passwordErrors.length === 0 && (
+                        <div className="mt-1 text-[10px] text-green-600 font-medium">✓ Contraseña válida</div>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Rol y Nº Abono */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Rol</label>
-                    <select
-                      value={form.rol}
-                      onChange={(e) => setForm({ ...form, rol: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                    >
-                      {ROLES_CLIENTE.map(r => (
-                        <option key={r.value} value={r.value}>{r.label}</option>
-                      ))}
-                    </select>
+                {/* Sección: Empresa */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Building2 className="h-4 w-4 text-green-600" />
+                    <span className="text-xs font-semibold text-green-700 uppercase tracking-wider">Empresa</span>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Nº Abono (interno)</label>
-                    <input
-                      type="text"
-                      value={form.id_interno}
-                      onChange={(e) => setForm({ ...form, id_interno: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                      placeholder="9001"
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Razón Social</label>
+                      <input
+                        type="text"
+                        value={form.razon_social_cliente}
+                        onChange={(e) => setForm({ ...form, razon_social_cliente: e.target.value })}
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                        placeholder="Empresa S.A."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        CUIT / ID Fiscal {['cliente_admin', 'cliente_usuario'].includes(form.rol) && <span className="text-red-500">*</span>}
+                      </label>
+                      <input
+                        type="text"
+                        value={form.cuit_cliente}
+                        onChange={(e) => { setForm({ ...form, cuit_cliente: e.target.value }); setFormErrors(prev => ({...prev, cuit_cliente: ''})) }}
+                        className={`w-full px-3 py-2.5 border rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all ${formErrors.cuit_cliente ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
+                        placeholder="30-12345678-9"
+                      />
+                      {formErrors.cuit_cliente && <p className="mt-1 text-[10px] text-red-500">{formErrors.cuit_cliente}</p>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sección: Contacto */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Globe className="h-4 w-4 text-green-600" />
+                    <span className="text-xs font-semibold text-green-700 uppercase tracking-wider">Contacto</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">País</label>
+                      <select
+                        value={form.pais_cliente}
+                        onChange={(e) => handlePaisChange(e.target.value)}
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                      >
+                        {PAISES.map(p => (
+                          <option key={p.code} value={p.code}>{p.name} (+{p.phoneCode})</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Teléfono</label>
+                      <div className="flex gap-2">
+                        <span className="inline-flex items-center px-2.5 py-2.5 border border-gray-200 rounded-xl bg-gray-100 text-sm text-gray-600 font-medium">
+                          +{form.codigo_telefono}
+                        </span>
+                        <input
+                          type="text"
+                          value={form.telefono}
+                          onChange={(e) => setForm({ ...form, telefono: e.target.value.replace(/\D/g, '') })}
+                          className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                          placeholder="1155551234"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sección: Configuración */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Hash className="h-4 w-4 text-green-600" />
+                    <span className="text-xs font-semibold text-green-700 uppercase tracking-wider">Configuración</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Rol</label>
+                      <select
+                        value={form.rol}
+                        onChange={(e) => setForm({ ...form, rol: e.target.value })}
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                      >
+                        {ROLES_CLIENTE.map(r => (
+                          <option key={r.value} value={r.value}>{r.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Nº Abono (Proveedor)</label>
+                      <select
+                        value={form.id_interno}
+                        onChange={(e) => setForm({ ...form, id_interno: e.target.value })}
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                      >
+                        <option value="">— Seleccionar proveedor —</option>
+                        {proveedores.map(p => (
+                          <option key={p.id} value={p.numero_abono}>
+                            {p.numero_abono} - {p.nombre_completo || p.razon_social_cliente || p.username}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
 
                 {/* Botones */}
-                <div className="flex justify-end gap-2 pt-3 border-t">
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
                   <button
                     type="button"
                     onClick={() => { setShowModal(false); resetForm() }}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                    className="px-5 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
                     disabled={saving}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
+                    className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 shadow-lg shadow-green-200 transition-all"
                   >
                     {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                     Crear Cliente
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Nuevo Cliente Proveedor */}
+      {showProveedorModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowProveedorModal(false)} />
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+              {/* Header con gradiente azul */}
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-white/20 rounded-lg">
+                      <Building2 className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-white">Nuevo Cliente Proveedor</h3>
+                      <p className="text-blue-100 text-xs">Crear proveedor con número de abono propio</p>
+                    </div>
+                  </div>
+                  <button onClick={() => { setShowProveedorModal(false); resetFormProv() }} className="p-1.5 hover:bg-white/20 rounded-lg transition-colors">
+                    <X className="h-5 w-5 text-white" />
+                  </button>
+                </div>
+              </div>
+
+              <form onSubmit={handleSubmitProveedor} className="p-6 space-y-5">
+                {/* Sección: Datos de acceso */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Shield className="h-4 w-4 text-blue-600" />
+                    <span className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Datos de acceso</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Nombre completo <span className="text-red-500">*</span></label>
+                      <input
+                        type="text"
+                        value={formProv.nombre_completo}
+                        onChange={(e) => { setFormProv({ ...formProv, nombre_completo: e.target.value }); setFormErrorsProv(prev => ({...prev, nombre_completo: ''})) }}
+                        className={`w-full px-3 py-2.5 border rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${formErrorsProv.nombre_completo ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
+                        placeholder="Nombre Proveedor"
+                      />
+                      {formErrorsProv.nombre_completo && <p className="mt-1 text-[10px] text-red-500">{formErrorsProv.nombre_completo}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Username <span className="text-red-500">*</span></label>
+                      <input
+                        type="text"
+                        value={formProv.username}
+                        onChange={(e) => { setFormProv({ ...formProv, username: e.target.value.toLowerCase().replace(/\s/g, '') }); setFormErrorsProv(prev => ({...prev, username: ''})) }}
+                        className={`w-full px-3 py-2.5 border rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${formErrorsProv.username ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
+                        placeholder="proveedor1"
+                      />
+                      {formErrorsProv.username && <p className="mt-1 text-[10px] text-red-500">{formErrorsProv.username}</p>}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Email <span className="text-red-500">*</span></label>
+                      <input
+                        type="email"
+                        value={formProv.email}
+                        onChange={(e) => { setFormProv({ ...formProv, email: e.target.value }); setFormErrorsProv(prev => ({...prev, email: ''})) }}
+                        className={`w-full px-3 py-2.5 border rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${formErrorsProv.email ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
+                        placeholder="email@proveedor.com"
+                      />
+                      {formErrorsProv.email && <p className="mt-1 text-[10px] text-red-500">{formErrorsProv.email}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Contraseña <span className="text-red-500">*</span></label>
+                      <div className="relative">
+                        <input
+                          type={showPasswordProv ? 'text' : 'password'}
+                          value={formProv.password}
+                          onChange={(e) => { handlePasswordChangeProv(e.target.value); setFormErrorsProv(prev => ({...prev, password: ''})) }}
+                          className={`w-full px-3 py-2.5 pr-10 border rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+                            (passwordErrorsProv.length > 0 && formProv.password) || formErrorsProv.password ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                          }`}
+                          placeholder="Ej: Clave@123"
+                        />
+                        <button type="button" onClick={() => setShowPasswordProv(!showPasswordProv)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                          {showPasswordProv ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      {formProv.password && passwordErrorsProv.length > 0 && (
+                        <div className="mt-1 text-[10px] text-red-500">Falta: {passwordErrorsProv.join(', ')}</div>
+                      )}
+                      {!formProv.password && (
+                        <div className="mt-1 text-[10px] text-gray-400">8+ chars, mayúscula, minúscula, número, símbolo</div>
+                      )}
+                      {formProv.password && passwordErrorsProv.length === 0 && (
+                        <div className="mt-1 text-[10px] text-green-600 font-medium">✓ Contraseña válida</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sección: Empresa */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Building2 className="h-4 w-4 text-blue-600" />
+                    <span className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Empresa</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Razón Social <span className="text-red-500">*</span></label>
+                      <input
+                        type="text"
+                        value={formProv.razon_social_cliente}
+                        onChange={(e) => { setFormProv({ ...formProv, razon_social_cliente: e.target.value }); setFormErrorsProv(prev => ({...prev, razon_social_cliente: ''})) }}
+                        className={`w-full px-3 py-2.5 border rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${formErrorsProv.razon_social_cliente ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
+                        placeholder="Proveedor S.A."
+                      />
+                      {formErrorsProv.razon_social_cliente && <p className="mt-1 text-[10px] text-red-500">{formErrorsProv.razon_social_cliente}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">CUIT / ID Fiscal</label>
+                      <input
+                        type="text"
+                        value={formProv.cuit_cliente}
+                        onChange={(e) => setFormProv({ ...formProv, cuit_cliente: e.target.value })}
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                        placeholder="30-12345678-9"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sección: Nº Abono destacado */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Hash className="h-4 w-4 text-blue-600" />
+                    <span className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Número de abono</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={formProv.id_interno}
+                      onChange={(e) => { setFormProv({ ...formProv, id_interno: e.target.value }); setFormErrorsProv(prev => ({...prev, id_interno: ''})) }}
+                      className={`w-full px-4 py-3 border-2 rounded-xl text-base font-semibold bg-blue-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:font-normal placeholder:text-sm ${formErrorsProv.id_interno ? 'border-red-400 bg-red-50' : 'border-blue-200'}`}
+                      placeholder="Ej: 9001"
+                    />
+                  </div>
+                  {formErrorsProv.id_interno ? (
+                    <p className="mt-1.5 text-[11px] text-red-500">{formErrorsProv.id_interno}</p>
+                  ) : (
+                    <p className="mt-1.5 text-[11px] text-blue-500 flex items-center gap-1">
+                      <span className="inline-block w-1 h-1 rounded-full bg-blue-400" />
+                      Este número identifica al proveedor y sus clientes afiliados
+                    </p>
+                  )}
+                </div>
+
+                {/* Sección: Contacto */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Globe className="h-4 w-4 text-blue-600" />
+                    <span className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Contacto</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">País</label>
+                      <select
+                        value={formProv.pais_cliente}
+                        onChange={(e) => handlePaisChangeProv(e.target.value)}
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      >
+                        {PAISES.map(p => (
+                          <option key={p.code} value={p.code}>{p.name} (+{p.phoneCode})</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Teléfono</label>
+                      <div className="flex gap-2">
+                        <span className="inline-flex items-center px-2.5 py-2.5 border border-gray-200 rounded-xl bg-gray-100 text-sm text-gray-600 font-medium">
+                          +{formProv.codigo_telefono}
+                        </span>
+                        <input
+                          type="text"
+                          value={formProv.telefono}
+                          onChange={(e) => setFormProv({ ...formProv, telefono: e.target.value.replace(/\D/g, '') })}
+                          className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                          placeholder="1155551234"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Botones */}
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => { setShowProveedorModal(false); resetFormProv() }}
+                    className="px-5 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingProveedor}
+                    className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 shadow-lg shadow-blue-200 transition-all"
+                  >
+                    {savingProveedor && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Crear Cliente Proveedor
                   </button>
                 </div>
               </form>

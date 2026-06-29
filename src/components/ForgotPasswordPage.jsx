@@ -41,9 +41,9 @@ function ForgotPasswordPage({ onBackToLogin }) {
           <img src={logo} alt="Inforysk" className="h-20 w-auto" />
         </div>
 
-        <h1 className="text-2xl font-bold text-slate-900 mb-2">Recuperar contrasena</h1>
-        <p className="text-sm text-slate-600 mb-6">
-          Ingresa tu email corporativo y te enviaremos un enlace seguro para restablecer tu contrasena.
+        <h1 className="text-2xl font-bold text-slate-900 mb-2 text-center">Recuperar contraseña</h1>
+        <p className="text-sm text-slate-600 mb-6 text-center">
+          Ingresa tu email y te enviaremos un enlace seguro para restablecer tu contraseña.
         </p>
 
         {error && (

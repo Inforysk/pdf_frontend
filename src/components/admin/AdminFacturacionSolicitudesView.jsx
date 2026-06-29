@@ -1289,6 +1289,9 @@ export default function AdminFacturacionSolicitudesView() {
                                 )}
                                 <div className="min-w-0">
                                   <p className="font-medium text-gray-900 break-words">{sol.razon_social}</p>
+                                  {sol.solicitante_nombre && (
+                                    <p className="text-[10px] text-indigo-500">→ {sol.solicitante_nombre}</p>
+                                  )}
                                   <div className="flex flex-wrap items-center gap-2 mt-1">
                                     <span className="font-mono text-xs text-gray-500 break-all">{sol.cuit}</span>
                                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
@@ -1401,8 +1404,13 @@ export default function AdminFacturacionSolicitudesView() {
                                   <div className="w-4 h-4" />
                                 )}
                               </td>
-                              <td className="px-3 py-2 max-w-[200px] truncate" title={sol.razon_social}>
-                                {sol.razon_social}
+                              <td className="px-3 py-2 max-w-[200px]" title={sol.razon_social}>
+                                <div className="truncate">{sol.razon_social}</div>
+                                {sol.solicitante_nombre && (
+                                  <div className="text-[10px] text-indigo-500 truncate" title={`Solicitado por: ${sol.solicitante_nombre}`}>
+                                    → {sol.solicitante_nombre}
+                                  </div>
+                                )}
                               </td>
                               <td className="px-3 py-2">
                                 <div className="flex items-center gap-1">
