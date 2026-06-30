@@ -44,6 +44,7 @@ export default function AdminFacturacionSolicitudesView() {
   
   // Moneda para el resumen general
   const [monedaResumen, setMonedaResumen] = useState('EUR')
+  const [expandedResumenCliente, setExpandedResumenCliente] = useState(null)
   const [eurUsdRate, setEurUsdRate] = useState(1.2)
   const [exporting, setExporting] = useState(false)
   
@@ -582,6 +583,90 @@ export default function AdminFacturacionSolicitudesView() {
     }))
   }, [data.solicitudes, eurUsdRate])
 
+  // Detalle por cliente para validar facturacion por pais/prioridad
+  const detalleResumenPorCliente = useMemo(() => {
+    const detalle = {}
+
+    data.solicitudes.forEach(sol => {
+      const clienteKey = sol.usuario_abono || 'SIN_ABONO'
+      const paisCodigo = sol.pais_codigo || '??'
+      const paisNombre = sol.pais_nombre || 'Sin país'
+      const paisKey = `${paisCodigo}|${paisNombre}`
+      const prioridad = sol.prioridad || 'normal'
+      const precioEur = getPrecioEur(sol)
+      const precioUsd = getPrecioUsd(sol)
+
+      if (!detalle[clienteKey]) detalle[clienteKey] = {}
+      if (!detalle[clienteKey][paisKey]) {
+        detalle[clienteKey][paisKey] = {
+          pais_codigo: paisCodigo,
+          pais_nombre: paisNombre,
+          qty_normal: 0,
+          eur_normal: 0,
+          usd_normal: 0,
+          qty_urgente: 0,
+          eur_urgente: 0,
+          usd_urgente: 0,
+          qty_monitoreo_fact: 0,
+          eur_monitoreo_fact: 0,
+          usd_monitoreo_fact: 0,
+          qty_monitoreo_cortesia: 0,
+          eur_monitoreo_cortesia: 0,
+          usd_monitoreo_cortesia: 0,
+          qty_72h: 0,
+          eur_72h: 0,
+          usd_72h: 0,
+          total_qty: 0,
+          total_eur: 0,
+          total_usd: 0,
+        }
+      }
+
+      const row = detalle[clienteKey][paisKey]
+
+      if (prioridad === 'urgente') {
+        row.qty_urgente += 1
+        row.eur_urgente += precioEur
+        row.usd_urgente += precioUsd
+      } else if (prioridad === '72h') {
+        row.qty_72h += 1
+        row.eur_72h += precioEur
+        row.usd_72h += precioUsd
+      } else if (prioridad === 'monitoreo') {
+        if (precioEur > 0) {
+          row.qty_monitoreo_fact += 1
+          row.eur_monitoreo_fact += precioEur
+          row.usd_monitoreo_fact += precioUsd
+        } else {
+          row.qty_monitoreo_cortesia += 1
+          row.eur_monitoreo_cortesia += precioEur
+          row.usd_monitoreo_cortesia += precioUsd
+        }
+      } else {
+        row.qty_normal += 1
+        row.eur_normal += precioEur
+        row.usd_normal += precioUsd
+      }
+
+      row.total_qty += 1
+      row.total_eur += precioEur
+      row.total_usd += precioUsd
+    })
+
+    const salida = {}
+    Object.keys(detalle).forEach(clienteKey => {
+      salida[clienteKey] = Object.values(detalle[clienteKey]).sort((a, b) => {
+        return (a.pais_codigo || '').localeCompare(b.pais_codigo || '')
+      })
+    })
+
+    return salida
+  }, [data.solicitudes, eurUsdRate])
+
+  const toggleExpandedResumenCliente = (abono) => {
+    setExpandedResumenCliente(prev => (prev === abono ? null : abono))
+  }
+
   // Total general según moneda
   const totalGeneralMonto = useMemo(() => {
     return resumenCalculado.reduce((sum, r) => {
@@ -1007,9 +1092,33 @@ export default function AdminFacturacionSolicitudesView() {
                 </thead>
                 <tbody className="divide-y">
                   {resumenCalculado.map((r, i) => (
-                    <tr key={i} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 font-mono text-blue-600">{r.usuario_abono}</td>
-                      <td className="px-3 py-2">{r.usuario_nombre}</td>
+                    <>
+                    <tr key={`row-${i}`} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 font-mono text-blue-600">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpandedResumenCliente(r.usuario_abono)}
+                          className="inline-flex items-center gap-1 hover:underline"
+                          title="Ver detalle por país"
+                        >
+                          {r.usuario_abono}
+                          {expandedResumenCliente === r.usuario_abono ? (
+                            <ChevronDown className="h-3.5 w-3.5 text-gray-500" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5 text-gray-500" />
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpandedResumenCliente(r.usuario_abono)}
+                          className="text-left hover:underline"
+                          title="Ver detalle por país"
+                        >
+                          {r.usuario_nombre}
+                        </button>
+                      </td>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap gap-1">
                           {r.proveedor_codigos.map(code => (
@@ -1028,6 +1137,157 @@ export default function AdminFacturacionSolicitudesView() {
                         {monedaResumen === 'USD' ? '$' : '€'}{(monedaResumen === 'USD' ? r.total_usd : r.total_eur).toFixed(2)}
                       </td>
                     </tr>
+                    {expandedResumenCliente === r.usuario_abono && (
+                      <tr key={`detail-${i}`} className="bg-gray-50/60">
+                        <td colSpan={9} className="px-3 py-3">
+                          {(() => {
+                            const detalleClienteRows = detalleResumenPorCliente[r.usuario_abono] || []
+                            const detalleClienteTotals = detalleClienteRows.reduce((acc, d) => {
+                              acc.qty_normal += d.qty_normal
+                              acc.eur_normal += d.eur_normal
+                              acc.usd_normal += d.usd_normal
+                              acc.qty_urgente += d.qty_urgente
+                              acc.eur_urgente += d.eur_urgente
+                              acc.usd_urgente += d.usd_urgente
+                              acc.qty_monitoreo_fact += d.qty_monitoreo_fact
+                              acc.eur_monitoreo_fact += d.eur_monitoreo_fact
+                              acc.usd_monitoreo_fact += d.usd_monitoreo_fact
+                              acc.qty_monitoreo_cortesia += d.qty_monitoreo_cortesia
+                              acc.eur_monitoreo_cortesia += d.eur_monitoreo_cortesia
+                              acc.usd_monitoreo_cortesia += d.usd_monitoreo_cortesia
+                              acc.qty_72h += d.qty_72h
+                              acc.eur_72h += d.eur_72h
+                              acc.usd_72h += d.usd_72h
+                              acc.total_qty += d.total_qty
+                              acc.total_eur += d.total_eur
+                              acc.total_usd += d.total_usd
+                              return acc
+                            }, {
+                              qty_normal: 0,
+                              eur_normal: 0,
+                              usd_normal: 0,
+                              qty_urgente: 0,
+                              eur_urgente: 0,
+                              usd_urgente: 0,
+                              qty_monitoreo_fact: 0,
+                              eur_monitoreo_fact: 0,
+                              usd_monitoreo_fact: 0,
+                              qty_monitoreo_cortesia: 0,
+                              eur_monitoreo_cortesia: 0,
+                              usd_monitoreo_cortesia: 0,
+                              qty_72h: 0,
+                              eur_72h: 0,
+                              usd_72h: 0,
+                              total_qty: 0,
+                              total_eur: 0,
+                              total_usd: 0,
+                            })
+
+                            const symbol = monedaResumen === 'USD' ? '$' : '€'
+                            const totalNormal = monedaResumen === 'USD' ? detalleClienteTotals.usd_normal : detalleClienteTotals.eur_normal
+                            const totalUrgente = monedaResumen === 'USD' ? detalleClienteTotals.usd_urgente : detalleClienteTotals.eur_urgente
+                            const totalMonFact = monedaResumen === 'USD' ? detalleClienteTotals.usd_monitoreo_fact : detalleClienteTotals.eur_monitoreo_fact
+                            const totalMonCortesia = monedaResumen === 'USD' ? detalleClienteTotals.usd_monitoreo_cortesia : detalleClienteTotals.eur_monitoreo_cortesia
+                            const total72h = monedaResumen === 'USD' ? detalleClienteTotals.usd_72h : detalleClienteTotals.eur_72h
+                            const totalFinal = monedaResumen === 'USD' ? detalleClienteTotals.total_usd : detalleClienteTotals.total_eur
+
+                            return (
+                          <div className="rounded-lg border border-gray-200 bg-white overflow-x-auto">
+                            <table className="min-w-full text-xs">
+                              <thead className="bg-gray-100 text-gray-700">
+                                <tr>
+                                  <th className="px-2 py-2 text-left font-semibold">País</th>
+                                  <th className="px-2 py-2 text-center font-semibold">Normal</th>
+                                  <th className="px-2 py-2 text-center font-semibold">Urgente</th>
+                                  <th className="px-2 py-2 text-center font-semibold">Monit. fact.</th>
+                                  <th className="px-2 py-2 text-center font-semibold">Monit. €0</th>
+                                  <th className="px-2 py-2 text-center font-semibold">72h</th>
+                                  <th className="px-2 py-2 text-center font-semibold">Total</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y">
+                                {detalleClienteRows.map((d, j) => {
+                                  const montoNormal = monedaResumen === 'USD' ? d.usd_normal : d.eur_normal
+                                  const montoUrgente = monedaResumen === 'USD' ? d.usd_urgente : d.eur_urgente
+                                  const montoMonFact = monedaResumen === 'USD' ? d.usd_monitoreo_fact : d.eur_monitoreo_fact
+                                  const montoMonCortesia = monedaResumen === 'USD' ? d.usd_monitoreo_cortesia : d.eur_monitoreo_cortesia
+                                  const monto72h = monedaResumen === 'USD' ? d.usd_72h : d.eur_72h
+                                  const montoTotal = monedaResumen === 'USD' ? d.total_usd : d.total_eur
+                                  const symbol = monedaResumen === 'USD' ? '$' : '€'
+
+                                  return (
+                                    <tr key={`${d.pais_codigo}-${j}`} className="hover:bg-gray-50">
+                                      <td className="px-2 py-2">
+                                        <div className="flex items-center gap-2">
+                                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold">{d.pais_codigo}</span>
+                                          <span>{d.pais_nombre}</span>
+                                        </div>
+                                      </td>
+                                      <td className="px-2 py-2 text-center">
+                                        <div className="font-medium">{d.qty_normal}</div>
+                                        <div className="text-gray-500">{symbol}{montoNormal.toFixed(2)}</div>
+                                      </td>
+                                      <td className="px-2 py-2 text-center">
+                                        <div className="font-medium">{d.qty_urgente}</div>
+                                        <div className="text-gray-500">{symbol}{montoUrgente.toFixed(2)}</div>
+                                      </td>
+                                      <td className="px-2 py-2 text-center bg-violet-50/50">
+                                        <div className="font-medium text-violet-700">{d.qty_monitoreo_fact}</div>
+                                        <div className="text-violet-600">{symbol}{montoMonFact.toFixed(2)}</div>
+                                      </td>
+                                      <td className="px-2 py-2 text-center bg-amber-50/50">
+                                        <div className="font-medium text-amber-700">{d.qty_monitoreo_cortesia}</div>
+                                        <div className="text-amber-600">{symbol}{montoMonCortesia.toFixed(2)}</div>
+                                      </td>
+                                      <td className="px-2 py-2 text-center">
+                                        <div className="font-medium">{d.qty_72h}</div>
+                                        <div className="text-gray-500">{symbol}{monto72h.toFixed(2)}</div>
+                                      </td>
+                                      <td className="px-2 py-2 text-center">
+                                        <div className="font-semibold">{d.total_qty}</div>
+                                        <div className="font-semibold text-emerald-700">{symbol}{montoTotal.toFixed(2)}</div>
+                                      </td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                              <tfoot className="bg-emerald-50 border-t border-emerald-200">
+                                <tr>
+                                  <td className="px-2 py-2 font-bold text-gray-900">TOTAL</td>
+                                  <td className="px-2 py-2 text-center">
+                                    <div className="font-bold">{detalleClienteTotals.qty_normal}</div>
+                                    <div className="font-bold text-gray-700">{symbol}{totalNormal.toFixed(2)}</div>
+                                  </td>
+                                  <td className="px-2 py-2 text-center">
+                                    <div className="font-bold">{detalleClienteTotals.qty_urgente}</div>
+                                    <div className="font-bold text-gray-700">{symbol}{totalUrgente.toFixed(2)}</div>
+                                  </td>
+                                  <td className="px-2 py-2 text-center">
+                                    <div className="font-bold text-violet-700">{detalleClienteTotals.qty_monitoreo_fact}</div>
+                                    <div className="font-bold text-violet-700">{symbol}{totalMonFact.toFixed(2)}</div>
+                                  </td>
+                                  <td className="px-2 py-2 text-center">
+                                    <div className="font-bold text-amber-700">{detalleClienteTotals.qty_monitoreo_cortesia}</div>
+                                    <div className="font-bold text-amber-700">{symbol}{totalMonCortesia.toFixed(2)}</div>
+                                  </td>
+                                  <td className="px-2 py-2 text-center">
+                                    <div className="font-bold">{detalleClienteTotals.qty_72h}</div>
+                                    <div className="font-bold text-gray-700">{symbol}{total72h.toFixed(2)}</div>
+                                  </td>
+                                  <td className="px-2 py-2 text-center">
+                                    <div className="font-bold text-gray-900">{detalleClienteTotals.total_qty}</div>
+                                    <div className="font-bold text-emerald-700">{symbol}{totalFinal.toFixed(2)}</div>
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                            )
+                          })()}
+                        </td>
+                      </tr>
+                    )}
+                    </>
                   ))}
                 </tbody>
                 <tfoot className="bg-emerald-50 font-medium">
