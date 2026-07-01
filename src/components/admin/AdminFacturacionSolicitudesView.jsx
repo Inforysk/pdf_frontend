@@ -34,7 +34,14 @@ const MESES = [
 export default function AdminFacturacionSolicitudesView() {
   const { isAdmin } = useAuth()
   const [loading, setLoading] = useState(true)
-  const [data, setData] = useState({ solicitudes: [], resumen: [], total_general_eur: 0 })
+  const [data, setData] = useState({
+    solicitudes: [],
+    resumen: [],
+    total_general_eur: 0,
+    pricing_policy: 'notify',
+    pricing_missing: [],
+    pricing_missing_count: 0,
+  })
   const [usuarios, setUsuarios] = useState([])
   const [expandedCliente, setExpandedCliente] = useState(null)
   const [selectedIds, setSelectedIds] = useState([])
@@ -193,6 +200,14 @@ export default function AdminFacturacionSolicitudesView() {
   const getPrecioByMoneda = (sol, moneda) => {
     return moneda === 'USD' ? getPrecioUsd(sol) : getPrecioEur(sol)
   }
+
+  const selectedMissingPricing = useMemo(() => {
+    if (!selectedIds.length) return []
+    const selected = new Set(selectedIds)
+    return (data.pricing_missing || []).filter(item =>
+      (item.solicitud_ids || []).some(id => selected.has(id))
+    )
+  }, [data.pricing_missing, selectedIds])
 
   // Guardar precio editado (admin only)
   const handleSavePrecio = async (solId) => {
@@ -361,6 +376,11 @@ export default function AdminFacturacionSolicitudesView() {
       toast.error('Selecciona solicitudes de un solo cliente para generar la factura')
       return
     }
+
+    if ((data.pricing_policy || 'notify') === 'block' && selectedMissingPricing.length > 0) {
+      toast.error('Bloqueado por política pricing: hay países sin asociación proveedor-país')
+      return
+    }
     
     // Obtener la moneda del cliente
     const monedaCliente = monedaPorCliente[primeraSol.usuario_abono] || primeraSol.moneda_facturacion || 'EUR'
@@ -395,6 +415,16 @@ export default function AdminFacturacionSolicitudesView() {
       return
     }
     
+    if ((data.pricing_policy || 'notify') === 'block') {
+      const modalMissing = (data.pricing_missing || []).filter(item =>
+        (item.solicitud_ids || []).some(id => (modalData?.solicitud_ids || []).includes(id))
+      )
+      if (modalMissing.length > 0) {
+        toast.error('Bloqueado por política pricing: completa asociación de países antes de generar PDF')
+        return
+      }
+    }
+
     setGeneratingPdf(true)
     try {
       const res = await axios.post('/api/admin/facturacion-solicitudes/generar-pdf', {
@@ -710,6 +740,23 @@ export default function AdminFacturacionSolicitudesView() {
         </div>
 
         {/* Tabs */}
+          {!!data.pricing_missing_count && (
+            <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-amber-900">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-semibold">Pricing faltante detectado ({data.pricing_missing_count})</p>
+                  <p className="text-xs mt-0.5">
+                    Modo actual: {(data.pricing_policy || 'notify').toUpperCase()}.{' '}
+                    {(data.pricing_policy || 'notify') === 'block'
+                      ? 'Se bloquea la facturación automática hasta asociar país/proveedor en Motor Pricing.'
+                      : 'Se permite facturar, pero se recomienda completar asociación en Motor Pricing.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
         <div className="mt-4 rounded-xl bg-gray-100 p-1">
           <div className="grid grid-cols-2 gap-1">
           <button

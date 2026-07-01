@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { 
   Users, Building2, Plus, Edit2, Trash2, Save, X, Loader2, 
   RefreshCw, Calculator, TrendingUp, DollarSign, Award, 
-  ChevronDown, ChevronRight, ArrowUpDown, Percent, Globe2, Search
+  ChevronDown, ChevronRight, ArrowUpDown, Percent, Globe2, Search,
+  AlertTriangle, ShieldAlert, ShieldCheck, Link2
 } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
@@ -89,7 +90,14 @@ function PreciosPaisTab() {
   const [precios, setPrecios] = useState([])
   const [proveedores, setProveedores] = useState([])
   const [paises, setPaises] = useState([])
+  const [pricingPolicy, setPricingPolicy] = useState('notify')
   const [loading, setLoading] = useState(true)
+  const [loadingMissing, setLoadingMissing] = useState(false)
+  const [showMissingModal, setShowMissingModal] = useState(false)
+  const [missingData, setMissingData] = useState(null)
+  const [showSyncScopeModal, setShowSyncScopeModal] = useState(false)
+  const [syncTargetRow, setSyncTargetRow] = useState(null)
+  const [syncingScope, setSyncingScope] = useState(false)
   const [filtroProveedor, setFiltroProveedor] = useState('')
   const [filtroPais, setFiltroPais] = useState('')
   const [filtroMoneda, setFiltroMoneda] = useState('EUR')
@@ -111,6 +119,15 @@ function PreciosPaisTab() {
         setPaises(preciosRes.data.paises || [])
       }
       if (provRes.data.success) setProveedores(provRes.data.proveedores)
+
+      try {
+        const policyRes = await axios.get('/api/admin/pricing/policy')
+        if (policyRes.data?.success && policyRes.data?.mode) {
+          setPricingPolicy(policyRes.data.mode)
+        }
+      } catch {
+        // Mantener notify por defecto si el endpoint no responde.
+      }
 
       try {
         const tasasRes = await axios.get('/api/admin/precios-pais/tasas-cambio')
@@ -153,6 +170,169 @@ function PreciosPaisTab() {
     }
   }
 
+  const handleUpdatePolicy = async (nextMode) => {
+    try {
+      const res = await axios.put('/api/admin/pricing/policy', { mode: nextMode })
+      if (res.data.success) {
+        setPricingPolicy(res.data.mode)
+        toast.success(`Política actualizada: ${res.data.mode}`)
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error actualizando política')
+    }
+  }
+
+  const loadMissingForProvider = async (providerId) => {
+    setLoadingMissing(true)
+    try {
+      const res = await axios.get(`/api/admin/proveedores/${providerId}/precios-pais/faltantes`)
+      if (res.data.success) {
+        setMissingData(res.data)
+        setShowMissingModal(true)
+      } else {
+        toast.error(res.data.error || 'No se pudo cargar faltantes')
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error cargando faltantes')
+    } finally {
+      setLoadingMissing(false)
+    }
+  }
+
+  const handleOpenMissing = () => {
+    if (!filtroProveedor) {
+      toast.error('Selecciona un proveedor para ver faltantes y sincronizar')
+      return
+    }
+    loadMissingForProvider(filtroProveedor)
+  }
+
+  const syncCountryToProvider = async ({ codigo_pais, providerId, manualValues = null, silent = false }) => {
+    if (!providerId) return { success: false, error: 'Proveedor inválido' }
+    const payload = {
+      proveedor_id: providerId,
+      codigo_pais,
+      sync_from_global: !manualValues,
+      overwrite: false,
+      moneda: 'EUR',
+    }
+    if (manualValues) {
+      payload.sync_from_global = false
+      payload.precio_normal = manualValues.precio_normal
+      payload.precio_urgente = manualValues.precio_urgente
+      payload.precio_72hrs = manualValues.precio_72hrs
+      payload.precio_monitoreo = manualValues.precio_monitoreo ?? MONITOREO_PRECIO_EUR
+    }
+
+    try {
+      const res = await axios.post('/api/admin/proveedores/precios-pais', payload)
+      if (res.data.success) {
+        if (!silent) {
+          toast.success('País agregado al motor pricing del proveedor')
+        }
+        return { success: true }
+      } else {
+        if (!silent) {
+          toast.error(res.data.error || 'No se pudo sincronizar')
+        }
+        return { success: false, error: res.data.error || 'No se pudo sincronizar' }
+      }
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Error sincronizando país'
+      if (!silent) {
+        toast.error(msg)
+      }
+      return { success: false, error: msg }
+    }
+  }
+
+  const handleSyncCountry = async ({ codigo_pais, manualValues = null }) => {
+    if (!missingData?.proveedor?.id) return
+    const result = await syncCountryToProvider({
+      codigo_pais,
+      providerId: missingData.proveedor.id,
+      manualValues,
+      silent: false,
+    })
+    if (result.success) {
+      await loadData()
+      await loadMissingForProvider(missingData.proveedor.id)
+    }
+  }
+
+  const getMissingProvidersForCountry = (codigoPais) => {
+    if (!codigoPais) return []
+    const code = String(codigoPais).toUpperCase()
+    const activos = (proveedores || []).filter(p => p.activo !== false)
+    return activos.filter((prov) => {
+      return !(precios || []).some(p => p.proveedor_id === prov.id && String(p.codigo_pais || '').toUpperCase() === code)
+    })
+  }
+
+  const handleOpenSyncScope = (row) => {
+    setSyncTargetRow(row)
+    setShowSyncScopeModal(true)
+  }
+
+  const handleConfirmSyncScope = async (mode) => {
+    if (!syncTargetRow?.codigo_pais) return
+    setSyncingScope(true)
+    try {
+      const codigo = syncTargetRow.codigo_pais
+      if (mode === 'current') {
+        const result = await syncCountryToProvider({
+          codigo_pais: codigo,
+          providerId: missingData?.proveedor?.id,
+          silent: false,
+        })
+        if (result.success) {
+          setShowSyncScopeModal(false)
+          setSyncTargetRow(null)
+          await loadData()
+          await loadMissingForProvider(missingData.proveedor.id)
+        }
+        return
+      }
+
+      const missingProviders = getMissingProvidersForCountry(codigo)
+      if (missingProviders.length === 0) {
+        toast('No hay proveedores pendientes para sincronizar en ese país')
+        setShowSyncScopeModal(false)
+        setSyncTargetRow(null)
+        return
+      }
+
+      let ok = 0
+      let fail = 0
+      for (const prov of missingProviders) {
+        const result = await syncCountryToProvider({
+          codigo_pais: codigo,
+          providerId: prov.id,
+          silent: true,
+        })
+        if (result.success) ok += 1
+        else fail += 1
+      }
+
+      if (ok > 0 && fail === 0) {
+        toast.success(`Sincronizado ${codigo} en ${ok} proveedor(es)`)
+      } else if (ok > 0 && fail > 0) {
+        toast.success(`Sincronizado parcial: ${ok} ok, ${fail} con error`)
+      } else {
+        toast.error('No se pudo sincronizar en proveedores')
+      }
+
+      setShowSyncScopeModal(false)
+      setSyncTargetRow(null)
+      await loadData()
+      if (missingData?.proveedor?.id) {
+        await loadMissingForProvider(missingData.proveedor.id)
+      }
+    } finally {
+      setSyncingScope(false)
+    }
+  }
+
   const preciosFiltrados = precios.filter(p => {
     if (filtroProveedor && p.proveedor_id !== parseInt(filtroProveedor)) return false
     if (filtroPais && p.codigo_pais !== filtroPais) return false
@@ -192,9 +372,53 @@ function PreciosPaisTab() {
           </h4>
           <p className="text-sm text-gray-500">Precios de costo por proveedor, país y prioridad</p>
         </div>
-        <button onClick={loadData} className="btn-secondary text-sm flex items-center justify-center gap-1 w-full sm:w-auto">
-          <RefreshCw className="h-4 w-4" /> Actualizar
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <button
+            onClick={handleOpenMissing}
+            disabled={loadingMissing}
+            className="btn-secondary text-sm flex items-center justify-center gap-1 w-full sm:w-auto"
+          >
+            {loadingMissing ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
+            Faltantes / Sync
+          </button>
+          <button onClick={loadData} className="btn-secondary text-sm flex items-center justify-center gap-1 w-full sm:w-auto">
+            <RefreshCw className="h-4 w-4" /> Actualizar
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="flex items-start gap-2">
+            {pricingPolicy === 'block' ? <ShieldAlert className="h-4 w-4 mt-0.5" /> : <ShieldCheck className="h-4 w-4 mt-0.5" />}
+            <div>
+              <p className="font-medium">Política de países sin pricing</p>
+              <p className="text-xs text-amber-800">
+                {pricingPolicy === 'block'
+                  ? 'Modo BLOCK: se bloquea facturación automática cuando falta asociación proveedor-país.'
+                  : 'Modo NOTIFY: se notifica y se permite cargar manualmente desde el modal.'}
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => handleUpdatePolicy('notify')}
+              className={`px-3 py-1.5 rounded-md border text-xs font-medium ${
+                pricingPolicy === 'notify' ? 'bg-green-100 border-green-300 text-green-800' : 'bg-white border-gray-300 text-gray-600'
+              }`}
+            >
+              NOTIFY
+            </button>
+            <button
+              onClick={() => handleUpdatePolicy('block')}
+              className={`px-3 py-1.5 rounded-md border text-xs font-medium ${
+                pricingPolicy === 'block' ? 'bg-red-100 border-red-300 text-red-800' : 'bg-white border-gray-300 text-gray-600'
+              }`}
+            >
+              BLOCK
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -368,6 +592,403 @@ function PreciosPaisTab() {
             No hay precios configurados con los filtros seleccionados
           </div>
         )}
+      </div>
+
+      {showMissingModal && (
+        <MissingPricingModal
+          data={missingData}
+          onClose={() => setShowMissingModal(false)}
+          onSyncCountry={handleSyncCountry}
+          onRequestSync={handleOpenSyncScope}
+        />
+      )}
+
+      {showSyncScopeModal && (
+        <SyncScopeModal
+          targetRow={syncTargetRow}
+          currentProvider={missingData?.proveedor}
+          missingProviders={getMissingProvidersForCountry(syncTargetRow?.codigo_pais)}
+          syncing={syncingScope}
+          onClose={() => {
+            if (syncingScope) return
+            setShowSyncScopeModal(false)
+            setSyncTargetRow(null)
+          }}
+          onConfirm={handleConfirmSyncScope}
+        />
+      )}
+    </div>
+  )
+}
+
+function MissingPricingModal({ data, onClose, onSyncCountry, onRequestSync }) {
+  const [manualForm, setManualForm] = useState({})
+  const [searchPais, setSearchPais] = useState('')
+  const [selectedCodigo, setSelectedCodigo] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [manualConfirmPayload, setManualConfirmPayload] = useState(null)
+  const [confirmingManualSave, setConfirmingManualSave] = useState(false)
+  const pageSize = 5
+
+  if (!data) return null
+
+  const manualRows = data.missing_in_both || []
+  const countryOptions = useMemo(() => {
+    return [...manualRows]
+      .sort((a, b) => `${a.pais}`.localeCompare(`${b.pais}`))
+      .map(r => ({ codigo_pais: r.codigo_pais, pais: r.pais }))
+  }, [manualRows])
+
+  const filteredManualRows = useMemo(() => {
+    const q = (searchPais || '').trim().toLowerCase()
+    return manualRows.filter((row) => {
+      if (selectedCodigo && row.codigo_pais !== selectedCodigo) return false
+      if (!q) return true
+      const txt = `${row.pais || ''} ${row.codigo_pais || ''}`.toLowerCase()
+      return txt.includes(q)
+    })
+  }, [manualRows, searchPais, selectedCodigo])
+
+  const totalPages = Math.max(1, Math.ceil(filteredManualRows.length / pageSize))
+  const safePage = Math.min(currentPage, totalPages)
+  const paginatedManualRows = filteredManualRows.slice((safePage - 1) * pageSize, safePage * pageSize)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchPais, selectedCodigo, data?.proveedor?.id])
+
+  const getManualValues = (codigo) => {
+    return manualForm[codigo] || {
+      precio_normal: 0,
+      precio_urgente: 0,
+      precio_72hrs: 0,
+      precio_monitoreo: MONITOREO_PRECIO_EUR,
+    }
+  }
+
+  const updateManualValues = (codigo, field, value) => {
+    const prev = getManualValues(codigo)
+    setManualForm((curr) => ({
+      ...curr,
+      [codigo]: {
+        ...prev,
+        [field]: Number(value) || 0,
+      }
+    }))
+  }
+
+  const openManualConfirm = (row) => {
+    const form = getManualValues(row.codigo_pais)
+    setManualConfirmPayload({
+      codigo_pais: row.codigo_pais,
+      pais: row.pais,
+      manualValues: {
+        precio_normal: Number(form.precio_normal) || 0,
+        precio_urgente: Number(form.precio_urgente) || 0,
+        precio_72hrs: Number(form.precio_72hrs) || 0,
+        precio_monitoreo: Number(form.precio_monitoreo) || MONITOREO_PRECIO_EUR,
+      }
+    })
+  }
+
+  const handleConfirmManualSave = async () => {
+    if (!manualConfirmPayload) return
+    setConfirmingManualSave(true)
+    try {
+      await onSyncCountry({
+        codigo_pais: manualConfirmPayload.codigo_pais,
+        manualValues: manualConfirmPayload.manualValues,
+      })
+      setManualConfirmPayload(null)
+    } finally {
+      setConfirmingManualSave(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-xl shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b flex items-center justify-between gap-3">
+          <div>
+            <h4 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+              <Link2 className="h-4 w-4 text-blue-600" />
+              Diferenciador de Países - {data.proveedor?.codigo}
+            </h4>
+            <p className="text-xs text-gray-500 mt-1">
+              Faltantes en proveedor: {data.summary?.missing_in_provider || 0} | Sin base global: {data.summary?.missing_in_both || 0}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-6">
+          <div>
+            <h5 className="text-sm font-semibold text-gray-900 mb-2">1) Países con precio global (sync directo)</h5>
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                  <tr>
+                    <th className="px-3 py-2 text-left">País</th>
+                    <th className="px-3 py-2 text-center">Normal</th>
+                    <th className="px-3 py-2 text-center">Urgente</th>
+                    <th className="px-3 py-2 text-center">72h</th>
+                    <th className="px-3 py-2 text-right">Acción</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {(data.sync_candidates || []).map((row) => (
+                    <tr key={`sync-${row.codigo_pais}`}>
+                      <td className="px-3 py-2">{row.pais} ({row.codigo_pais})</td>
+                      <td className="px-3 py-2 text-center">{Number(row.precio_normal || 0).toFixed(2)}</td>
+                      <td className="px-3 py-2 text-center">{Number(row.precio_urgente || 0).toFixed(2)}</td>
+                      <td className="px-3 py-2 text-center">{Number(row.precio_72hrs || 0).toFixed(2)}</td>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          onClick={() => onRequestSync(row)}
+                          className="px-2.5 py-1.5 rounded-md bg-blue-600 text-white text-xs hover:bg-blue-700"
+                        >
+                          Sincronizar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {(data.sync_candidates || []).length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-4 text-center text-gray-500">No hay candidatos de sincronización</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <h5 className="text-sm font-semibold text-gray-900 mb-2">2) Países sin precio global (carga manual)</h5>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+              <input
+                type="text"
+                value={searchPais}
+                onChange={(e) => setSearchPais(e.target.value)}
+                placeholder="Buscar país o código (ej: Andorra / AD)"
+                className="px-3 py-2 border rounded-md text-sm"
+              />
+              <select
+                value={selectedCodigo}
+                onChange={(e) => setSelectedCodigo(e.target.value)}
+                className="px-3 py-2 border rounded-md text-sm"
+              >
+                <option value="">Todos los países</option>
+                {countryOptions.map((opt) => (
+                  <option key={opt.codigo_pais} value={opt.codigo_pais}>
+                    {opt.pais} ({opt.codigo_pais})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="hidden md:grid md:grid-cols-5 gap-2 mb-2 px-1 text-[11px] uppercase tracking-wide text-gray-500 font-semibold">
+              <span>Normal</span>
+              <span>Urgente</span>
+              <span>72h</span>
+              <span>Monitoreo (defecto 120)</span>
+              <span className="text-right">Acción</span>
+            </div>
+            <div className="space-y-3">
+              {paginatedManualRows.map((row) => {
+                const form = getManualValues(row.codigo_pais)
+                return (
+                  <div key={`manual-${row.codigo_pais}`} className="border rounded-lg p-3">
+                    <div className="font-medium text-sm text-gray-800 mb-2">{row.pais} ({row.codigo_pais})</div>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="px-2 py-1.5 border rounded-md text-sm"
+                        placeholder="Normal"
+                        value={form.precio_normal}
+                        onChange={(e) => updateManualValues(row.codigo_pais, 'precio_normal', e.target.value)}
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="px-2 py-1.5 border rounded-md text-sm"
+                        placeholder="Urgente"
+                        value={form.precio_urgente}
+                        onChange={(e) => updateManualValues(row.codigo_pais, 'precio_urgente', e.target.value)}
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="px-2 py-1.5 border rounded-md text-sm"
+                        placeholder="72h"
+                        value={form.precio_72hrs}
+                        onChange={(e) => updateManualValues(row.codigo_pais, 'precio_72hrs', e.target.value)}
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="px-2 py-1.5 border rounded-md text-sm"
+                        placeholder="Monitoreo"
+                        value={form.precio_monitoreo}
+                        onChange={(e) => updateManualValues(row.codigo_pais, 'precio_monitoreo', e.target.value)}
+                      />
+                      <button
+                        onClick={() => openManualConfirm(row)}
+                        className="px-2.5 py-1.5 rounded-md bg-emerald-600 text-white text-xs hover:bg-emerald-700"
+                      >
+                        Guardar Manual
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+              {filteredManualRows.length === 0 && (
+                <div className="border rounded-lg p-4 text-center text-sm text-gray-500">
+                  No hay países que coincidan con el filtro.
+                </div>
+              )}
+
+              {filteredManualRows.length > 0 && (
+                <div className="flex items-center justify-between pt-1">
+                  <p className="text-xs text-gray-500">
+                    Mostrando {(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, filteredManualRows.length)} de {filteredManualRows.length}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={safePage <= 1}
+                      className="px-2.5 py-1 text-xs border rounded-md disabled:opacity-50"
+                    >
+                      Anterior
+                    </button>
+                    <span className="text-xs text-gray-600">Página {safePage} / {totalPages}</span>
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={safePage >= totalPages}
+                      className="px-2.5 py-1 text-xs border rounded-md disabled:opacity-50"
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {manualConfirmPayload && (
+        <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4" onClick={() => {
+          if (!confirmingManualSave) setManualConfirmPayload(null)
+        }}>
+          <div className="bg-white w-full max-w-lg rounded-xl shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b flex items-center justify-between">
+              <h4 className="text-base font-semibold text-gray-900">Confirmar carga manual</h4>
+              <button
+                onClick={() => setManualConfirmPayload(null)}
+                disabled={confirmingManualSave}
+                className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-40"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-sm">
+              <p className="text-gray-700">
+                Se agregarán estos valores para <span className="font-semibold">{manualConfirmPayload.pais} ({manualConfirmPayload.codigo_pais})</span>:
+              </p>
+
+              <div className="border rounded-lg p-3 bg-gray-50 space-y-1 text-gray-800">
+                <div className="flex items-center justify-between">
+                  <span>Normal</span>
+                  <span className="font-semibold">{Number(manualConfirmPayload.manualValues.precio_normal).toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Urgente</span>
+                  <span className="font-semibold">{Number(manualConfirmPayload.manualValues.precio_urgente).toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>72h</span>
+                  <span className="font-semibold">{Number(manualConfirmPayload.manualValues.precio_72hrs).toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Monitoreo</span>
+                  <span className="font-semibold">{Number(manualConfirmPayload.manualValues.precio_monitoreo).toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  onClick={() => setManualConfirmPayload(null)}
+                  disabled={confirmingManualSave}
+                  className="px-3 py-2 rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmManualSave}
+                  disabled={confirmingManualSave}
+                  className="px-3 py-2 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {confirmingManualSave ? 'Guardando...' : 'Confirmar y Guardar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SyncScopeModal({ targetRow, currentProvider, missingProviders, syncing, onClose, onConfirm }) {
+  if (!targetRow) return null
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white w-full max-w-2xl rounded-xl shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b flex items-center justify-between">
+          <h4 className="text-base font-semibold text-gray-900">Confirmar sincronización</h4>
+          <button onClick={onClose} disabled={syncing} className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-40">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4 text-sm">
+          <p className="text-gray-700">
+            País: <span className="font-semibold">{targetRow.pais} ({targetRow.codigo_pais})</span>
+          </p>
+          <p className="text-gray-700">
+            Proveedor actual: <span className="font-semibold">{currentProvider?.codigo} - {currentProvider?.nombre}</span>
+          </p>
+
+          <div className="border rounded-lg p-3 bg-gray-50">
+            <p className="font-medium text-gray-800 mb-2">Proveedores que hoy no tienen este país ({missingProviders.length})</p>
+            <div className="max-h-44 overflow-y-auto text-xs text-gray-700 space-y-1">
+              {missingProviders.length > 0 ? missingProviders.map((p) => (
+                <div key={p.id}>- {p.codigo} - {p.nombre}</div>
+              )) : <div>No hay faltantes para este país.</div>}
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+            <button
+              onClick={() => onConfirm('current')}
+              disabled={syncing}
+              className="px-3 py-2 rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              Solo {currentProvider?.codigo}
+            </button>
+            <button
+              onClick={() => onConfirm('all')}
+              disabled={syncing || missingProviders.length === 0}
+              className="px-3 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {syncing ? 'Sincronizando...' : 'Sincronizar a todos los faltantes'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )

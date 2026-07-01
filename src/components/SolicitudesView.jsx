@@ -26,8 +26,25 @@ const COUNTRY_ISO = {
   'Panamá': 'pa', 'Panama': 'pa', 'El Salvador': 'sv', 'Nicaragua': 'ni', 'Saint Lucia': 'lc',
   'Jamaica': 'jm', 'Barbados': 'bb', 'Bahamas': 'bs', 'Trinidad y Tobago': 'tt',
   'Antigua & Barbuda': 'ag', 'Antigua and Barbuda': 'ag', 'Antigua y Barbuda': 'ag',
+  'Andorra': 'ad', 'Dominica': 'dm',
   'Estados Unidos': 'us', 'Alemania': 'de', 'Union Europea': 'eu', 'Unión Europea': 'eu',
   'Desconocido': null, 'Internacional': null
+}
+
+const normalizeCountryKey = (value) => String(value || '')
+  .trim()
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/&/g, 'and')
+  .replace(/\s+/g, ' ')
+
+const buildStaticCountryIsoMap = () => {
+  const map = {}
+  Object.entries(COUNTRY_ISO).forEach(([name, code]) => {
+    if (code) map[normalizeCountryKey(name)] = String(code).toLowerCase()
+  })
+  return map
 }
 
 const PAISES_DISPONIBLES = ['Argentina', 'Uruguay', 'Chile', 'Colombia', 'Perú', 'Rep. Dominicana', 'Honduras', 'México', 'Costa Rica', 'Guatemala', 'España', 'Saint Lucia', 'Jamaica', 'Antigua & Barbuda', 'Brasil', 'Estados Unidos', 'Alemania']
@@ -94,6 +111,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
   const [modalCountryFilter, setModalCountryFilter] = useState('all')
   const [modalCountryOpen, setModalCountryOpen] = useState(false)
   const [paisesEmpresas, setPaisesEmpresas] = useState([]) // Países disponibles en empresas
+  const [countryIsoByName, setCountryIsoByName] = useState(() => buildStaticCountryIsoMap())
   const countryDropdownRef = useRef(null)
 
   // Dropdown de acciones y modales
@@ -123,6 +141,13 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
     const code = String(codigoPais || '').toUpperCase()
     if (code && PAIS_POR_CODIGO[code]) return PAIS_POR_CODIGO[code]
     return paisNombre || 'Argentina'
+  }
+
+  const getCountryIso = (paisNombre, codigoPais) => {
+    const byCode = String(codigoPais || '').trim().toLowerCase()
+    if (/^[a-z]{2}$/.test(byCode)) return byCode
+    const key = normalizeCountryKey(paisNombre)
+    return key ? (countryIsoByName[key] || null) : null
   }
 
   const inferPaisDisplay = (sol) => {
@@ -413,9 +438,27 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
   // Cargar países disponibles de empresas
   const loadPaisesEmpresas = async () => {
     try {
-      const res = await axios.get('/api/empresas/paises')
-      if (res.data.success && res.data.paises) {
-        setPaisesEmpresas(res.data.paises)
+      const [resPaises, resCountries] = await Promise.all([
+        axios.get('/api/empresas/paises'),
+        axios.get('/api/countries/all')
+      ])
+
+      if (resPaises.data.success && resPaises.data.paises) {
+        setPaisesEmpresas(resPaises.data.paises)
+      }
+
+      if (resCountries.data.success && Array.isArray(resCountries.data.paises)) {
+        setCountryIsoByName(prev => {
+          const next = { ...prev }
+          resCountries.data.paises.forEach((pais) => {
+            const nombre = pais?.nombre
+            const codigo = String(pais?.codigo || '').toLowerCase()
+            if (nombre && /^[a-z]{2}$/.test(codigo)) {
+              next[normalizeCountryKey(nombre)] = codigo
+            }
+          })
+          return next
+        })
       }
     } catch {
       // Fallback a lista principal si falla
@@ -1669,8 +1712,8 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                               : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
                           }`}
                         >
-                          {modalCountryFilter !== 'all' && COUNTRY_ISO[modalCountryFilter] ? (
-                            <img src={`https://flagcdn.com/20x15/${COUNTRY_ISO[modalCountryFilter]}.png`} alt="" className="w-5 h-3.5 rounded-sm object-cover" />
+                          {modalCountryFilter !== 'all' && getCountryIso(modalCountryFilter) ? (
+                            <img src={`https://flagcdn.com/20x15/${getCountryIso(modalCountryFilter)}.png`} alt="" className="w-5 h-3.5 rounded-sm object-cover" />
                           ) : (
                             <Globe className="h-3.5 w-3.5" />
                           )}
@@ -1690,7 +1733,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                           <div className="absolute z-50 mt-1 w-52 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
                             <div className="max-h-56 overflow-y-auto">
                               {(paisesEmpresas.length > 0 ? paisesEmpresas : PAISES_DISPONIBLES).map(pais => {
-                                const code = COUNTRY_ISO[pais]
+                                const code = getCountryIso(pais)
                                 return (
                                   <button
                                     key={pais}
@@ -1742,7 +1785,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                       <div className="border border-gray-200 rounded-xl max-h-64 overflow-y-auto">
                         {empresasEncontradas.map((emp, idx) => {
                           const empPais = resolvePaisNombre(emp.pais, emp.codigo_pais)
-                          const code = COUNTRY_ISO[empPais]
+                          const code = getCountryIso(empPais, emp.codigo_pais || emp.codigo)
                           return (
                             <button
                               key={idx}
