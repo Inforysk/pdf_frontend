@@ -1169,6 +1169,52 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     }
   }
 
+  const handleAddAllOtrosPaises = async () => {
+    if (filteredOtrosPaises.length === 0) {
+      toast('No hay paises pendientes para agregar')
+      return
+    }
+
+    const confirmMsg = `Se agregaran ${filteredOtrosPaises.length} pais(es) faltante(s). ¿Continuar?`
+    if (!window.confirm(confirmMsg)) return
+
+    setAddingCountry('__all__')
+    try {
+      const res = await axios.post('/api/countries/add-all')
+      if (!res.data?.success) {
+        toast.error(res.data?.error || 'No se pudo agregar paises en bloque')
+        return
+      }
+
+      const totalAffected = Number(res.data.total_affected || 0)
+      const insertedCount = Number(res.data.inserted_count || 0)
+      const reactivatedCount = Number(res.data.reactivated_count || 0)
+
+      if (totalAffected === 0) {
+        toast('No habia paises pendientes para configurar')
+      } else {
+        toast.success(`Paises configurados: ${insertedCount} nuevos, ${reactivatedCount} reactivados`)
+      }
+
+      // Refrescar listas del modal
+      const [availableRes, configuredRes] = await Promise.allSettled([
+        axios.get('/api/countries/available'),
+        axios.get('/api/countries/configured')
+      ])
+
+      if (availableRes.status === 'fulfilled') {
+        setOtrosPaises(availableRes.value?.data?.paises || [])
+      }
+      if (configuredRes.status === 'fulfilled') {
+        setConfiguredPaises(configuredRes.value?.data?.paises || [])
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al agregar paises en bloque')
+    } finally {
+      setAddingCountry(null)
+    }
+  }
+
   const handleUseConfiguredPais = async (pais) => {
     const opKey = `use:${pais.codigo}`
     setAddingCountry(opKey)
@@ -3268,7 +3314,18 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
                   )}
 
                   <div>
-                    <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Disponibles para agregar</p>
+                    <div className="px-2 pb-1 flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Disponibles para agregar</p>
+                      <button
+                        type="button"
+                        onClick={handleAddAllOtrosPaises}
+                        disabled={addingCountry === '__all__' || filteredOtrosPaises.length === 0}
+                        className="text-[11px] font-semibold px-2.5 py-1 rounded bg-purple-100 text-purple-700 hover:bg-purple-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Agregar todos los paises faltantes"
+                      >
+                        {addingCountry === '__all__' ? 'Agregando...' : `Agregar todos (${filteredOtrosPaises.length})`}
+                      </button>
+                    </div>
                     <div className="space-y-1">
                       {filteredOtrosPaises.length === 0 ? (
                         <div className="text-center py-4 text-sm text-gray-500">
