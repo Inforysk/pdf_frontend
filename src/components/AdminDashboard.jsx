@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, LineChart, Line, AreaChart, Area
@@ -25,6 +25,8 @@ const ESTADO_COLORS = {
   pendiente: '#f59e0b', en_proceso: '#3b82f6', completada: '#10b981',
   cancelada: '#9ca3af', consulta: '#8b5cf6', precarga: '#06b6d4'
 }
+
+const DASHBOARD_FILTERS_KEY = 'adminDashboardFiltersV1'
 
 function KpiCard({ icon: Icon, label, value, sub, color = 'blue', active, onClick, description }) {
   const colorMap = {
@@ -188,6 +190,33 @@ const CustomTooltip = ({ active, payload, label }) => {
   )
 }
 
+const EmpresasPaisTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null
+  const point = payload[0]?.payload || {}
+  const detalleOtros = Array.isArray(point.detalle_otros) ? point.detalle_otros : []
+
+  return (
+    <div className="bg-white rounded-lg shadow-lg border px-3 py-2 text-xs max-w-xs">
+      <p className="font-medium text-gray-700">{label}</p>
+      <p style={{ color: payload[0]?.color || '#111827' }}>
+        Empresas: <span className="font-semibold">{Number(payload[0]?.value || 0).toLocaleString()}</span>
+      </p>
+      {label === 'Otros' && detalleOtros.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-gray-100">
+          <p className="text-[11px] font-semibold text-gray-600 mb-1">Incluye:</p>
+          <div className="space-y-0.5 max-h-40 overflow-auto">
+            {detalleOtros.map((it, idx) => (
+              <p key={`${it.pais}-${idx}`} className="text-[11px] text-gray-600">
+                {it.pais}: <span className="font-medium text-gray-800">{Number(it.cantidad || 0).toLocaleString()}</span>
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AdminDashboard() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -309,7 +338,7 @@ export default function AdminDashboard() {
     }
   }
 
-  const loadDashboard = async (
+  const loadDashboard = useCallback(async (
     periodo = periodoFacturacion,
     resumenEmpresas = periodoResumenEmpresas,
     resumenSolicitudes = periodoResumenSolicitudes,
@@ -326,7 +355,7 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes])
   
   const handlePeriodoChange = (nuevoPeriodo) => {
     setPeriodoFacturacion(nuevoPeriodo)
@@ -348,14 +377,40 @@ export default function AdminDashboard() {
     loadDashboard(periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, nuevoPeriodo)
   }
 
-  // Auto-refresh cada 30 segundos para datos en tiempo real
+  // Restaurar filtros persistidos del dashboard
   useEffect(() => {
-    loadDashboard()
+    try {
+      const savedRaw = localStorage.getItem(DASHBOARD_FILTERS_KEY)
+      if (!savedRaw) return
+      const saved = JSON.parse(savedRaw)
+      if (saved.periodoFacturacion) setPeriodoFacturacion(Number(saved.periodoFacturacion))
+      if (saved.periodoResumenEmpresas) setPeriodoResumenEmpresas(saved.periodoResumenEmpresas)
+      if (saved.periodoResumenSolicitudes) setPeriodoResumenSolicitudes(saved.periodoResumenSolicitudes)
+      if (saved.periodoResumenClientes) setPeriodoResumenClientes(saved.periodoResumenClientes)
+    } catch {
+      // Ignorar valores corruptos en localStorage
+    }
+  }, [])
+
+  // Guardar filtros actuales para que no se desajusten tras recarga
+  useEffect(() => {
+    const payload = {
+      periodoFacturacion,
+      periodoResumenEmpresas,
+      periodoResumenSolicitudes,
+      periodoResumenClientes,
+    }
+    localStorage.setItem(DASHBOARD_FILTERS_KEY, JSON.stringify(payload))
+  }, [periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes])
+
+  // Auto-refresh cada 30 segundos usando filtros actuales
+  useEffect(() => {
+    loadDashboard(periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes)
     const interval = setInterval(() => {
-      loadDashboard()
+      loadDashboard(periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes)
     }, 30000) // 30 segundos
     return () => clearInterval(interval)
-  }, [])
+  }, [loadDashboard, periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes])
 
   if (loading) {
     return (
@@ -734,7 +789,7 @@ export default function AdminDashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                 <XAxis type="number" tick={{ fontSize: 12 }} />
                 <YAxis dataKey="pais" type="category" width={110} tick={{ fontSize: 11 }} />
-                <Tooltip content={<CustomTooltip />} />
+                <Tooltip content={<EmpresasPaisTooltip />} />
                 <Bar dataKey="cantidad" name="Empresas" radius={[0, 6, 6, 0]}>
                   {(data.empresas_por_pais || []).map((_, i) => (
                     <Cell key={i} fill={COLORS_PIE[i % COLORS_PIE.length]} />
