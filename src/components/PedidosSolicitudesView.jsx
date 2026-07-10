@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { Loader2, Search, ExternalLink, Clock, CheckCircle2, ChevronDown, Building2, MapPin, Briefcase, Shield, Send, Eye, X, Globe, Database, Filter, RotateCcw, Play, FileText, Ban, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileDown, Plus, FilePlus2, UserPlus, SlidersHorizontal, Calendar, AlertTriangle, ArrowLeft, ArrowRight, RotateCw, Zap, Check, MoreVertical } from 'lucide-react'
+import { Loader2, Search, ExternalLink, Clock, CheckCircle2, ChevronDown, Building2, MapPin, Briefcase, Shield, Send, Eye, X, Globe, Database, Filter, RotateCcw, Play, FileText, Ban, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileDown, Plus, FilePlus2, UserPlus, SlidersHorizontal, Calendar, AlertTriangle, ArrowLeft, ArrowRight, RotateCw, Zap, Check, MoreVertical, Upload, Scale } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
+import ProgressModal from './ui/ProgressModal'
 
 const ESTADO_CONFIG = {
   consulta: { label: 'Consulta', color: 'bg-purple-100 text-purple-800 border-purple-200', icon: Search },
@@ -69,6 +70,21 @@ const PAIS_POR_CODIGO = {
 
 const PER_PAGE = 5
 
+const BALANCE_PROGRESS_STEPS = [
+  { time: 0, msg: 'Subiendo PDF seleccionado...' },
+  { time: 4, msg: 'Leyendo páginas seleccionadas...' },
+  { time: 9, msg: 'Extrayendo datos contables...' },
+  { time: 15, msg: 'Guardando balance y antecedentes...' },
+]
+
+const getBalanceProgressMessage = (elapsed) => {
+  let current = BALANCE_PROGRESS_STEPS[0].msg
+  BALANCE_PROGRESS_STEPS.forEach((step) => {
+    if (elapsed >= step.time) current = step.msg
+  })
+  return current
+}
+
 export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNuevoInforme }) {
   const [solicitudes, setSolicitudes] = useState([])
   const [loading, setLoading] = useState(true)
@@ -124,7 +140,27 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
   const [solicitudAccion, setSolicitudAccion] = useState(null)
   const [motivoAccion, setMotivoAccion] = useState('')
   const [procesandoAccion, setProcesandoAccion] = useState(false)
+  const [uploadingBalanceSolicitudId, setUploadingBalanceSolicitudId] = useState(null)
+  const [balanceUploadSolicitud, setBalanceUploadSolicitud] = useState(null)
+  const [showBalanceUploadModal, setShowBalanceUploadModal] = useState(false)
+  const [selectedBalanceFile, setSelectedBalanceFile] = useState(null)
+  const [balancePdfPreviewPage, setBalancePdfPreviewPage] = useState(1)
+  const [balancePdfPreviewUrl, setBalancePdfPreviewUrl] = useState('')
+  const [balanceRangeStart, setBalanceRangeStart] = useState(null)
+  const [balanceRangeEnd, setBalanceRangeEnd] = useState(null)
+  const [balanceAntecedentes, setBalanceAntecedentes] = useState([])
+  const [showBalanceAntecedentesModal, setShowBalanceAntecedentesModal] = useState(false)
+  const [balanceAntecedentesSolicitud, setBalanceAntecedentesSolicitud] = useState(null)
+  const [showBalanceProgressModal, setShowBalanceProgressModal] = useState(false)
+  const [balanceProgressElapsed, setBalanceProgressElapsed] = useState(0)
+  const [balanceProgressMessage, setBalanceProgressMessage] = useState(getBalanceProgressMessage(0))
+  const [balanceProgressDone, setBalanceProgressDone] = useState(false)
+  const [loadingBalanceAntecedentes, setLoadingBalanceAntecedentes] = useState(false)
+  const [expandedBalanceHistoryId, setExpandedBalanceHistoryId] = useState(null)
+  const [antecedenteCountBySolicitud, setAntecedenteCountBySolicitud] = useState({})
+  const [hasBalanceBySolicitud, setHasBalanceBySolicitud] = useState({})
   const dropdownRef = useRef(null)
+  const balanceFileInputRef = useRef(null)
 
   // Abrir dropdown y calcular posición
   const handleOpenDropdown = (e, solId) => {
@@ -234,6 +270,29 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
       minute: '2-digit',
       hour12: false,
     })
+  }
+
+  const getAntecedentePagesText = (item) => {
+    if (!item) return 'Sin paginas informadas'
+    if (item.page_from && item.page_to) {
+      return item.page_from === item.page_to ? `pagina ${item.page_from}` : `paginas ${item.page_from}-${item.page_to}`
+    }
+    if (item.page_from) return `pagina ${item.page_from}`
+    return 'Sin paginas informadas'
+  }
+
+  const buildBalanceChangeSummary = (current, previous) => {
+    if (!previous) return 'Primer balance registrado en el historial.'
+
+    const currentRange = `${current?.page_from || '?'}-${current?.page_to || '?'}`
+    const previousRange = `${previous?.page_from || '?'}-${previous?.page_to || '?'}`
+    if (currentRange !== previousRange) return `Cambio de rango de paginas: ${previousRange} -> ${currentRange}.`
+
+    const currentFile = String(current?.filename || '').trim().toLowerCase()
+    const previousFile = String(previous?.filename || '').trim().toLowerCase()
+    if (currentFile !== previousFile) return 'Se actualizo el archivo fuente del balance.'
+
+    return 'Actualizacion incremental sin cambios visibles en el rango de paginas.'
   }
 
   // Key para forzar recargas
@@ -391,6 +450,300 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
       toast.error('Error al actualizar prioridad')
     }
   }
+
+  const loadBalanceAntecedentes = async (solicitudId) => {
+    if (!solicitudId) return
+    setLoadingBalanceAntecedentes(true)
+    try {
+      const res = await axios.get(`/api/pedidos-solicitudes/${solicitudId}/balance-antecedentes`)
+      if (res.data?.success) {
+        setBalanceAntecedentes(res.data.items || [])
+      } else {
+        setBalanceAntecedentes([])
+      }
+    } catch {
+      setBalanceAntecedentes([])
+    } finally {
+      setLoadingBalanceAntecedentes(false)
+    }
+  }
+
+  const fetchBalanceAntecedentesCount = async (solicitudId) => {
+    if (!solicitudId) return 0
+    try {
+      const res = await axios.get(`/api/pedidos-solicitudes/${solicitudId}/balance-antecedentes`)
+      if (!res.data?.success) return 0
+      return Array.isArray(res.data.items) ? res.data.items.length : 0
+    } catch {
+      return 0
+    }
+  }
+
+  const openBalanceAntecedentesModal = (solicitud) => {
+    if (!solicitud) return
+    setExpandedBalanceHistoryId(null)
+    setBalanceAntecedentesSolicitud(solicitud)
+    setShowBalanceAntecedentesModal(true)
+  }
+
+  const handleSubirBalanceClick = (solicitud) => {
+    setBalanceUploadSolicitud(solicitud)
+    setActionDropdownId(null)
+    setSelectedBalanceFile(null)
+    setBalancePdfPreviewPage(1)
+    setBalancePdfPreviewUrl('')
+    setBalanceRangeStart(null)
+    setBalanceRangeEnd(null)
+    setShowBalanceUploadModal(true)
+  }
+
+  const handleCloseBalanceUploadModal = () => {
+    setShowBalanceUploadModal(false)
+    setSelectedBalanceFile(null)
+    setBalancePdfPreviewPage(1)
+    setBalancePdfPreviewUrl('')
+    setBalanceRangeStart(null)
+    setBalanceRangeEnd(null)
+  }
+
+  const handleExtractAndSaveBalance = async (solicitud, file, options = {}) => {
+    if (!solicitud || !file) return
+
+    if (!file.name?.toLowerCase().endsWith('.pdf')) {
+      toast.error('Solo se permiten archivos PDF')
+      return
+    }
+
+    const empresaId = solicitud.empresa_id || solicitud.empresa_modelo_id
+    if (!empresaId) {
+      toast.error('Esta solicitud no tiene empresa asociada. Primero usa Continuar Informe para asociarla.')
+      return
+    }
+
+    setUploadingBalanceSolicitudId(solicitud.id)
+    setBalanceProgressElapsed(0)
+    setBalanceProgressMessage(getBalanceProgressMessage(0))
+    setBalanceProgressDone(false)
+    setShowBalanceProgressModal(true)
+    let completedSuccessfully = false
+    try {
+      const formDataUpload = new FormData()
+      formDataUpload.append('file', file)
+      formDataUpload.append('empresa_id', String(empresaId))
+      formDataUpload.append('solicitud_id', String(solicitud.id))
+      formDataUpload.append('solicitud_source', 'pedidos-solicitudes')
+      if (Array.isArray(options.selectedPages) && options.selectedPages.length > 0) {
+        formDataUpload.append('selected_pages', options.selectedPages.join(','))
+      }
+      if (options.pageFrom) formDataUpload.append('page_from', String(options.pageFrom))
+      if (options.pageTo) formDataUpload.append('page_to', String(options.pageTo))
+
+      const extractRes = await axios.post('/api/extract-balance', formDataUpload, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+
+      if (!extractRes.data?.success) {
+        toast.error(extractRes.data?.error || 'No se pudo extraer el balance del PDF')
+        return
+      }
+
+      const allPeriods = extractRes.data?.all_periods || []
+      const currentPeriod = extractRes.data?.data ? [extractRes.data.data] : []
+      const balances = allPeriods.length > 0 ? allPeriods : currentPeriod
+
+      if (!balances.length) {
+        const antecedenteCount = await fetchBalanceAntecedentesCount(solicitud.id)
+        if (extractRes.data?.antecedente_guardado || antecedenteCount > 0) {
+          toast.success('PDF guardado como antecedente. No se detectaron datos contables para cargar balance.')
+          await loadBalanceAntecedentes(solicitud.id)
+          setAntecedenteCountBySolicitud(prev => ({ ...prev, [solicitud.id]: antecedenteCount }))
+          setHasBalanceBySolicitud(prev => ({ ...prev, [solicitud.id]: antecedenteCount > 0 }))
+          completedSuccessfully = true
+          return
+        }
+
+        toast('No se detectaron datos contables en el PDF. Intenta seleccionar páginas con el estado financiero.')
+        return
+      }
+
+      const saveRes = await axios.post(`/api/empresas/${empresaId}/balances/batch`, { balances })
+      if (!saveRes.data?.success) {
+        toast.error(saveRes.data?.error || 'No se pudo guardar el balance')
+        return
+      }
+
+      const asociadoMsg = extractRes.data?.antecedente_guardado ? ' y PDF asociado como antecedente' : ''
+      toast.success(`Balance cargado: ${saveRes.data.saved || 0} período(s) guardado(s)${asociadoMsg}`)
+      await loadBalanceAntecedentes(solicitud.id)
+      const newCount = await fetchBalanceAntecedentesCount(solicitud.id)
+      setAntecedenteCountBySolicitud(prev => ({ ...prev, [solicitud.id]: newCount }))
+      setHasBalanceBySolicitud(prev => ({ ...prev, [solicitud.id]: newCount > 0 }))
+      completedSuccessfully = true
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al subir y procesar balance PDF')
+    } finally {
+      if (completedSuccessfully) {
+        setBalanceProgressDone(true)
+        setBalanceProgressMessage('Completado')
+        await new Promise((resolve) => window.setTimeout(resolve, 1000))
+      }
+      setUploadingBalanceSolicitudId(null)
+      setShowBalanceProgressModal(false)
+      setBalanceProgressDone(false)
+      setBalanceUploadSolicitud(null)
+      handleCloseBalanceUploadModal()
+    }
+  }
+
+  const handleBalanceFileInputChange = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+
+    if (!file.name?.toLowerCase().endsWith('.pdf')) {
+      toast.error('Solo se permiten archivos PDF')
+      return
+    }
+
+    setSelectedBalanceFile(file)
+    setBalancePdfPreviewPage(1)
+    setBalanceRangeStart(null)
+    setBalanceRangeEnd(null)
+  }
+
+  useEffect(() => {
+    if (!selectedBalanceFile) {
+      setBalancePdfPreviewUrl('')
+      return
+    }
+
+    const objectUrl = URL.createObjectURL(selectedBalanceFile)
+    setBalancePdfPreviewUrl(objectUrl)
+
+    return () => {
+      URL.revokeObjectURL(objectUrl)
+    }
+  }, [selectedBalanceFile])
+
+  useEffect(() => {
+    if (!showBalanceProgressModal) return
+    const timer = window.setInterval(() => {
+      setBalanceProgressElapsed((prev) => prev + 1)
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [showBalanceProgressModal])
+
+  useEffect(() => {
+    if (!showBalanceProgressModal) return
+    if (balanceProgressDone) return
+    setBalanceProgressMessage(getBalanceProgressMessage(balanceProgressElapsed))
+  }, [balanceProgressElapsed, showBalanceProgressModal, balanceProgressDone])
+
+  const markBalanceRangeFromPreview = (mode) => {
+    const currentPage = Number(balancePdfPreviewPage)
+    if (!Number.isFinite(currentPage) || currentPage < 1) return
+
+    if (mode === 'start') {
+      setBalanceRangeStart(currentPage)
+      setBalanceRangeEnd((prevEnd) => (prevEnd && prevEnd < currentPage ? currentPage : prevEnd))
+      return
+    }
+
+    setBalanceRangeEnd(currentPage)
+    setBalanceRangeStart((prevStart) => {
+      if (!prevStart) return currentPage
+      return currentPage < prevStart ? currentPage : prevStart
+    })
+  }
+
+  const goToBalancePreviewPage = (nextPage) => {
+    const parsed = Number(nextPage)
+    if (!Number.isFinite(parsed) || parsed < 1) return
+    setBalancePdfPreviewPage(Math.floor(parsed))
+  }
+
+  const handleConfirmBalanceUpload = async () => {
+    if (!balanceUploadSolicitud || !selectedBalanceFile) {
+      toast.error('Selecciona primero un PDF')
+      return
+    }
+
+    const rangeStart = balanceRangeStart || balanceRangeEnd || null
+    const rangeEnd = balanceRangeEnd || balanceRangeStart || null
+    const pageFrom = rangeStart && rangeEnd ? Math.min(rangeStart, rangeEnd) : null
+    const pageTo = rangeStart && rangeEnd ? Math.max(rangeStart, rangeEnd) : null
+    const selectedPages = rangeStart && rangeEnd
+      ? Array.from(new Set([rangeStart, rangeEnd].map((n) => Number(n)).filter((n) => Number.isFinite(n) && n >= 1)))
+      : []
+
+    await handleExtractAndSaveBalance(balanceUploadSolicitud, selectedBalanceFile, { pageFrom, pageTo, selectedPages })
+  }
+
+  const handleDownloadAntecedente = async (item) => {
+    try {
+      const res = await axios.get(`/api/balance-antecedentes/${item.id}/pdf`, { responseType: 'blob' })
+      const url = window.URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = item.filename || `antecedente_balance_${item.id}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch {
+      toast.error('No se pudo descargar el antecedente')
+    }
+  }
+
+  useEffect(() => {
+    if (showBalanceAntecedentesModal && balanceAntecedentesSolicitud?.id) {
+      loadBalanceAntecedentes(balanceAntecedentesSolicitud.id)
+    } else {
+      setBalanceAntecedentes([])
+    }
+  }, [showBalanceAntecedentesModal, balanceAntecedentesSolicitud?.id])
+
+  useEffect(() => {
+    if (!showBalanceAntecedentesModal) {
+      setExpandedBalanceHistoryId(null)
+    }
+  }, [showBalanceAntecedentesModal])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadVisibleAntecedentesCount = async () => {
+      const rows = solicitudes.filter((s) => s?.id)
+      if (rows.length === 0) {
+        setAntecedenteCountBySolicitud({})
+        setHasBalanceBySolicitud({})
+        return
+      }
+
+      const results = await Promise.all(rows.map(async (sol) => {
+        const count = await fetchBalanceAntecedentesCount(sol.id)
+        return { id: sol.id, count }
+      }))
+
+      if (cancelled) return
+
+      const countMap = {}
+      const hasBalanceMap = {}
+      results.forEach(({ id, count }) => {
+        countMap[id] = count
+        hasBalanceMap[id] = count > 0
+      })
+
+      setAntecedenteCountBySolicitud(countMap)
+      setHasBalanceBySolicitud(hasBalanceMap)
+    }
+
+    loadVisibleAntecedentesCount()
+
+    return () => {
+      cancelled = true
+    }
+  }, [solicitudes])
 
   const goToPage = (p) => {
     if (p >= 1 && p <= pagination.total_pages) {
@@ -1007,6 +1360,9 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                   const pais = inferPaisDisplay(sol)
                   const esApi = sol.tipo_solicitud === 'api' || (sol.notas || '').toLowerCase().includes('solicitar api')
                   const puedeCompletar = Boolean(sol.empresa_id || sol.empresa_modelo_id)
+                  const canUploadBalance = Boolean(sol.empresa_id || sol.empresa_modelo_id)
+                  const antecedentesCount = antecedenteCountBySolicitud[sol.id] || 0
+                  const hasBalance = Boolean(hasBalanceBySolicitud[sol.id])
 
                   const fechaFin = sol.fecha_fin || (sol.estado === 'completada' || sol.estado === 'cancelada' ? sol.updated_at : null)
 
@@ -1114,6 +1470,20 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                           >
                             <Eye className="h-4 w-4" />
                           </button>
+                          {(antecedentesCount > 0 || hasBalance) && (
+                            <button
+                              onClick={() => openBalanceAntecedentesModal(sol)}
+                              className="relative p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
+                              title={antecedentesCount > 0 ? `Balance General (${antecedentesCount})` : 'Balance General cargado'}
+                            >
+                              <Scale className="h-4 w-4" />
+                              {antecedentesCount > 1 && (
+                                <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 inline-flex items-center justify-center rounded-full bg-emerald-600 text-white text-[9px] leading-none">
+                                  {antecedentesCount}
+                                </span>
+                              )}
+                            </button>
+                          )}
                           <div className="relative" ref={actionDropdownId === sol.id ? dropdownRef : null}>
                             <button
                               onClick={(e) => handleOpenDropdown(e, sol.id)}
@@ -1143,6 +1513,20 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                                       <ArrowRight className="h-4 w-4 text-green-500" />
                                       <span>Aceptar</span>
                                     </button>
+                                    {canUploadBalance && (
+                                      <button
+                                        onClick={() => handleSubirBalanceClick(sol)}
+                                        disabled={uploadingBalanceSolicitudId === sol.id}
+                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 disabled:opacity-60"
+                                      >
+                                        {uploadingBalanceSolicitudId === sol.id ? (
+                                          <Loader2 className="h-4 w-4 text-indigo-500 animate-spin" />
+                                        ) : (
+                                          <Upload className="h-4 w-4 text-indigo-500" />
+                                        )}
+                                        <span>Subir Balance PDF</span>
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() => { setSolicitudAccion(sol); setModalAccion('cancelar'); setActionDropdownId(null) }}
                                       className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-red-50"
@@ -1169,6 +1553,20 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                                       >
                                         <FileText className="h-4 w-4 text-blue-500" />
                                         <span>Continuar Informe</span>
+                                      </button>
+                                    )}
+                                    {canUploadBalance && (
+                                      <button
+                                        onClick={() => handleSubirBalanceClick(sol)}
+                                        disabled={uploadingBalanceSolicitudId === sol.id}
+                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 disabled:opacity-60"
+                                      >
+                                        {uploadingBalanceSolicitudId === sol.id ? (
+                                          <Loader2 className="h-4 w-4 text-indigo-500 animate-spin" />
+                                        ) : (
+                                          <Upload className="h-4 w-4 text-indigo-500" />
+                                        )}
+                                        <span>Subir Balance PDF</span>
                                       </button>
                                     )}
                                     {puedeCompletar && (
@@ -1198,13 +1596,29 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                                   </>
                                 )}
                                 {(sol.estado === 'completada' || sol.estado === 'cancelada') && (
-                                  <button
-                                    onClick={() => { setSolicitudAccion(sol); setModalAccion('reabrir'); setActionDropdownId(null) }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50"
-                                  >
-                                    <RotateCw className="h-4 w-4 text-blue-500" />
-                                    <span>Reabrir</span>
-                                  </button>
+                                  <>
+                                    {sol.estado === 'completada' && canUploadBalance && (
+                                      <button
+                                        onClick={() => handleSubirBalanceClick(sol)}
+                                        disabled={uploadingBalanceSolicitudId === sol.id}
+                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 disabled:opacity-60"
+                                      >
+                                        {uploadingBalanceSolicitudId === sol.id ? (
+                                          <Loader2 className="h-4 w-4 text-indigo-500 animate-spin" />
+                                        ) : (
+                                          <Upload className="h-4 w-4 text-indigo-500" />
+                                        )}
+                                        <span>Subir Balance PDF</span>
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => { setSolicitudAccion(sol); setModalAccion('reabrir'); setActionDropdownId(null) }}
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50"
+                                    >
+                                      <RotateCw className="h-4 w-4 text-blue-500" />
+                                      <span>Reabrir</span>
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             )}
@@ -2209,6 +2623,298 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
           </div>
         </div>
       )}
+
+      {showBalanceUploadModal && balanceUploadSolicitud && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div
+              className="fixed inset-0 bg-black/50 transition-opacity"
+              onClick={() => {
+                if (uploadingBalanceSolicitudId === balanceUploadSolicitud.id) return
+                handleCloseBalanceUploadModal()
+              }}
+            />
+            <div className="relative bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-900">Subir Balance PDF</h3>
+                <button
+                  onClick={handleCloseBalanceUploadModal}
+                  disabled={uploadingBalanceSolicitudId === balanceUploadSolicitud.id}
+                  className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-40"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <p className="text-sm text-gray-600 mb-4">
+                Empresa: <span className="font-medium text-gray-900">{balanceUploadSolicitud.razon_social}</span>
+              </p>
+
+              <div className="mb-4">
+                <button
+                  onClick={() => balanceFileInputRef.current?.click()}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-xl hover:bg-indigo-700"
+                >
+                  <Upload className="h-4 w-4" />
+                  {selectedBalanceFile ? 'Cambiar PDF' : 'Seleccionar PDF'}
+                </button>
+                {selectedBalanceFile && (
+                  <p className="text-xs text-gray-500 mt-2 truncate">
+                    Archivo: <span className="font-medium text-gray-700">{selectedBalanceFile.name}</span>
+                  </p>
+                )}
+              </div>
+
+              {selectedBalanceFile && (
+                <div className="border border-gray-200 rounded-xl p-3 mb-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <button
+                      onClick={() => goToBalancePreviewPage(balancePdfPreviewPage - 1)}
+                      disabled={balancePdfPreviewPage <= 1}
+                      className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg disabled:opacity-40"
+                    >
+                      Página anterior
+                    </button>
+                    <input
+                      type="number"
+                      min="1"
+                      value={balancePdfPreviewPage}
+                      onChange={(e) => {
+                        goToBalancePreviewPage(e.target.value)
+                      }}
+                      className="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-xs"
+                    />
+                    <button
+                      onClick={() => goToBalancePreviewPage(balancePdfPreviewPage + 1)}
+                      className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg"
+                    >
+                      Página siguiente
+                    </button>
+                  </div>
+
+                  <div className="h-[420px] border border-gray-100 rounded-lg bg-gray-50 overflow-hidden">
+                    {balancePdfPreviewUrl ? (
+                      <iframe
+                        key={`balance-preview-${balancePdfPreviewPage}`}
+                        title="Vista previa PDF"
+                        src={`${balancePdfPreviewUrl}#page=${balancePdfPreviewPage}&zoom=page-width&toolbar=0&navpanes=0&scrollbar=1`}
+                        className="w-full h-full"
+                      />
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-sm text-gray-500">
+                        Cargando vista previa...
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                <div>
+                  <button
+                    onClick={() => markBalanceRangeFromPreview('start')}
+                    disabled={!selectedBalanceFile}
+                    className="w-full px-3 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-xl hover:bg-indigo-100 disabled:opacity-50"
+                  >
+                    Marcar inicio en pág. {balancePdfPreviewPage}
+                  </button>
+                </div>
+                <div>
+                  <button
+                    onClick={() => markBalanceRangeFromPreview('end')}
+                    disabled={!selectedBalanceFile}
+                    className="w-full px-3 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-xl hover:bg-indigo-100 disabled:opacity-50"
+                  >
+                    Marcar fin en pág. {balancePdfPreviewPage}
+                  </button>
+                </div>
+                <div>
+                  <button
+                    onClick={() => {
+                      const currentPage = Number(balancePdfPreviewPage)
+                      if (!Number.isFinite(currentPage) || currentPage < 1) return
+                      setBalanceRangeStart(currentPage)
+                      setBalanceRangeEnd(currentPage)
+                    }}
+                    disabled={!selectedBalanceFile}
+                    className="w-full px-3 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-xl hover:bg-emerald-100 disabled:opacity-50"
+                  >
+                    Usar solo esta página
+                  </button>
+                </div>
+              </div>
+
+              {(() => {
+                const rangeStart = balanceRangeStart || balanceRangeEnd
+                const rangeEnd = balanceRangeEnd || balanceRangeStart
+                const from = rangeStart && rangeEnd ? Math.min(rangeStart, rangeEnd) : null
+                const to = rangeStart && rangeEnd ? Math.max(rangeStart, rangeEnd) : null
+                const pagesText = from
+                  ? (to && to !== from ? `${from} y ${to}` : `${from}`)
+                  : null
+                return (
+              <p className="text-xs text-gray-500 mb-5">
+                {pagesText
+                  ? `Páginas seleccionadas: ${pagesText}.`
+                  : 'Si no marcas páginas, se procesa automáticamente el PDF completo.'}
+              </p>
+                )
+              })()}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleCloseBalanceUploadModal}
+                  disabled={uploadingBalanceSolicitudId === balanceUploadSolicitud.id}
+                  className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmBalanceUpload}
+                  disabled={!selectedBalanceFile || uploadingBalanceSolicitudId === balanceUploadSolicitud.id}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-60"
+                >
+                  {uploadingBalanceSolicitudId === balanceUploadSolicitud.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  Subir y procesar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ProgressModal
+        isOpen={showBalanceProgressModal}
+        title="Procesando Balance"
+        message={balanceProgressMessage}
+        elapsed={balanceProgressElapsed}
+        progressMaxSeconds={40}
+        accent={balanceProgressDone ? 'emerald' : 'indigo'}
+        completed={balanceProgressDone}
+        subtitle="No cierres esta ventana hasta finalizar"
+      />
+
+      {showBalanceAntecedentesModal && balanceAntecedentesSolicitud && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={() => setShowBalanceAntecedentesModal(false)} />
+            <div className="relative bg-white rounded-2xl shadow-2xl max-w-xl w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Balance General</h3>
+                  <p className="text-sm text-gray-500 truncate max-w-[420px]">{balanceAntecedentesSolicitud.razon_social || 'Solicitud'} #{balanceAntecedentesSolicitud.id}</p>
+                </div>
+                <button onClick={() => setShowBalanceAntecedentesModal(false)} className="p-1 text-gray-400 hover:text-gray-600">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {loadingBalanceAntecedentes ? (
+                <div className="flex items-center gap-2 text-sm text-gray-500 py-8 justify-center">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Cargando antecedentes...
+                </div>
+              ) : balanceAntecedentes.length === 0 ? (
+                <p className="text-sm text-gray-500 py-8 text-center">No hay antecedentes PDF cargados para esta solicitud.</p>
+              ) : (
+                <div className="max-h-[60vh] overflow-y-auto pr-1">
+                  <div className="mb-3 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2">
+                    <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Trazabilidad de Balance</p>
+                    <p className="text-xs text-indigo-700/80 mt-1">Arbol historico auditable para seguimiento de cambios y respaldo comercial.</p>
+                  </div>
+
+                  {(() => {
+                    const historialOrdenado = [...balanceAntecedentes].sort((a, b) => {
+                      const dateA = a?.created_at ? new Date(a.created_at).getTime() : 0
+                      const dateB = b?.created_at ? new Date(b.created_at).getTime() : 0
+                      if (dateA !== dateB) return dateB - dateA
+                      return (b?.id || 0) - (a?.id || 0)
+                    })
+
+                    return (
+                      <div className="relative pl-6 space-y-3">
+                        <div className="absolute left-2 top-1 bottom-1 w-px bg-gray-200" />
+                        {historialOrdenado.map((item, idx) => {
+                          const previousItem = historialOrdenado[idx + 1] || null
+                          const isLatest = idx === 0
+                          const isOpen = expandedBalanceHistoryId === item.id
+
+                          return (
+                            <div key={item.id} className="relative">
+                              <div className={`absolute -left-5 top-4 h-3 w-3 rounded-full border-2 ${isLatest ? 'bg-emerald-500 border-emerald-100' : 'bg-white border-gray-300'}`} />
+                              <div className="border border-gray-200 rounded-xl p-3 bg-white">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <p className="text-sm font-medium text-gray-900 truncate">{item.filename || `Antecedente #${item.id}`}</p>
+                                      {isLatest && (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">Ultimo balance</span>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      {item.created_at ? formatFechaHora(item.created_at) : '-'} • {getAntecedentePagesText(item)}
+                                    </p>
+                                  </div>
+                                  <button
+                                    onClick={() => handleDownloadAntecedente(item)}
+                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
+                                  >
+                                    <Download className="h-3.5 w-3.5" />
+                                    Descargar
+                                  </button>
+                                </div>
+
+                                <div className="mt-2 pt-2 border-t border-gray-100">
+                                  <button
+                                    onClick={() => setExpandedBalanceHistoryId((prev) => (prev === item.id ? null : item.id))}
+                                    className="w-full inline-flex items-center justify-between text-xs font-medium text-indigo-700 hover:text-indigo-800"
+                                  >
+                                    <span>{isOpen ? 'Ocultar detalle de cambios' : 'Ver detalle de cambios'}</span>
+                                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                                  </button>
+
+                                  {isOpen && (
+                                    <div className="mt-2 rounded-lg bg-gray-50 border border-gray-100 p-3 text-xs text-gray-700 space-y-1.5">
+                                      <p><span className="font-semibold text-gray-800">Resumen:</span> {buildBalanceChangeSummary(item, previousItem)}</p>
+                                      <p><span className="font-semibold text-gray-800">Version:</span> #{item.id}</p>
+                                      <p><span className="font-semibold text-gray-800">Fecha:</span> {item.created_at ? formatFechaHora(item.created_at) : '-'}</p>
+                                      <p><span className="font-semibold text-gray-800">Rango:</span> {getAntecedentePagesText(item)}</p>
+                                      <p><span className="font-semibold text-gray-800">Mime:</span> {item.mime_type || 'application/pdf'}</p>
+                                      <p><span className="font-semibold text-gray-800">Paginas detectadas:</span> {item.selected_page_count || '-'}</p>
+                                      <p><span className="font-semibold text-gray-800">Origen:</span> {item.solicitud_source || '-'}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowBalanceAntecedentesModal(false)}
+                  className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <input
+        ref={balanceFileInputRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        onChange={handleBalanceFileInputChange}
+        className="hidden"
+      />
     </div>
   )
 }

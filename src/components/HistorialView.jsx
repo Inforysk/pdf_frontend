@@ -128,6 +128,31 @@ function HistorialView({ empresaId, cuit, onBack, onViewVersion }) {
     }
   }
 
+  const getSolicitudSourceLabel = (source) => {
+    const key = String(source || '').toLowerCase()
+    if (key === 'solicitudes_investigacion' || key === 'solicitudes') return 'Solicitudes'
+    if (key === 'pedidos-solicitudes' || key === 'pedidos_solicitudes' || key === 'solicitudes_pedidos') return 'Pedidos'
+    return source || 'Origen desconocido'
+  }
+
+  const handleDownloadBalanceAntecedente = async (evento) => {
+    if (!evento?.id) return
+    try {
+      const res = await axios.get(`/api/balance-antecedentes/${evento.id}/pdf`, { responseType: 'blob' })
+      const url = window.URL.createObjectURL(res.data)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = evento.filename || `balance_antecedente_${evento.id}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Error descargando antecedente de balance:', err)
+      toast.error('No se pudo descargar el PDF del balance')
+    }
+  }
+
   const handleDownloadVersionPDF = async (version, lang = 'es') => {
     try {
       setOpenPdfDropdown(null)
@@ -446,6 +471,61 @@ function HistorialView({ empresaId, cuit, onBack, onViewVersion }) {
             )}
           </div>
         ))}
+      </div>
+
+      {/* Trazabilidad de balances PDF */}
+      <div className="mt-8 bg-white rounded-lg shadow-sm border p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <Download className="h-5 w-5 text-emerald-600" />
+          Trazabilidad de Balances PDF
+        </h3>
+
+        {historial.balance_eventos?.length > 0 ? (
+          <div className="relative pl-5 space-y-3">
+            <div className="absolute left-1.5 top-1 bottom-1 w-px bg-gray-200" />
+            {historial.balance_eventos.map((evento, idx) => (
+              <div key={evento.id} className="relative border border-gray-200 rounded-xl p-3 bg-gray-50/40">
+                <div className={`absolute -left-[18px] top-4 h-3 w-3 rounded-full border-2 ${idx === 0 ? 'bg-emerald-500 border-emerald-100' : 'bg-white border-gray-300'}`} />
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{evento.filename || `Antecedente #${evento.id}`}</p>
+                      {idx === 0 && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                          Último balance
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">{formatDate(evento.created_at)}</p>
+                    <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                      <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-200">
+                        {getSolicitudSourceLabel(evento.solicitud_source)}
+                      </span>
+                      {evento.solicitud_id && (
+                        <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+                          Solicitud #{evento.solicitud_id}
+                        </span>
+                      )}
+                      {evento.page_from && evento.page_to && (
+                        <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200">
+                          Páginas {evento.page_from}-{evento.page_to}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDownloadBalanceAntecedente(evento)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
+                  >
+                    <Download className="h-3.5 w-3.5" /> PDF
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">No hay eventos de carga de balances PDF registrados para esta empresa.</p>
+        )}
       </div>
 
       {/* Resumen de cambios globales */}

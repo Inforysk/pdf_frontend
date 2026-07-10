@@ -1,3 +1,5 @@
+import { CheckCircle2 } from 'lucide-react'
+
 const ACCENT_STYLES = {
   blue: {
     stroke: '#2563eb',
@@ -38,37 +40,46 @@ export default function ProgressModal({
   elapsed = 0,
   progressMaxSeconds = 60,
   accent = 'blue',
+  completed = false,
   subtitle,
   footer,
 }) {
   if (!isOpen) return null
 
   const styles = ACCENT_STYLES[accent] || ACCENT_STYLES.blue
-  const progress = Math.min(100, (Math.max(0, elapsed) / Math.max(1, progressMaxSeconds)) * 100)
+  const progress = completed
+    ? 100
+    : Math.min(100, (Math.max(0, elapsed) / Math.max(1, progressMaxSeconds)) * 100)
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center">
       <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 text-center">
         <div className="mb-6">
-          <div className="relative w-24 h-24 mx-auto">
-            <svg className="w-24 h-24 animate-spin" viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="40" fill="none" stroke="#e5e7eb" strokeWidth="8" />
-              <circle
-                cx="50"
-                cy="50"
-                r="40"
-                fill="none"
-                stroke={styles.stroke}
-                strokeWidth="8"
-                strokeDasharray="251"
-                strokeDashoffset="188"
-                strokeLinecap="round"
-              />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className={`text-2xl font-bold ${styles.timeClass}`}>{elapsed}s</span>
+          {completed ? (
+            <div className="relative w-24 h-24 mx-auto rounded-full bg-emerald-50 border-4 border-emerald-200 flex items-center justify-center">
+              <CheckCircle2 className="w-12 h-12 text-emerald-600" />
             </div>
-          </div>
+          ) : (
+            <div className="relative w-24 h-24 mx-auto">
+              <svg className="w-24 h-24 animate-spin" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="40" fill="none" stroke="#e5e7eb" strokeWidth="8" />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="40"
+                  fill="none"
+                  stroke={styles.stroke}
+                  strokeWidth="8"
+                  strokeDasharray="251"
+                  strokeDashoffset="188"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className={`text-2xl font-bold ${styles.timeClass}`}>{elapsed}s</span>
+              </div>
+            </div>
+          )}
         </div>
 
         <h3 className="text-xl font-bold text-gray-900 mb-2">{title}</h3>

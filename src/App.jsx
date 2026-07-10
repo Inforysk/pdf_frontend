@@ -567,7 +567,6 @@ function App() {
 
   // Volver desde historial respetando de dónde vino
   const handleBackFromHistorial = () => {
-    setRefreshKey(k => k + 1)
     if (previousView === 'list-modal') {
       // Volver a Ver Registros con el modal abierto
       setSelectedEmpresaId(null)
@@ -584,6 +583,14 @@ function App() {
       setOriginView(null)
       setListDetailEmpresaId(null)
       setCurrentView('list')
+    } else if (previousView === 'search') {
+      // Volver a Buscador conservando el contexto (no refrescar ni limpiar filtros)
+      setSelectedEmpresaId(null)
+      setSelectedEmpresaCuit(null)
+      setSelectedEmpresaMode(null)
+      setPreviousView(null)
+      setOriginView(null)
+      setCurrentView('search')
     } else {
       handleBackToSearch()
     }
@@ -1020,7 +1027,7 @@ function App() {
               <Menu className="h-5 w-5 text-gray-600" />
             </button>
             {(previousView || currentView === 'edit' || currentView === 'view' || currentView === 'historial' || currentView === 'solicitud-informe') && (
-              <button onClick={currentView === 'solicitud-informe' ? handleBackFromSolicitudInforme : handleBackFromView} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
+              <button onClick={currentView === 'solicitud-informe' ? handleBackFromSolicitudInforme : currentView === 'historial' ? handleBackFromHistorial : handleBackFromView} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
                 <ArrowLeft className="h-5 w-5" />
               </button>
             )}

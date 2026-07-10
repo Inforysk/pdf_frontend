@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Search, Filter, Eye, Edit2, Loader2, History, Download, ChevronDown, Globe, BarChart3, CheckCircle2, Star, Shield, ExternalLink, Send, AlertTriangle, Building2, MapPin, Briefcase, CreditCard, MapPinned, ShieldCheck, X, FileText, Zap, Clock, Code2, ShoppingCart, Package, AlertCircle } from 'lucide-react'
+import { Search, Filter, Eye, Edit2, Loader2, History, Download, ChevronDown, Globe, BarChart3, CheckCircle2, Star, Shield, ExternalLink, Send, AlertTriangle, Building2, MapPin, Briefcase, CreditCard, MapPinned, ShieldCheck, X, FileText, Zap, Clock, Code2, ShoppingCart, Package, AlertCircle, Scale } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '../contexts/AuthContext'
@@ -54,6 +54,11 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
   const [scoringFilter, setScoringFilter] = useState('all')
   const [totalResults, setTotalResults] = useState(0)
   const [openPdfDropdown, setOpenPdfDropdown] = useState(null) // ID de empresa con dropdown abierto
+  const [showBalanceGeneralModal, setShowBalanceGeneralModal] = useState(false)
+  const [selectedBalanceEmpresa, setSelectedBalanceEmpresa] = useState(null)
+  const [loadingBalanceGeneralHistory, setLoadingBalanceGeneralHistory] = useState(false)
+  const [balanceGeneralHistory, setBalanceGeneralHistory] = useState([])
+  const [balanceGeneralByEmpresa, setBalanceGeneralByEmpresa] = useState({})
   const [openInformeDropdown, setOpenInformeDropdown] = useState(null)
   const [solicitudForm, setSolicitudForm] = useState(null) // {key, tipo, label, empresa data...}
   const [solicitudEmail, setSolicitudEmail] = useState('')
@@ -83,6 +88,47 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
 
   // Mapeo de iconos de Lucide
   const ICON_MAP = { FileText, Zap, Clock, History, Code2 }
+
+  // Fallback: para casos donde has_balance_general no viene marcado,
+  // verificamos antecedentes PDF directamente por empresa.
+  useEffect(() => {
+    if (!canSeeBalanceGeneralBadge || !Array.isArray(results) || results.length === 0) return
+
+    const pending = results
+      .filter((empresa) => empresa?.id && !empresa?.has_balance_general && balanceGeneralByEmpresa[empresa.id] === undefined)
+      .slice(0, 25)
+
+    if (!pending.length) return
+
+    let cancelled = false
+
+    const loadBalanceFallback = async () => {
+      const resolved = await Promise.all(
+        pending.map(async (empresa) => {
+          try {
+            const res = await axios.get(`/api/empresas/${empresa.id}/balance-antecedentes`)
+            const count = Array.isArray(res.data?.items) ? res.data.items.length : 0
+            return { id: empresa.id, count }
+          } catch {
+            return { id: empresa.id, count: 0 }
+          }
+        })
+      )
+
+      if (cancelled) return
+
+      setBalanceGeneralByEmpresa((prev) => {
+        const next = { ...prev }
+        resolved.forEach(({ id, count }) => {
+          if (next[id] === undefined) next[id] = count
+        })
+        return next
+      })
+    }
+
+    loadBalanceFallback()
+    return () => { cancelled = true }
+  }, [results, canSeeBalanceGeneralBadge, balanceGeneralByEmpresa])
   
   // Cargar tipos de informe al montar
   useEffect(() => {
@@ -919,6 +965,51 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
     }
   }
 
+  const handleOpenBalanceGeneral = async (empresa) => {
+    if (!empresa?.id) {
+      toast.error('No se pudo identificar la empresa para abrir el historial de balance')
+      return
+    }
+
+    setSelectedBalanceEmpresa(empresa)
+    setShowBalanceGeneralModal(true)
+    setLoadingBalanceGeneralHistory(true)
+    setBalanceGeneralHistory([])
+
+    try {
+      const res = await axios.get(`/api/empresas/${empresa.id}/balance-antecedentes`)
+      if (res.data?.success) {
+        const items = Array.isArray(res.data.items) ? res.data.items : []
+        setBalanceGeneralHistory(items)
+        setBalanceGeneralByEmpresa(prev => ({ ...prev, [empresa.id]: items.length }))
+      } else {
+        setBalanceGeneralHistory([])
+      }
+    } catch {
+      toast.error('No se pudo cargar el historial de balances')
+      setBalanceGeneralHistory([])
+    } finally {
+      setLoadingBalanceGeneralHistory(false)
+    }
+  }
+
+  const handleDownloadBalanceAntecedente = async (item) => {
+    if (!item?.id) return
+    try {
+      const res = await axios.get(`/api/balance-antecedentes/${item.id}/pdf`, { responseType: 'blob' })
+      const url = window.URL.createObjectURL(res.data)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = item.filename || `balance_antecedente_${item.id}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch {
+      toast.error('No se pudo descargar el PDF de balance')
+    }
+  }
+
   const handleClearFilters = () => {
     setSearchTerm('')
     setSearchType('all')
@@ -1332,7 +1423,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
               const cuitArgentinoValidado = isArgentinaCuitValidated(empresa)
               const afipValidation = getArgentinaAfipValidation(empresa)
               const nombreLimpio = cleanDisplayRazonSocial(empresa.razon_social)
-              const hasBalanceGeneral = canSeeBalanceGeneralBadge && Boolean(empresa.has_balance_general)
+              const hasBalanceGeneral = canSeeBalanceGeneralBadge && Boolean(empresa.has_balance_general || (balanceGeneralByEmpresa[empresa.id] || 0) > 0)
               // Usar codigo_pais guardado o buscar en mapeo
               const paisIso = empresa?.codigo_pais?.toLowerCase() || (pais ? COUNTRY_ISO[pais] : null)
 
@@ -1419,9 +1510,13 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                       </span>
                     )}
                     {hasBalanceGeneral && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
-                        <CheckCircle2 className="h-3 w-3" /> Balance General
-                      </span>
+                      <button
+                        onClick={() => handleOpenBalanceGeneral(empresa)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors"
+                        title="Ver PDFs e historial de Balance General"
+                      >
+                        <Scale className="h-3 w-3" /> Balance General
+                      </button>
                     )}
                   </div>
 
@@ -1711,6 +1806,15 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                     >
                       <BarChart3 className="h-4 w-4" />
                       <span className="hidden sm:inline">Scoring</span><span className="sm:hidden">Score</span>
+                    </button>
+                    )}
+                    {hasBalanceGeneral && (
+                    <button
+                      onClick={() => handleOpenBalanceGeneral(empresa)}
+                      className="flex-1 flex items-center justify-center gap-1 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium text-xs sm:text-sm"
+                    >
+                      <Scale className="h-4 w-4" />
+                      <span className="hidden sm:inline">Balance PDF</span><span className="sm:hidden">Balance</span>
                     </button>
                     )}
                   </div>
@@ -2153,6 +2257,95 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
           </div>
           )
         })()}
+
+        {/* Modal Sin Saldo - Comprar Pack */}
+        {showBalanceGeneralModal && selectedBalanceEmpresa && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
+              <div className="px-6 py-4 border-b bg-gradient-to-r from-emerald-50 to-green-50 flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-gray-900">Balance General</h3>
+                  <p className="text-sm text-gray-600 truncate max-w-[520px]">{selectedBalanceEmpresa.razon_social || selectedBalanceEmpresa.cuit}</p>
+                </div>
+                <button onClick={() => setShowBalanceGeneralModal(false)} className="p-1 hover:bg-white/80 rounded-lg">
+                  <X className="h-5 w-5 text-gray-500" />
+                </button>
+              </div>
+
+              <div className="p-6">
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {hasPermission('historial') && (
+                    <button
+                      onClick={() => {
+                        const empresa = selectedBalanceEmpresa
+                        setShowBalanceGeneralModal(false)
+                        handleHistorial(empresa)
+                      }}
+                      className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100"
+                    >
+                      <History className="h-4 w-4" /> Abrir historial completo
+                    </button>
+                  )}
+                  {hasPermission('descargar_pdf') && (
+                    <button
+                      onClick={() => handleDownloadPDF(selectedBalanceEmpresa, 'es')}
+                      className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100"
+                    >
+                      <Download className="h-4 w-4" /> Descargar informe actual (ES)
+                    </button>
+                  )}
+                </div>
+
+                {loadingBalanceGeneralHistory ? (
+                  <div className="py-10 flex items-center justify-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Cargando PDFs de balance...
+                  </div>
+                ) : balanceGeneralHistory.length === 0 ? (
+                  <div className="py-8 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-xl px-4">
+                    Esta empresa tiene balance contable registrado, pero aun no hay antecedentes PDF disponibles para mostrar en este modulo.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-[52vh] overflow-y-auto pr-1">
+                    {balanceGeneralHistory.map((item, idx) => (
+                      <div key={item.id} className="border border-gray-200 rounded-xl p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-semibold text-gray-900 truncate">{item.filename || `Antecedente #${item.id}`}</p>
+                              {idx === 0 && (
+                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">Ultimo balance</span>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {item.created_at ? new Date(item.created_at).toLocaleString() : '-'}
+                              {item.page_from && item.page_to ? ` • paginas ${item.page_from}-${item.page_to}` : ''}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">Fuente: {item.solicitud_source || '-'}</p>
+                          </div>
+                          <button
+                            onClick={() => handleDownloadBalanceAntecedente(item)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
+                          >
+                            <Download className="h-3.5 w-3.5" /> PDF
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="px-6 py-4 border-t bg-gray-50">
+                <button
+                  onClick={() => setShowBalanceGeneralModal(false)}
+                  className="w-full px-4 py-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Modal Sin Saldo - Comprar Pack */}
         {sinSaldoModal && (
