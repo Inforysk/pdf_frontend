@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Search, Filter, Eye, Edit2, Loader2, History, Download, ChevronDown, Globe, BarChart3, CheckCircle2, Star, Shield, ExternalLink, Send, AlertTriangle, Building2, MapPin, Briefcase, CreditCard, MapPinned, ShieldCheck, X, FileText, Zap, Clock, Code2, ShoppingCart, Package, AlertCircle, Scale } from 'lucide-react'
+import { Search, Filter, Eye, Edit2, Loader2, History, Download, ChevronDown, Globe, BarChart3, CheckCircle2, Star, Shield, ExternalLink, Send, AlertTriangle, Building2, MapPin, Briefcase, CreditCard, MapPinned, ShieldCheck, X, FileText, Zap, Clock, Code2, ShoppingCart, Package, AlertCircle, Scale, Trash2 } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '../contexts/AuthContext'
@@ -38,6 +38,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
   const isClientUser = user?.rol === 'usuario' || user?.rol === 'cliente_admin' || user?.rol === 'cliente_usuario' || user?.rol === 'cliente_presentacion'
   const isClienteAdmin = user?.rol === 'cliente_admin' // Solo cliente_admin puede comprar packs
   const canSeeBalanceGeneralBadge = ['admin', 'analista'].includes((user?.rol || '').toLowerCase())
+  const canDeleteBalanceGeneralPdf = ['admin', 'analista'].includes((user?.rol || '').toLowerCase())
   const canAccessScoringModule = isAdmin && hasPermission('scoring')
   const canUseAfipFilter = hasPermission('buscar_afip')
   const canSeeAfipData = hasPermission('ver_afip')
@@ -59,6 +60,8 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
   const [loadingBalanceGeneralHistory, setLoadingBalanceGeneralHistory] = useState(false)
   const [balanceGeneralHistory, setBalanceGeneralHistory] = useState([])
   const [balanceGeneralByEmpresa, setBalanceGeneralByEmpresa] = useState({})
+  const [deletingBalanceAntecedenteId, setDeletingBalanceAntecedenteId] = useState(null)
+  const [pendingDeleteBalanceAntecedente, setPendingDeleteBalanceAntecedente] = useState(null)
   const [openInformeDropdown, setOpenInformeDropdown] = useState(null)
   const [solicitudForm, setSolicitudForm] = useState(null) // {key, tipo, label, empresa data...}
   const [solicitudEmail, setSolicitudEmail] = useState('')
@@ -1007,6 +1010,36 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
       window.URL.revokeObjectURL(url)
     } catch {
       toast.error('No se pudo descargar el PDF de balance')
+    }
+  }
+
+  const handleDeleteBalanceAntecedente = async (item) => {
+    if (!item?.id || !selectedBalanceEmpresa?.id) return
+
+    setPendingDeleteBalanceAntecedente(item)
+  }
+
+  const handleConfirmDeleteBalanceAntecedente = async () => {
+    const item = pendingDeleteBalanceAntecedente
+    if (!item?.id || !selectedBalanceEmpresa?.id) return
+
+    try {
+      setDeletingBalanceAntecedenteId(item.id)
+      const res = await axios.delete(`/api/balance-antecedentes/${item.id}`)
+      if (!res.data?.success) {
+        toast.error(res.data?.error || 'No se pudo eliminar el antecedente PDF')
+        return
+      }
+
+      const nextHistory = balanceGeneralHistory.filter((entry) => entry.id !== item.id)
+      setBalanceGeneralHistory(nextHistory)
+      setBalanceGeneralByEmpresa(prev => ({ ...prev, [selectedBalanceEmpresa.id]: nextHistory.length }))
+      toast.success('Antecedente PDF eliminado')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'No se pudo eliminar el antecedente PDF')
+    } finally {
+      setDeletingBalanceAntecedenteId(null)
+      setPendingDeleteBalanceAntecedente(null)
     }
   }
 
@@ -2322,12 +2355,24 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                             </p>
                             <p className="text-xs text-gray-400 mt-1">Fuente: {item.solicitud_source || '-'}</p>
                           </div>
-                          <button
-                            onClick={() => handleDownloadBalanceAntecedente(item)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
-                          >
-                            <Download className="h-3.5 w-3.5" /> PDF
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleDownloadBalanceAntecedente(item)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
+                            >
+                              <Download className="h-3.5 w-3.5" /> PDF
+                            </button>
+                            {canDeleteBalanceGeneralPdf && (
+                              <button
+                                onClick={() => handleDeleteBalanceAntecedente(item)}
+                                disabled={deletingBalanceAntecedenteId === item.id}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-red-700 bg-red-50 rounded-lg hover:bg-red-100 disabled:opacity-60"
+                                title="Eliminar antecedente PDF"
+                              >
+                                {deletingBalanceAntecedenteId === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Eliminar
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -2341,6 +2386,48 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                   className="w-full px-4 py-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium"
                 >
                   Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {pendingDeleteBalanceAntecedente && (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+              <div className="p-5 border-b bg-gradient-to-r from-red-50 to-rose-50">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-red-100 rounded-xl">
+                    <AlertTriangle className="h-5 w-5 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-gray-900">Eliminar PDF antecedente</h3>
+                    <p className="text-sm text-gray-600">Esta acción no se puede deshacer.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-5">
+                <p className="text-sm text-gray-700 break-words">
+                  ¿Seguro que deseas eliminar <span className="font-semibold">{pendingDeleteBalanceAntecedente.filename || `Antecedente #${pendingDeleteBalanceAntecedente.id}`}</span>?
+                </p>
+              </div>
+
+              <div className="p-4 border-t bg-gray-50 flex gap-3">
+                <button
+                  onClick={() => setPendingDeleteBalanceAntecedente(null)}
+                  disabled={deletingBalanceAntecedenteId === pendingDeleteBalanceAntecedente.id}
+                  className="flex-1 px-4 py-2.5 text-gray-700 hover:bg-gray-200 rounded-xl transition font-medium disabled:opacity-60"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmDeleteBalanceAntecedente}
+                  disabled={deletingBalanceAntecedenteId === pendingDeleteBalanceAntecedente.id}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold disabled:opacity-60"
+                >
+                  {deletingBalanceAntecedenteId === pendingDeleteBalanceAntecedente.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  Eliminar
                 </button>
               </div>
             </div>

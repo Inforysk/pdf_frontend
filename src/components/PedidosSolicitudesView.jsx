@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { Loader2, Search, ExternalLink, Clock, CheckCircle2, ChevronDown, Building2, MapPin, Briefcase, Shield, Send, Eye, X, Globe, Database, Filter, RotateCcw, Play, FileText, Ban, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileDown, Plus, FilePlus2, UserPlus, SlidersHorizontal, Calendar, AlertTriangle, ArrowLeft, ArrowRight, RotateCw, Zap, Check, MoreVertical, Upload, Scale } from 'lucide-react'
+import { Loader2, Search, ExternalLink, Clock, CheckCircle2, ChevronDown, Building2, MapPin, Briefcase, Shield, Send, Eye, X, Globe, Database, Filter, RotateCcw, Play, FileText, Ban, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileDown, Plus, FilePlus2, UserPlus, SlidersHorizontal, Calendar, AlertTriangle, ArrowLeft, ArrowRight, RotateCw, Zap, Check, MoreVertical, Upload, Scale, Trash2 } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import ProgressModal from './ui/ProgressModal'
+import { useAuth } from '../contexts/AuthContext'
 
 const ESTADO_CONFIG = {
   consulta: { label: 'Consulta', color: 'bg-purple-100 text-purple-800 border-purple-200', icon: Search },
@@ -86,6 +87,8 @@ const getBalanceProgressMessage = (elapsed) => {
 }
 
 export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNuevoInforme }) {
+  const { user } = useAuth()
+  const canDeleteBalancePdf = ['admin', 'analista'].includes((user?.rol || '').toLowerCase())
   const [solicitudes, setSolicitudes] = useState([])
   const [loading, setLoading] = useState(true)
   const [filtroEstado, setFiltroEstado] = useState('')
@@ -159,6 +162,8 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
   const [expandedBalanceHistoryId, setExpandedBalanceHistoryId] = useState(null)
   const [antecedenteCountBySolicitud, setAntecedenteCountBySolicitud] = useState({})
   const [hasBalanceBySolicitud, setHasBalanceBySolicitud] = useState({})
+  const [deletingAntecedenteId, setDeletingAntecedenteId] = useState(null)
+  const [pendingDeleteAntecedente, setPendingDeleteAntecedente] = useState(null)
   const dropdownRef = useRef(null)
   const balanceFileInputRef = useRef(null)
 
@@ -692,6 +697,44 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
       window.URL.revokeObjectURL(url)
     } catch {
       toast.error('No se pudo descargar el antecedente')
+    }
+  }
+
+  const handleDeleteAntecedente = async (item) => {
+    if (!item?.id || !balanceAntecedentesSolicitud?.id) return
+
+    setPendingDeleteAntecedente(item)
+  }
+
+  const handleConfirmDeleteAntecedente = async () => {
+    const item = pendingDeleteAntecedente
+    if (!item?.id || !balanceAntecedentesSolicitud?.id) return
+
+    setDeletingAntecedenteId(item.id)
+    try {
+      const res = await axios.delete(`/api/balance-antecedentes/${item.id}`)
+      if (!res.data?.success) {
+        toast.error(res.data?.error || 'No se pudo eliminar el antecedente')
+        return
+      }
+
+      const solicitudId = balanceAntecedentesSolicitud.id
+      await loadBalanceAntecedentes(solicitudId)
+
+      const newCount = await fetchBalanceAntecedentesCount(solicitudId)
+      setAntecedenteCountBySolicitud(prev => ({ ...prev, [solicitudId]: newCount }))
+      setHasBalanceBySolicitud(prev => ({ ...prev, [solicitudId]: newCount > 0 }))
+
+      if (expandedBalanceHistoryId === item.id) {
+        setExpandedBalanceHistoryId(null)
+      }
+
+      toast.success('Antecedente eliminado')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'No se pudo eliminar el antecedente')
+    } finally {
+      setDeletingAntecedenteId(null)
+      setPendingDeleteAntecedente(null)
     }
   }
 
@@ -2855,13 +2898,26 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                                       {item.created_at ? formatFechaHora(item.created_at) : '-'} • {getAntecedentePagesText(item)}
                                     </p>
                                   </div>
-                                  <button
-                                    onClick={() => handleDownloadAntecedente(item)}
-                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
-                                  >
-                                    <Download className="h-3.5 w-3.5" />
-                                    Descargar
-                                  </button>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => handleDownloadAntecedente(item)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
+                                    >
+                                      <Download className="h-3.5 w-3.5" />
+                                      Descargar
+                                    </button>
+                                    {canDeleteBalancePdf && (
+                                      <button
+                                        onClick={() => handleDeleteAntecedente(item)}
+                                        disabled={deletingAntecedenteId === item.id}
+                                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 disabled:opacity-60"
+                                        title="Eliminar antecedente PDF"
+                                      >
+                                        {deletingAntecedenteId === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                                        Eliminar
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
 
                                 <div className="mt-2 pt-2 border-t border-gray-100">
@@ -2901,6 +2957,47 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                   className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200"
                 >
                   Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingDeleteAntecedente && (
+        <div className="fixed inset-0 z-[60] overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={() => setPendingDeleteAntecedente(null)} />
+            <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="p-2.5 bg-red-100 rounded-xl">
+                  <AlertTriangle className="h-5 w-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Eliminar PDF antecedente</h3>
+                  <p className="text-sm text-gray-600">Esta acción no se puede deshacer.</p>
+                </div>
+              </div>
+
+              <p className="text-sm text-gray-700 mb-5 break-words">
+                ¿Seguro que deseas eliminar <span className="font-semibold">{pendingDeleteAntecedente.filename || `Antecedente #${pendingDeleteAntecedente.id}`}</span>?
+              </p>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setPendingDeleteAntecedente(null)}
+                  disabled={deletingAntecedenteId === pendingDeleteAntecedente.id}
+                  className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 disabled:opacity-60"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmDeleteAntecedente}
+                  disabled={deletingAntecedenteId === pendingDeleteAntecedente.id}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-red-600 rounded-xl hover:bg-red-700 disabled:opacity-60"
+                >
+                  {deletingAntecedenteId === pendingDeleteAntecedente.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  Eliminar
                 </button>
               </div>
             </div>
