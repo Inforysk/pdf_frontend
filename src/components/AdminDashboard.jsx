@@ -503,13 +503,30 @@ export default function AdminDashboard() {
     }
   }
 
+  const getDashboardDetalleBaseFiltros = (tipo) => {
+    if (tipo === 'solicitudes') {
+      return { periodo: periodoResumenSolicitudes }
+    }
+    if (tipo === 'empresas_pais') {
+      return { periodo: periodoResumenEmpresas }
+    }
+    if (tipo === 'top_clientes') {
+      return { periodo: periodoResumenClientes }
+    }
+    return {}
+  }
+
   const openDashboardDetalle = async (tipo, title, filtros = {}, dateOptions = {}) => {
     const effectiveDesde = dateOptions.desde ?? dashboardDesde
     const effectiveHasta = dateOptions.hasta ?? dashboardHasta
+    const effectiveFiltros = {
+      ...getDashboardDetalleBaseFiltros(tipo),
+      ...filtros,
+    }
     setDashboardDetalleTipo(tipo)
     setDashboardDetalleTitle(title)
     setDashboardDetalleRows([])
-    setDashboardDetalleFiltros(filtros)
+    setDashboardDetalleFiltros(effectiveFiltros)
     setDashboardDetalleDesde(effectiveDesde || '')
     setDashboardDetalleHasta(effectiveHasta || '')
     setDashboardDetalleOpen(true)
@@ -517,7 +534,7 @@ export default function AdminDashboard() {
     try {
       const params = {
         tipo,
-        ...filtros,
+        ...effectiveFiltros,
       }
       if (effectiveDesde) params.desde = effectiveDesde
       if (effectiveHasta) params.hasta = effectiveHasta
@@ -537,10 +554,14 @@ export default function AdminDashboard() {
   const exportDashboardDetalle = async (tipo, filtros = {}, filenameBase = 'dashboard_detalle') => {
     setDashboardDetalleExporting(true)
     try {
+      const effectiveFiltros = {
+        ...getDashboardDetalleBaseFiltros(tipo),
+        ...filtros,
+      }
       const params = {
         tipo,
         format: 'csv',
-        ...filtros,
+        ...effectiveFiltros,
       }
       if (!params.desde && dashboardDesde) params.desde = dashboardDesde
       if (!params.hasta && dashboardHasta) params.hasta = dashboardHasta
