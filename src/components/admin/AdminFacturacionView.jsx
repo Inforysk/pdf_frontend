@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import {
@@ -90,6 +90,118 @@ export default function AdminFacturacionView() {
   const [bulkChanging, setBulkChanging] = useState(false)
   const [showBulkConfirm, setShowBulkConfirm] = useState(false) // modal confirmación bulk
   const [eurUsdRate, setEurUsdRate] = useState(1.2)
+  const [sortByProv, setSortByProv] = useState('fecha')
+  const [sortDirProv, setSortDirProv] = useState('desc')
+
+  const buildPendingStatsFromSolicitudes = (solicitudes = [], rate = 1.2) => {
+    const safeRate = Number(rate) > 0 ? Number(rate) : 1.2
+    let cantidad = 0
+    let totalEur = 0
+    let totalUsd = 0
+
+    solicitudes.forEach((s) => {
+      const estadoPago = String(s?.factura_estado_pago || '').toLowerCase()
+      const esFacturable = !s?.facturado || estadoPago === 'pendiente'
+      if (!esFacturable) return
+
+      cantidad += 1
+      const moneda = String(s?.moneda_facturacion || 'EUR').toUpperCase()
+      const precioEur = Number(s?.precio_eur || s?.precio_calculado || 0)
+      const precioUsd = Number(s?.precio_usd || 0)
+
+      if (moneda === 'USD') {
+        totalUsd += (precioUsd > 0 ? precioUsd : precioEur * safeRate)
+      } else {
+        totalEur += precioEur
+      }
+    })
+
+    return {
+      cantidad,
+      total_eur: Number(totalEur.toFixed(2)),
+      total_usd: Number(totalUsd.toFixed(2)),
+      total: Number((totalEur + totalUsd).toFixed(2)),
+    }
+  }
+
+  const normalizeTotalsByRate = (stat = {}, rate = 1.2) => {
+    const safeRate = Number(rate) > 0 ? Number(rate) : 1.2
+    const rawEur = Number(stat?.total_eur || 0)
+    const rawUsd = Number(stat?.total_usd || 0)
+
+    // Mostrar siempre equivalentes en ambas monedas usando la tasa activa.
+    const eur = rawEur + (rawUsd / safeRate)
+    const usd = rawUsd + (rawEur * safeRate)
+
+    return {
+      eur: Number(eur.toFixed(2)),
+      usd: Number(usd.toFixed(2)),
+    }
+  }
+
+  const handleSortProveedores = (key) => {
+    if (sortByProv === key) {
+      setSortDirProv(prev => (prev === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+    setSortByProv(key)
+    setSortDirProv(key === 'fecha' ? 'desc' : 'asc')
+  }
+
+  const getSortIndicator = (key) => {
+    if (sortByProv !== key) return '↕'
+    return sortDirProv === 'asc' ? '↑' : '↓'
+  }
+
+  const sortedFacturasProveedores = useMemo(() => {
+    const list = [...facturasProveedores]
+    const estadoRank = { pendiente: 0, facturada: 1, pagada: 2, cancelada: 3 }
+
+    list.sort((a, b) => {
+      let va
+      let vb
+
+      if (sortByProv === 'fecha') {
+        va = new Date(a.created_at || 0).getTime()
+        vb = new Date(b.created_at || 0).getTime()
+      } else if (sortByProv === 'numero_factura') {
+        va = String(a.numero_factura || '')
+        vb = String(b.numero_factura || '')
+        const na = Number(va)
+        const nb = Number(vb)
+        if (Number.isFinite(na) && Number.isFinite(nb)) {
+          va = na
+          vb = nb
+        }
+      } else if (sortByProv === 'cliente') {
+        va = `${a.usuario_abono || ''} ${a.usuario_nombre || ''}`.trim().toLowerCase()
+        vb = `${b.usuario_abono || ''} ${b.usuario_nombre || ''}`.trim().toLowerCase()
+      } else if (sortByProv === 'cantidad') {
+        va = Number(a.cantidad_solicitudes || 0)
+        vb = Number(b.cantidad_solicitudes || 0)
+      } else if (sortByProv === 'total') {
+        va = Number(a.total_eur || 0)
+        vb = Number(b.total_eur || 0)
+      } else if (sortByProv === 'estado') {
+        va = estadoRank[(a.estado_pago || 'pendiente').toLowerCase()] ?? 99
+        vb = estadoRank[(b.estado_pago || 'pendiente').toLowerCase()] ?? 99
+      } else {
+        va = String(a[sortByProv] || '')
+        vb = String(b[sortByProv] || '')
+      }
+
+      let cmp = 0
+      if (typeof va === 'number' && typeof vb === 'number') {
+        cmp = va - vb
+      } else {
+        cmp = String(va).localeCompare(String(vb), 'es', { numeric: true, sensitivity: 'base' })
+      }
+
+      return sortDirProv === 'asc' ? cmp : -cmp
+    })
+
+    return list
+  }, [facturasProveedores, sortByProv, sortDirProv])
 
   // Función para descargar PDF con autenticación
   const handleDownloadPdf = async (facturaId) => {
@@ -141,15 +253,30 @@ export default function AdminFacturacionView() {
   const loadFacturasProveedores = async () => {
     setLoadingProveedores(true)
     try {
-      const [res, tasasRes] = await Promise.all([
+      const [res, tasasRes, pendientesRes] = await Promise.all([
         axios.get('/api/admin/facturas-proveedores/historial', {
           params: { _ts: Date.now() }
         }),
         axios.get('/api/admin/precios-pais/tasas-cambio').catch(() => null),
+        axios.get('/api/admin/facturacion-solicitudes', {
+          params: { facturado: 'false', _ts: Date.now() }
+        }).catch(() => null),
       ])
       if (res.data.success) {
         setFacturasProveedores(res.data.facturas || [])
-        setProveedoresStats(res.data.stats || {})
+        const statsBase = res.data.stats || {}
+        const rate = tasasRes?.data?.success
+          ? Number(tasasRes.data.tasas?.find(t => t.moneda_origen === 'EUR' && t.moneda_destino === 'USD')?.tasa || eurUsdRate)
+          : eurUsdRate
+        if (pendientesRes?.data?.success) {
+          const pendientesStats = buildPendingStatsFromSolicitudes(pendientesRes.data.solicitudes || [], rate)
+          setProveedoresStats({
+            ...statsBase,
+            pendiente: pendientesStats,
+          })
+        } else {
+          setProveedoresStats(statsBase)
+        }
       }
       if (tasasRes?.data?.success) {
         const t = tasasRes.data.tasas?.find(t => t.moneda_origen === 'EUR' && t.moneda_destino === 'USD')
@@ -851,7 +978,7 @@ export default function AdminFacturacionView() {
           {/* Stats de estados de pago */}
           {Object.keys(proveedoresStats).length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {Object.entries(ESTADO_PAGO_PROV).map(([key, cfg]) => {
+                  {Object.entries(ESTADO_PAGO_PROV).map(([key, cfg]) => {
                 const stat = proveedoresStats[key] || { cantidad: 0, total_eur: 0, total_usd: 0 }
                 return (
                   <div key={key} className={`${cfg.color} rounded-xl p-3 sm:p-4 min-w-0`}>
@@ -861,7 +988,10 @@ export default function AdminFacturacionView() {
                     </div>
                     <p className="text-xl sm:text-2xl font-bold mt-2 leading-none">{stat.cantidad || 0}</p>
                     <p className="text-xs sm:text-sm opacity-75 break-words">
-                      €{parseFloat(stat.total_eur || 0).toFixed(2)} | ${Math.round(parseFloat(stat.total_eur || 0) * eurUsdRate).toLocaleString()}
+                      {(() => {
+                        const totals = normalizeTotalsByRate(stat, eurUsdRate)
+                        return `€${totals.eur.toFixed(2)} | $${totals.usd.toFixed(2)}`
+                      })()}
                     </p>
                   </div>
                 )
@@ -884,7 +1014,7 @@ export default function AdminFacturacionView() {
             ) : (
               <>
                 <div className="md:hidden divide-y divide-gray-100">
-                  {facturasProveedores.map(f => {
+                  {sortedFacturasProveedores.map(f => {
                     const estadoKey = f.estado_pago || 'pendiente'
                     const estadoCfg = ESTADO_PAGO_PROV[estadoKey] || ESTADO_PAGO_PROV.pendiente
                     const monedaFactura = f.moneda || 'EUR'
@@ -997,23 +1127,47 @@ export default function AdminFacturacionView() {
                       <th className="px-3 py-3 w-10">
                         <input
                           type="checkbox"
-                          checked={facturasProveedores.length > 0 && selectedFacturas.length === facturasProveedores.length}
+                          checked={sortedFacturasProveedores.length > 0 && selectedFacturas.length === sortedFacturasProveedores.length}
                           onChange={toggleSelectAll}
                           className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                          title={selectedFacturas.length === facturasProveedores.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                          title={selectedFacturas.length === sortedFacturasProveedores.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
                         />
                       </th>
-                      <th className="px-4 py-3 text-left">Fecha</th>
-                      <th className="px-4 py-3 text-left">N° Factura</th>
-                      <th className="px-4 py-3 text-left">Cliente</th>
-                      <th className="px-4 py-3 text-center">Cant.</th>
-                      <th className="px-4 py-3 text-right">Total</th>
-                      <th className="px-4 py-3 text-center">Estado</th>
+                      <th className="px-4 py-3 text-left">
+                        <button onClick={() => handleSortProveedores('fecha')} className="inline-flex items-center gap-1 hover:text-gray-700">
+                          Fecha <span>{getSortIndicator('fecha')}</span>
+                        </button>
+                      </th>
+                      <th className="px-4 py-3 text-left">
+                        <button onClick={() => handleSortProveedores('numero_factura')} className="inline-flex items-center gap-1 hover:text-gray-700">
+                          N° Factura <span>{getSortIndicator('numero_factura')}</span>
+                        </button>
+                      </th>
+                      <th className="px-4 py-3 text-left">
+                        <button onClick={() => handleSortProveedores('cliente')} className="inline-flex items-center gap-1 hover:text-gray-700">
+                          Cliente <span>{getSortIndicator('cliente')}</span>
+                        </button>
+                      </th>
+                      <th className="px-4 py-3 text-center">
+                        <button onClick={() => handleSortProveedores('cantidad')} className="inline-flex items-center gap-1 hover:text-gray-700">
+                          Cant. <span>{getSortIndicator('cantidad')}</span>
+                        </button>
+                      </th>
+                      <th className="px-4 py-3 text-right">
+                        <button onClick={() => handleSortProveedores('total')} className="inline-flex items-center gap-1 hover:text-gray-700">
+                          Total <span>{getSortIndicator('total')}</span>
+                        </button>
+                      </th>
+                      <th className="px-4 py-3 text-center">
+                        <button onClick={() => handleSortProveedores('estado')} className="inline-flex items-center gap-1 hover:text-gray-700">
+                          Estado <span>{getSortIndicator('estado')}</span>
+                        </button>
+                      </th>
                       <th className="px-4 py-3 text-center">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {facturasProveedores.map(f => {
+                    {sortedFacturasProveedores.map(f => {
                       const estadoKey = f.estado_pago || 'pendiente'
                       const estadoCfg = ESTADO_PAGO_PROV[estadoKey] || ESTADO_PAGO_PROV.pendiente
                       const monedaFactura = f.moneda || 'EUR'

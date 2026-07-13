@@ -64,10 +64,22 @@ export default function AdminFacturacionSolicitudesView() {
   const [showModal, setShowModal] = useState(false)
   const [modalData, setModalData] = useState(null)
   const [invoiceNumber, setInvoiceNumber] = useState('')
+  const [invoiceDate, setInvoiceDate] = useState('')
   const [poNumber, setPoNumber] = useState('')
   const [generatingPdf, setGeneratingPdf] = useState(false)
   const [pdfGenerated, setPdfGenerated] = useState(false)
   const [marking, setMarking] = useState(false)
+
+  const getTodayInputDate = () => {
+    const d = new Date()
+    const yyyy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return `${yyyy}-${mm}-${dd}`
+  }
+
+  const isEstadoPendiente = (sol) => (sol?.factura_estado_pago || '').toLowerCase() === 'pendiente'
+  const isFacturable = (sol) => !sol?.facturado || isEstadoPendiente(sol)
 
   // Modal de revertir
   const [showRevertModal, setShowRevertModal] = useState(false)
@@ -201,6 +213,48 @@ export default function AdminFacturacionSolicitudesView() {
     return moneda === 'USD' ? getPrecioUsd(sol) : getPrecioEur(sol)
   }
 
+  const buildPendingStatsFromSolicitudes = (solicitudes = [], rate = 1.2) => {
+    const safeRate = Number(rate) > 0 ? Number(rate) : 1.2
+    let cantidad = 0
+    let totalEur = 0
+    let totalUsd = 0
+
+    solicitudes.forEach((s) => {
+      const estadoPago = String(s?.factura_estado_pago || '').toLowerCase()
+      const esFacturable = !s?.facturado || estadoPago === 'pendiente'
+      if (!esFacturable) return
+
+      cantidad += 1
+      const moneda = String(s?.moneda_facturacion || 'EUR').toUpperCase()
+      const precioEur = Number(s?.precio_eur || s?.precio_calculado || 0)
+      const precioUsd = Number(s?.precio_usd || 0)
+
+      if (moneda === 'USD') {
+        totalUsd += (precioUsd > 0 ? precioUsd : precioEur * safeRate)
+      } else {
+        totalEur += precioEur
+      }
+    })
+
+    return {
+      cantidad,
+      total_eur: Number(totalEur.toFixed(2)),
+      total_usd: Number(totalUsd.toFixed(2)),
+    }
+  }
+
+  const normalizeTotalsByRate = (stat = {}, rate = 1.2) => {
+    const safeRate = Number(rate) > 0 ? Number(rate) : 1.2
+    const rawEur = Number(stat?.total_eur || 0)
+    const rawUsd = Number(stat?.total_usd || 0)
+    const eur = rawEur + (rawUsd / safeRate)
+    const usd = rawUsd + (rawEur * safeRate)
+    return {
+      eur: Number(eur.toFixed(2)),
+      usd: Number(usd.toFixed(2)),
+    }
+  }
+
   const selectedMissingPricing = useMemo(() => {
     if (!selectedIds.length) return []
     const selected = new Set(selectedIds)
@@ -248,10 +302,23 @@ export default function AdminFacturacionSolicitudesView() {
         if (usr) params.set('usuario_abono', usr.abono)
       }
 
-      const res = await axios.get(`/api/admin/facturas-proveedores/historial?${params}`)
-      if (res.data.success) {
-        setHistorial(res.data.facturas)
-        setHistorialStats(res.data.stats || {})
+      const [resHistorial, resPendientes] = await Promise.all([
+        axios.get(`/api/admin/facturas-proveedores/historial?${params}`),
+        axios.get(`/api/admin/facturacion-solicitudes?${params}&facturado=false`).catch(() => null),
+      ])
+
+      if (resHistorial.data.success) {
+        setHistorial(resHistorial.data.facturas)
+        const statsBase = resHistorial.data.stats || {}
+        if (resPendientes?.data?.success) {
+          const pendingStats = buildPendingStatsFromSolicitudes(resPendientes.data.solicitudes || [], eurUsdRate)
+          setHistorialStats({
+            ...statsBase,
+            pendiente: pendingStats,
+          })
+        } else {
+          setHistorialStats(statsBase)
+        }
       }
     } catch (err) {
       toast.error('Error al cargar historial')
@@ -366,10 +433,11 @@ export default function AdminFacturacionSolicitudesView() {
     // Obtener info del cliente/proveedor de las solicitudes seleccionadas
     const primeraSol = data.solicitudes.find(s => selectedIds.includes(s.id))
     if (!primeraSol) return
+
+    const selectedSolicitudes = data.solicitudes.filter(s => selectedIds.includes(s.id))
     
     // Verificar que todas las seleccionadas sean del mismo cliente/proveedor
-    const mismoCliente = data.solicitudes
-      .filter(s => selectedIds.includes(s.id))
+    const mismoCliente = selectedSolicitudes
       .every(s => s.usuario_abono === primeraSol.usuario_abono)
     
     if (!mismoCliente) {
@@ -386,12 +454,16 @@ export default function AdminFacturacionSolicitudesView() {
     const monedaCliente = monedaPorCliente[primeraSol.usuario_abono] || primeraSol.moneda_facturacion || 'EUR'
     
     // Calcular total en la moneda seleccionada
-    const totalMonto = data.solicitudes
-      .filter(s => selectedIds.includes(s.id))
+    const totalMonto = selectedSolicitudes
       .reduce((sum, s) => {
         const precio = getPrecioByMoneda(s, monedaCliente)
         return sum + precio
       }, 0)
+
+    const precioOverrides = {}
+    selectedSolicitudes.forEach(s => {
+      precioOverrides[s.id] = getPrecioByMoneda(s, monedaCliente)
+    })
     
     setModalData({
       usuario_abono: primeraSol.usuario_abono,
@@ -401,9 +473,11 @@ export default function AdminFacturacionSolicitudesView() {
       cantidad: selectedIds.length,
       total_eur: totalMonto,
       solicitud_ids: selectedIds,
-      moneda: monedaCliente
+      moneda: monedaCliente,
+      precio_overrides: precioOverrides,
     })
     setInvoiceNumber('')
+    setInvoiceDate(getTodayInputDate())
     setPoNumber('')
     setPdfGenerated(false)
     setShowModal(true)
@@ -427,15 +501,22 @@ export default function AdminFacturacionSolicitudesView() {
 
     setGeneratingPdf(true)
     try {
+      const mesNum = filtros.mes === '' || filtros.mes == null ? null : Number(filtros.mes)
+      const anioNum = filtros.anio === '' || filtros.anio == null ? null : Number(filtros.anio)
+      const mesPayload = Number.isInteger(mesNum) && mesNum >= 1 && mesNum <= 12 ? mesNum : null
+      const anioPayload = Number.isInteger(anioNum) && anioNum >= 2000 ? anioNum : null
+
       const res = await axios.post('/api/admin/facturacion-solicitudes/generar-pdf', {
         usuario_abono: modalData.usuario_abono,
         proveedor_codigo: modalData.proveedor_codigo,
         solicitud_ids: modalData.solicitud_ids,
         invoice_number: invoiceNumber,
+        invoice_date: invoiceDate,
         po_number: poNumber,
-        mes: filtros.mes,
-        anio: filtros.anio,
-        moneda: modalData.moneda || 'EUR'
+        mes: mesPayload,
+        anio: anioPayload,
+        moneda: modalData.moneda || 'EUR',
+        precio_overrides: modalData.precio_overrides || {}
       }, { responseType: 'blob' })
       
       // Descargar PDF
@@ -461,16 +542,23 @@ export default function AdminFacturacionSolicitudesView() {
     setShowConfirmFacturadoModal(false)
     setMarking(true)
     try {
+      const mesNum = filtros.mes === '' || filtros.mes == null ? null : Number(filtros.mes)
+      const anioNum = filtros.anio === '' || filtros.anio == null ? null : Number(filtros.anio)
+      const mesPayload = Number.isInteger(mesNum) && mesNum >= 1 && mesNum <= 12 ? mesNum : null
+      const anioPayload = Number.isInteger(anioNum) && anioNum >= 2000 ? anioNum : null
+
       // Primero generar y guardar el PDF en el historial
       await axios.post('/api/admin/facturacion-solicitudes/generar-pdf', {
         usuario_abono: modalData.usuario_abono,
         proveedor_codigo: modalData.proveedor_codigo,
         solicitud_ids: modalData.solicitud_ids,
         invoice_number: invoiceNumber,
+        invoice_date: invoiceDate,
         po_number: poNumber,
-        mes: filtros.mes,
-        anio: filtros.anio,
+        mes: mesPayload,
+        anio: anioPayload,
         moneda: modalData.moneda || 'EUR',
+        precio_overrides: modalData.precio_overrides || {},
         save_to_history: true
       }, { responseType: 'blob' })
 
@@ -478,7 +566,6 @@ export default function AdminFacturacionSolicitudesView() {
       const res = await axios.post('/api/admin/facturacion-solicitudes/marcar', {
         ids: modalData.solicitud_ids,
         facturado: true,
-        factura_id: invoiceNumber
       })
       if (res.data.success) {
         toast.success(`${res.data.updated} solicitudes marcadas como facturadas`)
@@ -540,8 +627,8 @@ export default function AdminFacturacionSolicitudesView() {
   }
 
   const toggleSelectAll = (clienteAbono) => {
-    // Solo seleccionar solicitudes PENDIENTES (no facturadas)
-    const solsPendientes = data.solicitudes.filter(s => s.usuario_abono === clienteAbono && !s.facturado)
+    // Solo seleccionar solicitudes facturables (sin factura o con estado de pago pendiente)
+    const solsPendientes = data.solicitudes.filter(s => s.usuario_abono === clienteAbono && isFacturable(s))
     const idsPendientes = solsPendientes.map(s => s.id)
     const allSelected = idsPendientes.length > 0 && idsPendientes.every(id => selectedIds.includes(id))
     
@@ -1445,8 +1532,8 @@ export default function AdminFacturacionSolicitudesView() {
               }, 0)
               
               // Calcular estado del grupo
-              const solsPendientes = grupo.solicitudes.filter(s => !s.facturado)
-              const solsFacturadas = grupo.solicitudes.filter(s => s.facturado)
+              const solsPendientes = grupo.solicitudes.filter(s => isFacturable(s))
+              const solsFacturadas = grupo.solicitudes.filter(s => !isFacturable(s))
               const todasFacturadas = solsFacturadas.length === grupo.solicitudes.length
               const todasPendientes = solsPendientes.length === grupo.solicitudes.length
               
@@ -1457,6 +1544,7 @@ export default function AdminFacturacionSolicitudesView() {
                 const estadosSols = solsFacturadas.map(s => s.factura_estado_pago || 'facturada')
                 if (estadosSols.includes('pagada')) return 'pagada'
                 if (estadosSols.includes('cancelada')) return 'cancelada'
+                if (estadosSols.includes('pendiente')) return 'pendiente'
                 if (estadosSols.includes('facturada')) return 'facturada'
                 return 'facturada' // default si tiene factura
               }
@@ -1522,26 +1610,6 @@ export default function AdminFacturacionSolicitudesView() {
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 sm:gap-4 sm:justify-end">
-                      {/* Botón Revertir para admin - solo si hay facturadas */}
-                      {isAdmin && solsFacturadas.length > 0 && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            // Revertir todas las facturadas del grupo
-                            setRevertData({
-                              ids: solsFacturadas.map(s => s.id),
-                              count: solsFacturadas.length,
-                              usuario_nombre: grupo.usuario_nombre,
-                              usuario_abono: abono
-                            })
-                            setShowRevertModal(true)
-                          }}
-                          className="px-2 py-1 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded text-xs font-medium transition-colors flex items-center gap-1"
-                          title="Revertir facturadas a Pendiente"
-                        >
-                          ↩ Revertir ({solsFacturadas.length})
-                        </button>
-                      )}
                       <span className="text-sm text-gray-500">{grupo.solicitudes.length} informes</span>
                       <select
                         value={monedaCliente}
@@ -1564,10 +1632,10 @@ export default function AdminFacturacionSolicitudesView() {
                     <div>
                       <div className="md:hidden divide-y divide-gray-100 bg-white">
                         {grupo.solicitudes.map(sol => (
-                          <div key={sol.id} className={`p-4 space-y-3 ${sol.facturado ? 'bg-green-50' : ''} ${selectedIds.includes(sol.id) ? 'bg-blue-50' : ''}`}>
+                          <div key={sol.id} className={`p-4 space-y-3 ${!isFacturable(sol) ? 'bg-green-50' : ''} ${selectedIds.includes(sol.id) ? 'bg-blue-50' : ''}`}>
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex items-start gap-3 min-w-0">
-                                {!sol.facturado ? (
+                                {isFacturable(sol) ? (
                                   <button
                                     onClick={() => {
                                       if (selectedIds.includes(sol.id)) {
@@ -1617,7 +1685,7 @@ export default function AdminFacturacionSolicitudesView() {
                                 <span className="font-semibold text-emerald-600">
                                   {simboloMoneda}{getPrecioByMoneda(sol, monedaCliente).toFixed(2)}
                                 </span>
-                                {isAdmin && !sol.facturado && (
+                                {isAdmin && isFacturable(sol) && (
                                   <button
                                     onClick={() => { setEditingPrecio(sol.id); setEditPrecioValue(getPrecioEur(sol).toString()) }}
                                     className="text-gray-300 hover:text-blue-500 transition-colors"
@@ -1638,7 +1706,7 @@ export default function AdminFacturacionSolicitudesView() {
                               }`}>
                                 {sol.prioridad === 'urgente' ? 'Urgente' : sol.prioridad === 'monitoreo' ? 'Monitoreo' : sol.prioridad === '72h' ? '72h' : 'Normal'}
                               </span>
-                              {sol.facturado ? (
+                              {!isFacturable(sol) ? (
                                 (() => {
                                   const estadoSol = sol.factura_estado_pago || 'facturada'
                                   const cfg = ESTADO_PAGO_CONFIG[estadoSol] || ESTADO_PAGO_CONFIG.facturada
@@ -1679,9 +1747,9 @@ export default function AdminFacturacionSolicitudesView() {
                         </thead>
                         <tbody className="divide-y">
                           {grupo.solicitudes.map(sol => (
-                            <tr key={sol.id} className={`hover:bg-gray-50 ${sol.facturado ? 'bg-green-50' : ''} ${selectedIds.includes(sol.id) ? 'bg-blue-50' : ''}`}>
+                            <tr key={sol.id} className={`hover:bg-gray-50 ${!isFacturable(sol) ? 'bg-green-50' : ''} ${selectedIds.includes(sol.id) ? 'bg-blue-50' : ''}`}>
                               <td className="px-3 py-2">
-                                {!sol.facturado ? (
+                                {isFacturable(sol) ? (
                                   <button onClick={() => {
                                     // Toggle selección individual
                                     if (selectedIds.includes(sol.id)) {
@@ -1768,7 +1836,7 @@ export default function AdminFacturacionSolicitudesView() {
                                 ) : (
                                   <span className="inline-flex items-center gap-1">
                                     {simboloMoneda}{getPrecioByMoneda(sol, monedaCliente).toFixed(2)}
-                                    {isAdmin && !sol.facturado && (
+                                    {isAdmin && isFacturable(sol) && (
                                       <button
                                         onClick={() => { setEditingPrecio(sol.id); setEditPrecioValue(getPrecioEur(sol).toString()) }}
                                         className="text-gray-300 hover:text-blue-500 transition-colors"
@@ -1782,7 +1850,7 @@ export default function AdminFacturacionSolicitudesView() {
                               </td>
                               <td className="px-3 py-2 text-center text-xs text-gray-500">{sol.fecha_completado || sol.updated_at}</td>
                               <td className="px-3 py-2 text-center">
-                                {sol.facturado ? (
+                                {!isFacturable(sol) ? (
                                   (() => {
                                     const estadoSol = sol.factura_estado_pago || 'facturada'
                                     const cfg = ESTADO_PAGO_CONFIG[estadoSol] || ESTADO_PAGO_CONFIG.facturada
@@ -1839,6 +1907,7 @@ export default function AdminFacturacionSolicitudesView() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
               {Object.entries(ESTADO_PAGO_CONFIG).map(([key, cfg]) => {
                 const stat = historialStats[key] || { cantidad: 0, total: 0 }
+                const totals = normalizeTotalsByRate(stat, eurUsdRate)
                 return (
                   <div key={key} className={`${cfg.color} rounded-lg p-3`}>
                     <div className="flex items-center gap-2">
@@ -1846,7 +1915,7 @@ export default function AdminFacturacionSolicitudesView() {
                       <span className="text-xs font-medium">{cfg.label}</span>
                     </div>
                     <p className="text-lg font-bold mt-1">{stat.cantidad || 0}</p>
-                    <p className="text-xs opacity-75">€{(stat.total || 0).toFixed(2)} | ${Math.round((stat.total || 0) * eurUsdRate).toLocaleString()}</p>
+                    <p className="text-xs opacity-75">€{totals.eur.toFixed(2)} | ${totals.usd.toFixed(2)}</p>
                   </div>
                 )
               })}
@@ -2060,6 +2129,19 @@ export default function AdminFacturacionSolicitudesView() {
                   placeholder="Ej: 6850"
                   className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Fecha de Invoice
+                </label>
+                <input
+                  type="date"
+                  value={invoiceDate}
+                  onChange={e => setInvoiceDate(e.target.value)}
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p className="mt-1 text-xs text-gray-500">Si no se modifica, se usa la fecha de hoy.</p>
               </div>
 
               {/* PO Number (solo para Ducroire) */}
