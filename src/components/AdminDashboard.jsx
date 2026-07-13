@@ -423,6 +423,38 @@ export default function AdminDashboard() {
     '1y': 'Último año',
   }
 
+  const formatDateInput = (dateObj) => {
+    const year = dateObj.getFullYear()
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0')
+    const day = String(dateObj.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  const getDateRangeForPeriod = (period) => {
+    const now = new Date()
+    const today = formatDateInput(now)
+    const from = new Date(now)
+
+    if (period === 'day') {
+      return { desde: today, hasta: today }
+    }
+    if (period === '1m') {
+      from.setDate(1)
+      return { desde: formatDateInput(from), hasta: today }
+    }
+    if (period === '3m') {
+      from.setMonth(from.getMonth() - 3)
+      return { desde: formatDateInput(from), hasta: today }
+    }
+    if (period === '1y') {
+      from.setFullYear(from.getFullYear() - 1)
+      return { desde: formatDateInput(from), hasta: today }
+    }
+
+    from.setMonth(from.getMonth() - 6)
+    return { desde: formatDateInput(from), hasta: today }
+  }
+
   const loadSolicitudesActivas = async (estado = '', prioridad = '') => {
     setLoadingDetail(true)
     try {
@@ -517,10 +549,12 @@ export default function AdminDashboard() {
   }
 
   const openDashboardDetalle = async (tipo, title, filtros = {}, dateOptions = {}) => {
-    const effectiveDesde = dateOptions.desde ?? dashboardDesde
-    const effectiveHasta = dateOptions.hasta ?? dashboardHasta
+    const baseFiltros = getDashboardDetalleBaseFiltros(tipo)
+    const fallbackRange = getDateRangeForPeriod(baseFiltros.periodo)
+    const effectiveDesde = dateOptions.desde ?? (dashboardDesde || fallbackRange.desde)
+    const effectiveHasta = dateOptions.hasta ?? (dashboardHasta || fallbackRange.hasta)
     const effectiveFiltros = {
-      ...getDashboardDetalleBaseFiltros(tipo),
+      ...baseFiltros,
       ...filtros,
     }
     setDashboardDetalleTipo(tipo)
@@ -554,8 +588,10 @@ export default function AdminDashboard() {
   const exportDashboardDetalle = async (tipo, filtros = {}, filenameBase = 'dashboard_detalle') => {
     setDashboardDetalleExporting(true)
     try {
+      const baseFiltros = getDashboardDetalleBaseFiltros(tipo)
+      const fallbackRange = getDateRangeForPeriod(baseFiltros.periodo)
       const effectiveFiltros = {
-        ...getDashboardDetalleBaseFiltros(tipo),
+        ...baseFiltros,
         ...filtros,
       }
       const params = {
@@ -563,8 +599,8 @@ export default function AdminDashboard() {
         format: 'csv',
         ...effectiveFiltros,
       }
-      if (!params.desde && dashboardDesde) params.desde = dashboardDesde
-      if (!params.hasta && dashboardHasta) params.hasta = dashboardHasta
+      if (!params.desde) params.desde = dashboardDesde || fallbackRange.desde
+      if (!params.hasta) params.hasta = dashboardHasta || fallbackRange.hasta
 
       const res = await axios.get('/api/admin/dashboard/detalle', {
         params,
