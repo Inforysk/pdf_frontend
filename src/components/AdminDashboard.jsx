@@ -176,6 +176,158 @@ function DetailPanel({ data, title, nameKey = 'pais', valueKey = 'cantidad', val
   )
 }
 
+function DashboardDetalleModal({
+  open,
+  title,
+  tipo,
+  rows,
+  loading,
+  onClose,
+  onExport,
+  exporting,
+  desde,
+  hasta,
+  onChangeDesde,
+  onChangeHasta,
+  onApplyFiltro,
+  onClearFiltro,
+}) {
+  if (!open) return null
+
+  const columnsByTipo = {
+    solicitudes: [
+      { key: 'id', label: 'ID' },
+      { key: 'cliente', label: 'Cliente' },
+      { key: 'razon_social', label: 'Empresa' },
+      { key: 'cuit', label: 'CUIT' },
+      { key: 'estado', label: 'Estado' },
+      { key: 'prioridad', label: 'Prioridad' },
+      { key: 'created_at', label: 'Fecha' },
+    ],
+    empresas_pais: [
+      { key: 'id', label: 'ID' },
+      { key: 'razon_social', label: 'Empresa' },
+      { key: 'cuit', label: 'CUIT' },
+      { key: 'pais', label: 'Pais' },
+      { key: 'codigo_pais', label: 'Codigo' },
+      { key: 'tipo_identificacion', label: 'Tipo ID' },
+      { key: 'created_at', label: 'Fecha' },
+    ],
+    top_clientes: [
+      { key: 'id', label: 'ID' },
+      { key: 'cliente', label: 'Cliente' },
+      { key: 'razon_social', label: 'Empresa' },
+      { key: 'cuit', label: 'CUIT' },
+      { key: 'estado', label: 'Estado' },
+      { key: 'prioridad', label: 'Prioridad' },
+      { key: 'precio_eur', label: 'Precio EUR' },
+      { key: 'created_at', label: 'Fecha' },
+    ],
+  }
+
+  const columns = columnsByTipo[tipo] || []
+
+  const formatCell = (key, value) => {
+    if (value == null) return ''
+    if (key === 'created_at') {
+      const d = new Date(value)
+      if (!Number.isNaN(d.getTime())) return d.toLocaleDateString('es-AR')
+    }
+    if (key === 'precio_eur') {
+      return `€${Number(value || 0).toFixed(2)}`
+    }
+    return String(value)
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border shadow-2xl w-full max-w-6xl max-h-[88vh] overflow-hidden">
+        <div className="px-4 py-3 border-b bg-gradient-to-r from-slate-50 to-blue-50 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800">{title}</h3>
+            <p className="text-xs text-gray-500">Total: {rows.length} registros</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onExport}
+              disabled={loading || exporting}
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-100 rounded-lg hover:bg-green-100 disabled:opacity-60"
+            >
+              {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+              Descargar Excel
+            </button>
+            <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-200 text-gray-500">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="px-4 py-3 border-b bg-white flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-gray-500">Rango fecha:</span>
+          <input
+            type="date"
+            value={desde}
+            onChange={(e) => onChangeDesde(e.target.value)}
+            className="text-xs border rounded-md px-2 py-1"
+          />
+          <span className="text-xs text-gray-400">a</span>
+          <input
+            type="date"
+            value={hasta}
+            onChange={(e) => onChangeHasta(e.target.value)}
+            className="text-xs border rounded-md px-2 py-1"
+          />
+          <button
+            onClick={onApplyFiltro}
+            disabled={loading}
+            className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 disabled:opacity-60"
+          >
+            Aplicar
+          </button>
+          <button
+            onClick={onClearFiltro}
+            disabled={loading}
+            className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-60"
+          >
+            Limpiar
+          </button>
+        </div>
+
+        <div className="overflow-y-auto overflow-x-hidden max-h-[72vh]">
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="text-center py-16 text-sm text-gray-500">No hay registros para este filtro.</div>
+          ) : (
+            <table className="w-full table-fixed text-xs">
+              <thead className="bg-gray-100 sticky top-0">
+                <tr>
+                  {columns.map(col => (
+                    <th key={col.key} className="text-left px-2 py-2 font-semibold text-gray-700 break-words">{col.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {rows.map((row, idx) => (
+                  <tr key={`${row.id || idx}-${idx}`} className="hover:bg-blue-50/40">
+                    {columns.map(col => (
+                      <td key={col.key} className="px-2 py-2 text-gray-700 align-top break-words">
+                        {formatCell(col.key, row[col.key])}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
   return (
@@ -241,6 +393,19 @@ export default function AdminDashboard() {
   const [periodoResumenEmpresas, setPeriodoResumenEmpresas] = useState('6m')
   const [periodoResumenSolicitudes, setPeriodoResumenSolicitudes] = useState('6m')
   const [periodoResumenClientes, setPeriodoResumenClientes] = useState('6m')
+  const [dashboardDesde, setDashboardDesde] = useState('')
+  const [dashboardHasta, setDashboardHasta] = useState('')
+
+  const [dashboardDetalleOpen, setDashboardDetalleOpen] = useState(false)
+  const [dashboardDetalleTitle, setDashboardDetalleTitle] = useState('Detalle')
+  const [dashboardDetalleTipo, setDashboardDetalleTipo] = useState('solicitudes')
+  const [dashboardDetalleRows, setDashboardDetalleRows] = useState([])
+  const [dashboardDetalleFiltros, setDashboardDetalleFiltros] = useState({})
+  const [dashboardDetalleDesde, setDashboardDetalleDesde] = useState('')
+  const [dashboardDetalleHasta, setDashboardDetalleHasta] = useState('')
+  const [dashboardDetalleLoading, setDashboardDetalleLoading] = useState(false)
+  const [dashboardDetalleExporting, setDashboardDetalleExporting] = useState(false)
+
 
   const PERIODOS_RESUMEN = [
     { value: 'day', label: 'D' },
@@ -338,6 +503,69 @@ export default function AdminDashboard() {
     }
   }
 
+  const openDashboardDetalle = async (tipo, title, filtros = {}, dateOptions = {}) => {
+    const effectiveDesde = dateOptions.desde ?? dashboardDesde
+    const effectiveHasta = dateOptions.hasta ?? dashboardHasta
+    setDashboardDetalleTipo(tipo)
+    setDashboardDetalleTitle(title)
+    setDashboardDetalleRows([])
+    setDashboardDetalleFiltros(filtros)
+    setDashboardDetalleDesde(effectiveDesde || '')
+    setDashboardDetalleHasta(effectiveHasta || '')
+    setDashboardDetalleOpen(true)
+    setDashboardDetalleLoading(true)
+    try {
+      const params = {
+        tipo,
+        ...filtros,
+      }
+      if (effectiveDesde) params.desde = effectiveDesde
+      if (effectiveHasta) params.hasta = effectiveHasta
+      const res = await axios.get('/api/admin/dashboard/detalle', { params })
+      if (res.data?.success) {
+        setDashboardDetalleRows(res.data.data?.rows || [])
+      } else {
+        toast.error(res.data?.error || 'No se pudo cargar el detalle')
+      }
+    } catch {
+      toast.error('Error al cargar detalle')
+    } finally {
+      setDashboardDetalleLoading(false)
+    }
+  }
+
+  const exportDashboardDetalle = async (tipo, filtros = {}, filenameBase = 'dashboard_detalle') => {
+    setDashboardDetalleExporting(true)
+    try {
+      const params = {
+        tipo,
+        format: 'csv',
+        ...filtros,
+      }
+      if (!params.desde && dashboardDesde) params.desde = dashboardDesde
+      if (!params.hasta && dashboardHasta) params.hasta = dashboardHasta
+
+      const res = await axios.get('/api/admin/dashboard/detalle', {
+        params,
+        responseType: 'blob',
+      })
+      const url = window.URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = res.headers['content-disposition']?.match(/filename=(.+)/)?.[1]
+        || `${filenameBase}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+      toast.success('Excel descargado')
+    } catch {
+      toast.error('Error al descargar Excel')
+    } finally {
+      setDashboardDetalleExporting(false)
+    }
+  }
+
   const loadDashboard = useCallback(async (
     periodo = periodoFacturacion,
     resumenEmpresas = periodoResumenEmpresas,
@@ -346,16 +574,22 @@ export default function AdminDashboard() {
   ) => {
     setLoading(true)
     try {
-      const res = await axios.get(
-        `/api/admin/dashboard?periodo_facturacion=${periodo}&periodo_empresas=${resumenEmpresas}&periodo_solicitudes=${resumenSolicitudes}&periodo_clientes=${resumenClientes}`
-      )
+      const params = {
+        periodo_facturacion: periodo,
+        periodo_empresas: resumenEmpresas,
+        periodo_solicitudes: resumenSolicitudes,
+        periodo_clientes: resumenClientes,
+      }
+      if (dashboardDesde) params.fecha_desde = dashboardDesde
+      if (dashboardHasta) params.fecha_hasta = dashboardHasta
+      const res = await axios.get('/api/admin/dashboard', { params })
       if (res.data.success) setData(res.data.data)
     } catch {
       toast.error('Error al cargar dashboard')
     } finally {
       setLoading(false)
     }
-  }, [periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes])
+  }, [periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes, dashboardDesde, dashboardHasta])
   
   const handlePeriodoChange = (nuevoPeriodo) => {
     setPeriodoFacturacion(nuevoPeriodo)
@@ -387,6 +621,8 @@ export default function AdminDashboard() {
       if (saved.periodoResumenEmpresas) setPeriodoResumenEmpresas(saved.periodoResumenEmpresas)
       if (saved.periodoResumenSolicitudes) setPeriodoResumenSolicitudes(saved.periodoResumenSolicitudes)
       if (saved.periodoResumenClientes) setPeriodoResumenClientes(saved.periodoResumenClientes)
+      if (saved.dashboardDesde) setDashboardDesde(saved.dashboardDesde)
+      if (saved.dashboardHasta) setDashboardHasta(saved.dashboardHasta)
     } catch {
       // Ignorar valores corruptos en localStorage
     }
@@ -399,9 +635,11 @@ export default function AdminDashboard() {
       periodoResumenEmpresas,
       periodoResumenSolicitudes,
       periodoResumenClientes,
+      dashboardDesde,
+      dashboardHasta,
     }
     localStorage.setItem(DASHBOARD_FILTERS_KEY, JSON.stringify(payload))
-  }, [periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes])
+  }, [periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes, dashboardDesde, dashboardHasta])
 
   // Auto-refresh cada 30 segundos usando filtros actuales
   useEffect(() => {
@@ -410,7 +648,7 @@ export default function AdminDashboard() {
       loadDashboard(periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes)
     }, 30000) // 30 segundos
     return () => clearInterval(interval)
-  }, [loadDashboard, periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes])
+  }, [loadDashboard, periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes, dashboardDesde, dashboardHasta])
 
   if (loading) {
     return (
@@ -449,13 +687,45 @@ export default function AdminDashboard() {
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard Ejecutivo</h2>
           <p className="text-sm text-gray-500 mt-0.5">Vista general del sistema Inforysk</p>
         </div>
-        <button
-          onClick={loadDashboard}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-xl hover:bg-gray-50 transition-colors self-start sm:self-auto"
-        >
-          <RefreshCcw className="h-4 w-4" />
-          Actualizar
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-1.5 px-2 py-1.5 bg-white border rounded-xl">
+            <Calendar className="h-3.5 w-3.5 text-gray-400" />
+            <input
+              type="date"
+              value={dashboardDesde}
+              onChange={(e) => setDashboardDesde(e.target.value)}
+              className="text-xs border rounded-md px-2 py-1"
+              title="Desde"
+            />
+            <span className="text-xs text-gray-400">a</span>
+            <input
+              type="date"
+              value={dashboardHasta}
+              onChange={(e) => setDashboardHasta(e.target.value)}
+              className="text-xs border rounded-md px-2 py-1"
+              title="Hasta"
+            />
+            <button
+              onClick={() => loadDashboard(periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes)}
+              className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100"
+            >
+              Aplicar
+            </button>
+            <button
+              onClick={() => { setDashboardDesde(''); setDashboardHasta('') }}
+              className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200"
+            >
+              Limpiar
+            </button>
+          </div>
+          <button
+            onClick={loadDashboard}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-xl hover:bg-gray-50 transition-colors self-start sm:self-auto"
+          >
+            <RefreshCcw className="h-4 w-4" />
+            Actualizar
+          </button>
+        </div>
       </div>
 
       {/* ── KPIs ── */}
@@ -766,20 +1036,38 @@ export default function AdminDashboard() {
         <ChartCard
           title={`Empresas por País (${RESUMEN_LABELS[periodoResumenEmpresas] || 'Últimos 6 meses'})`}
           headerRight={
-            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-              {PERIODOS_RESUMEN.map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => handlePeriodoEmpresasChange(opt.value)}
-                  className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${
-                    periodoResumenEmpresas === opt.value
-                      ? 'bg-white text-blue-700 shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => openDashboardDetalle('empresas_pais', 'Detalle de Empresas por País', {})}
+                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100"
+                title="Ver detalle"
+              >
+                Ver detalle
+              </button>
+              <button
+                onClick={() => exportDashboardDetalle('empresas_pais', {}, 'empresas_por_pais')}
+                disabled={dashboardDetalleExporting}
+                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-green-700 bg-green-50 rounded-md hover:bg-green-100 disabled:opacity-60"
+                title="Descargar Excel"
+              >
+                {dashboardDetalleExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+                Excel
+              </button>
+              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+                {PERIODOS_RESUMEN.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => handlePeriodoEmpresasChange(opt.value)}
+                    className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                      periodoResumenEmpresas === opt.value
+                        ? 'bg-white text-blue-700 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
           }
         >
@@ -790,7 +1078,17 @@ export default function AdminDashboard() {
                 <XAxis type="number" tick={{ fontSize: 12 }} />
                 <YAxis dataKey="pais" type="category" width={110} tick={{ fontSize: 11 }} />
                 <Tooltip content={<EmpresasPaisTooltip />} />
-                <Bar dataKey="cantidad" name="Empresas" radius={[0, 6, 6, 0]}>
+                <Bar
+                  dataKey="cantidad"
+                  name="Empresas"
+                  radius={[0, 6, 6, 0]}
+                  onClick={(row) => {
+                    if (row?.pais) {
+                      openDashboardDetalle('empresas_pais', `Empresas por país: ${row.pais}`, { pais: row.pais })
+                    }
+                  }}
+                  style={{ cursor: 'pointer' }}
+                >
                   {(data.empresas_por_pais || []).map((_, i) => (
                     <Cell key={i} fill={COLORS_PIE[i % COLORS_PIE.length]} />
                   ))}
@@ -807,20 +1105,38 @@ export default function AdminDashboard() {
         <ChartCard
           title={`Solicitudes ${RESUMEN_LABELS[periodoResumenSolicitudes] || 'Últimos 6 meses'} ⚡`}
           headerRight={
-            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-              {PERIODOS_RESUMEN.map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => handlePeriodoSolicitudesChange(opt.value)}
-                  className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${
-                    periodoResumenSolicitudes === opt.value
-                      ? 'bg-white text-blue-700 shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => openDashboardDetalle('solicitudes', 'Detalle de Solicitudes (todos los estados)', {})}
+                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100"
+                title="Ver detalle"
+              >
+                Ver detalle
+              </button>
+              <button
+                onClick={() => exportDashboardDetalle('solicitudes', {}, 'solicitudes')}
+                disabled={dashboardDetalleExporting}
+                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-green-700 bg-green-50 rounded-md hover:bg-green-100 disabled:opacity-60"
+                title="Descargar Excel"
+              >
+                {dashboardDetalleExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+                Excel
+              </button>
+              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+                {PERIODOS_RESUMEN.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => handlePeriodoSolicitudesChange(opt.value)}
+                    className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                      periodoResumenSolicitudes === opt.value
+                        ? 'bg-white text-blue-700 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
           }
         >
@@ -828,14 +1144,19 @@ export default function AdminDashboard() {
             {(data.solicitudes_hoy || []).length > 0 ? (
               <div className="space-y-3 pt-2">
                 {['pendiente', 'en_proceso', 'completada'].map(estado => {
-                  const item = (data.solicitudes_hoy || []).find(s => s.estado === estado)
+                  const sourceRows = data.solicitudes_hoy || []
+                  const item = sourceRows.find(s => s.estado === estado)
                   const cantidad = item?.cantidad || 0
                   const colors = { pendiente: '#f59e0b', en_proceso: '#3b82f6', completada: '#10b981' }
                   const labels = { pendiente: 'Pendientes', en_proceso: 'En Proceso', completada: 'Completadas' }
-                  const total = (data.solicitudes_hoy || []).reduce((a, b) => a + (b.cantidad || 0), 0) || 1
+                  const total = sourceRows.reduce((a, b) => a + (b.cantidad || 0), 0) || 1
                   const pct = (cantidad / total * 100).toFixed(0)
                   return (
-                    <div key={estado} className="flex items-center gap-3">
+                    <button
+                      key={estado}
+                      onClick={() => openDashboardDetalle('solicitudes', `Solicitudes ${labels[estado]}`, { estado })}
+                      className="w-full flex items-center gap-3 text-left hover:bg-gray-50 rounded-lg px-1 py-1"
+                    >
                       <div className="w-24 text-xs font-medium text-gray-600">{labels[estado]}</div>
                       <div className="flex-1 h-8 bg-gray-100 rounded-lg overflow-hidden relative">
                         <div 
@@ -846,7 +1167,7 @@ export default function AdminDashboard() {
                           {cantidad}
                         </span>
                       </div>
-                    </div>
+                    </button>
                   )
                 })}
                 <div className="pt-2 border-t mt-3 flex justify-between text-sm">
@@ -868,20 +1189,38 @@ export default function AdminDashboard() {
         <ChartCard
           title={`Top 5 Clientes (${RESUMEN_LABELS[periodoResumenClientes] || 'Últimos 6 meses'})`}
           headerRight={
-            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-              {PERIODOS_RESUMEN.map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => handlePeriodoClientesChange(opt.value)}
-                  className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${
-                    periodoResumenClientes === opt.value
-                      ? 'bg-white text-blue-700 shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => openDashboardDetalle('top_clientes', 'Detalle de Top Clientes', {})}
+                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100"
+                title="Ver detalle"
+              >
+                Ver detalle
+              </button>
+              <button
+                onClick={() => exportDashboardDetalle('top_clientes', {}, 'top_clientes')}
+                disabled={dashboardDetalleExporting}
+                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-green-700 bg-green-50 rounded-md hover:bg-green-100 disabled:opacity-60"
+                title="Descargar Excel"
+              >
+                {dashboardDetalleExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+                Excel
+              </button>
+              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+                {PERIODOS_RESUMEN.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => handlePeriodoClientesChange(opt.value)}
+                    className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                      periodoResumenClientes === opt.value
+                        ? 'bg-white text-blue-700 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
           }
         >
@@ -893,7 +1232,18 @@ export default function AdminDashboard() {
                   <XAxis type="number" tick={{ fontSize: 12 }} />
                   <YAxis dataKey="cliente" type="category" width={100} tick={{ fontSize: 11 }} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="solicitudes" name="Solicitudes" fill="#8b5cf6" radius={[0, 6, 6, 0]} />
+                  <Bar
+                    dataKey="solicitudes"
+                    name="Solicitudes"
+                    fill="#8b5cf6"
+                    radius={[0, 6, 6, 0]}
+                    onClick={(row) => {
+                      if (row?.cliente) {
+                        openDashboardDetalle('top_clientes', `Detalle cliente: ${row.cliente}`, { cliente: row.cliente })
+                      }
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -1145,6 +1495,45 @@ export default function AdminDashboard() {
           </div>
         </ChartCard>
       </div>
+
+      <DashboardDetalleModal
+        open={dashboardDetalleOpen}
+        title={dashboardDetalleTitle}
+        tipo={dashboardDetalleTipo}
+        rows={dashboardDetalleRows}
+        loading={dashboardDetalleLoading}
+        exporting={dashboardDetalleExporting}
+        desde={dashboardDetalleDesde}
+        hasta={dashboardDetalleHasta}
+        onChangeDesde={setDashboardDetalleDesde}
+        onChangeHasta={setDashboardDetalleHasta}
+        onApplyFiltro={() => openDashboardDetalle(
+          dashboardDetalleTipo,
+          dashboardDetalleTitle,
+          dashboardDetalleFiltros,
+          { desde: dashboardDetalleDesde, hasta: dashboardDetalleHasta }
+        )}
+        onClearFiltro={() => {
+          setDashboardDetalleDesde('')
+          setDashboardDetalleHasta('')
+          openDashboardDetalle(
+            dashboardDetalleTipo,
+            dashboardDetalleTitle,
+            dashboardDetalleFiltros,
+            { desde: '', hasta: '' }
+          )
+        }}
+        onClose={() => setDashboardDetalleOpen(false)}
+        onExport={() => exportDashboardDetalle(
+          dashboardDetalleTipo,
+          {
+            ...dashboardDetalleFiltros,
+            ...(dashboardDetalleDesde ? { desde: dashboardDetalleDesde } : {}),
+            ...(dashboardDetalleHasta ? { hasta: dashboardDetalleHasta } : {}),
+          },
+          `detalle_${dashboardDetalleTipo}`
+        )}
+      />
     </div>
   )
 }

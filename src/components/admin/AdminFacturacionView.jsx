@@ -27,6 +27,24 @@ const ESTADO_PAGO_PROV = {
 export default function AdminFacturacionView() {
   const currencySymbol = (moneda) => (moneda === 'USD' ? '$' : '€')
   const formatByCurrency = (amount, moneda) => `${currencySymbol(moneda)}${parseFloat(amount || 0).toFixed(2)}`
+  const formatFechaPago = (rawDate) => {
+    if (!rawDate) return ''
+    try {
+      // Priorizar YYYY-MM-DD literal para evitar saltos por timezone.
+      const raw = String(rawDate)
+      const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+      if (match) {
+        return `${Number(match[3])}/${Number(match[2])}/${match[1]}`
+      }
+      const d = new Date(raw)
+      if (!Number.isNaN(d.getTime())) {
+        return `${d.getUTCDate()}/${d.getUTCMonth() + 1}/${d.getUTCFullYear()}`
+      }
+      return raw
+    } catch {
+      return String(rawDate)
+    }
+  }
 
   const [facturas, setFacturas] = useState([])
   const [stats, setStats] = useState(null)
@@ -65,6 +83,7 @@ export default function AdminFacturacionView() {
   const [changingEstado, setChangingEstado] = useState(false)
   const [showProveedorDetail, setShowProveedorDetail] = useState(null) // factura seleccionada para detalle
   const [confirmEstadoChange, setConfirmEstadoChange] = useState(null) // { facturaId, nuevoEstado } para confirmación
+  const [estadoCambioFecha, setEstadoCambioFecha] = useState(() => new Date().toISOString().slice(0, 10))
   const [selectedFacturas, setSelectedFacturas] = useState([]) // IDs seleccionados para bulk
   const [bulkEstado, setBulkEstado] = useState('') // estado para cambio masivo
   const [bulkFecha, setBulkFecha] = useState('') // fecha opcional para cambio masivo
@@ -123,7 +142,9 @@ export default function AdminFacturacionView() {
     setLoadingProveedores(true)
     try {
       const [res, tasasRes] = await Promise.all([
-        axios.get('/api/admin/facturas-proveedores/historial'),
+        axios.get('/api/admin/facturas-proveedores/historial', {
+          params: { _ts: Date.now() }
+        }),
         axios.get('/api/admin/precios-pais/tasas-cambio').catch(() => null),
       ])
       if (res.data.success) {
@@ -142,25 +163,68 @@ export default function AdminFacturacionView() {
 
   // Solicitar confirmación para cambiar estado de pago
   const handleCambiarEstadoPago = (facturaId, nuevoEstado) => {
+    setEstadoCambioFecha(nuevoEstado === 'pagada' ? new Date().toISOString().slice(0, 10) : '')
     setConfirmEstadoChange({ facturaId, nuevoEstado })
   }
 
   // Confirmar y ejecutar el cambio de estado
   const confirmarCambioEstado = async () => {
     if (!confirmEstadoChange) return
+    const requiereFechaPago = confirmEstadoChange.nuevoEstado === 'pagada'
+    if (requiereFechaPago && !estadoCambioFecha) {
+      toast.error('Debe seleccionar la fecha del cambio de estado')
+      return
+    }
     
     const { facturaId, nuevoEstado } = confirmEstadoChange
+    const facturaAntes = facturasProveedores.find(f => f.id === facturaId)
+    const fechaAnterior = facturaAntes?.fecha_pago || showProveedorDetail?.fecha_pago || null
     setChangingEstado(true)
     try {
       const res = await axios.post(`/api/admin/facturas-proveedores/${facturaId}/change-status`, {
-        estado: nuevoEstado
+        estado: nuevoEstado,
+        fecha: requiereFechaPago ? estadoCambioFecha : undefined
       })
       if (res.data.success) {
-        toast.success(`Estado cambiado a ${ESTADO_PAGO_PROV[nuevoEstado]?.label || nuevoEstado}`)
+        const labelEstado = ESTADO_PAGO_PROV[nuevoEstado]?.label || nuevoEstado
+        const fechaGuardada = res.data?.fecha_pago_guardada
+        const fechaPagoFinal = nuevoEstado === 'pagada' ? (fechaGuardada || estadoCambioFecha) : null
+        const msg = nuevoEstado === 'pagada'
+          ? `Factura #${facturaId} -> ${labelEstado} | Pago anterior: ${formatFechaPago(fechaAnterior) || 'N/A'} | Pago nuevo: ${formatFechaPago(fechaPagoFinal)}`
+          : `Factura #${facturaId} -> ${labelEstado} | Pago anterior: ${formatFechaPago(fechaAnterior) || 'N/A'} | Pago nuevo: N/A`
+        toast.success(msg)
+        console.info('[facturas-proveedores][change-status]', {
+          facturaId,
+          estadoAnterior: facturaAntes?.estado_pago || showProveedorDetail?.estado_pago || null,
+          estadoNuevo: nuevoEstado,
+          fechaAnterior,
+          fechaEnviada: requiereFechaPago ? estadoCambioFecha : null,
+          fechaGuardadaBackend: fechaGuardada,
+          fechaFinalUI: fechaPagoFinal,
+        })
+
+        // Reflejar cambio en UI inmediatamente para evitar ver datos viejos mientras recarga.
+        setFacturasProveedores(prev => prev.map(f => (
+          f.id === facturaId
+            ? {
+                ...f,
+                estado_pago: nuevoEstado,
+                fecha_pago: fechaPagoFinal,
+              }
+            : f
+        )))
+
+        setShowProveedorDetail(prev => (
+          prev && prev.id === facturaId
+            ? { ...prev, estado_pago: nuevoEstado, fecha_pago: fechaPagoFinal }
+            : prev
+        ))
+
         setShowEstadoMenu(null)
         setConfirmEstadoChange(null)
+        setEstadoCambioFecha(new Date().toISOString().slice(0, 10))
         setShowProveedorDetail(null) // Cerrar modal de detalle
-        loadFacturasProveedores()
+        await loadFacturasProveedores()
       } else {
         toast.error(res.data.error || 'Error al cambiar estado')
       }
@@ -992,7 +1056,7 @@ export default function AdminFacturacionView() {
                             </span>
                             {estadoKey === 'pagada' && f.fecha_pago && (
                               <div className="text-[10px] text-gray-400 mt-0.5">
-                                Pago: {(() => { const d = new Date(f.fecha_pago); return `${d.getUTCDate()}/${d.getUTCMonth()+1}/${d.getUTCFullYear()}`; })()}
+                                Pago: {formatFechaPago(f.fecha_pago)}
                               </div>
                             )}
                           </td>
@@ -1104,10 +1168,10 @@ export default function AdminFacturacionView() {
               </div>
 
               {/* Fecha de pago si está pagada */}
-              {showProveedorDetail.fecha_pago && (
+              {(showProveedorDetail.estado_pago === 'pagada') && showProveedorDetail.fecha_pago && (
                 <div className="p-4 bg-green-50 rounded-lg">
                   <p className="text-xs text-green-600">Fecha de pago</p>
-                  <p className="font-medium text-green-700">{(() => { const d = new Date(showProveedorDetail.fecha_pago); return `${d.getUTCDate()}/${d.getUTCMonth()+1}/${d.getUTCFullYear()}`; })()}</p>
+                  <p className="font-medium text-green-700">{formatFechaPago(showProveedorDetail.fecha_pago)}</p>
                 </div>
               )}
 
@@ -1118,10 +1182,10 @@ export default function AdminFacturacionView() {
                   <button
                     key={estado}
                     onClick={() => handleCambiarEstadoPago(showProveedorDetail.id, estado)}
-                    disabled={changingEstado || (showProveedorDetail.estado_pago || 'facturada') === estado}
+                    disabled={changingEstado}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1 ${
                       (showProveedorDetail.estado_pago || 'facturada') === estado
-                        ? `${config.color} cursor-default`
+                        ? `${config.color}`
                         : 'border hover:bg-gray-50'
                     }`}
                   >
@@ -1151,7 +1215,9 @@ export default function AdminFacturacionView() {
 
             <div className="p-4 bg-gray-50 rounded-lg mb-4">
               <p className="text-sm text-gray-600">
-                ¿Está seguro que desea cambiar el estado de la factura a{' '}
+                {(showProveedorDetail?.estado_pago || 'facturada') === confirmEstadoChange.nuevoEstado
+                  ? '¿Desea actualizar la fecha del estado actual de la factura a '
+                  : '¿Está seguro que desea cambiar el estado de la factura a '}
                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
                   ESTADO_PAGO_PROV[confirmEstadoChange.nuevoEstado]?.color || 'bg-gray-100'
                 }`}>
@@ -1160,9 +1226,28 @@ export default function AdminFacturacionView() {
               </p>
             </div>
 
+            {confirmEstadoChange.nuevoEstado === 'pagada' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Fecha de pago
+                </label>
+                <input
+                  type="date"
+                  value={estadoCambioFecha}
+                  onChange={(e) => setEstadoCambioFecha(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={changingEstado}
+                  required
+                />
+              </div>
+            )}
+
             <div className="flex justify-end gap-3">
               <button
-                onClick={() => setConfirmEstadoChange(null)}
+                onClick={() => {
+                  setConfirmEstadoChange(null)
+                  setEstadoCambioFecha(new Date().toISOString().slice(0, 10))
+                }}
                 disabled={changingEstado}
                 className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 disabled:opacity-50"
               >

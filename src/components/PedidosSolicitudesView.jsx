@@ -151,6 +151,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
   const [balancePdfPreviewUrl, setBalancePdfPreviewUrl] = useState('')
   const [balanceRangeStart, setBalanceRangeStart] = useState(null)
   const [balanceRangeEnd, setBalanceRangeEnd] = useState(null)
+  const [balanceSelectedPages, setBalanceSelectedPages] = useState([])
   const [balanceAntecedentes, setBalanceAntecedentes] = useState([])
   const [showBalanceAntecedentesModal, setShowBalanceAntecedentesModal] = useState(false)
   const [balanceAntecedentesSolicitud, setBalanceAntecedentesSolicitud] = useState(null)
@@ -484,6 +485,17 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     }
   }
 
+  const fetchEmpresaHasBalances = async (empresaId) => {
+    if (!empresaId) return false
+    try {
+      const res = await axios.get(`/api/empresas/${empresaId}/balances`)
+      if (!res.data?.success) return false
+      return Array.isArray(res.data.balances) && res.data.balances.length > 0
+    } catch {
+      return false
+    }
+  }
+
   const openBalanceAntecedentesModal = (solicitud) => {
     if (!solicitud) return
     setExpandedBalanceHistoryId(null)
@@ -499,6 +511,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     setBalancePdfPreviewUrl('')
     setBalanceRangeStart(null)
     setBalanceRangeEnd(null)
+    setBalanceSelectedPages([])
     setShowBalanceUploadModal(true)
   }
 
@@ -509,6 +522,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     setBalancePdfPreviewUrl('')
     setBalanceRangeStart(null)
     setBalanceRangeEnd(null)
+    setBalanceSelectedPages([])
   }
 
   const handleExtractAndSaveBalance = async (solicitud, file, options = {}) => {
@@ -558,11 +572,12 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
 
       if (!balances.length) {
         const antecedenteCount = await fetchBalanceAntecedentesCount(solicitud.id)
+        const hasEmpresaBalance = await fetchEmpresaHasBalances(empresaId)
         if (extractRes.data?.antecedente_guardado || antecedenteCount > 0) {
           toast.success('PDF guardado como antecedente. No se detectaron datos contables para cargar balance.')
           await loadBalanceAntecedentes(solicitud.id)
           setAntecedenteCountBySolicitud(prev => ({ ...prev, [solicitud.id]: antecedenteCount }))
-          setHasBalanceBySolicitud(prev => ({ ...prev, [solicitud.id]: antecedenteCount > 0 }))
+          setHasBalanceBySolicitud(prev => ({ ...prev, [solicitud.id]: antecedenteCount > 0 || hasEmpresaBalance }))
           completedSuccessfully = true
           return
         }
@@ -571,7 +586,12 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
         return
       }
 
-      const saveRes = await axios.post(`/api/empresas/${empresaId}/balances/batch`, { balances })
+      const saveRes = await axios.post(`/api/empresas/${empresaId}/balances/batch`, {
+        balances,
+        balance_antecedente_id: extractRes.data?.antecedente_id || null,
+        source_solicitud_id: solicitud.id,
+        source_solicitud_source: 'pedidos-solicitudes'
+      })
       if (!saveRes.data?.success) {
         toast.error(saveRes.data?.error || 'No se pudo guardar el balance')
         return
@@ -581,8 +601,9 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
       toast.success(`Balance cargado: ${saveRes.data.saved || 0} período(s) guardado(s)${asociadoMsg}`)
       await loadBalanceAntecedentes(solicitud.id)
       const newCount = await fetchBalanceAntecedentesCount(solicitud.id)
+      const hasEmpresaBalance = await fetchEmpresaHasBalances(empresaId)
       setAntecedenteCountBySolicitud(prev => ({ ...prev, [solicitud.id]: newCount }))
-      setHasBalanceBySolicitud(prev => ({ ...prev, [solicitud.id]: newCount > 0 }))
+      setHasBalanceBySolicitud(prev => ({ ...prev, [solicitud.id]: newCount > 0 || hasEmpresaBalance }))
       completedSuccessfully = true
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error al subir y procesar balance PDF')
@@ -614,6 +635,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     setBalancePdfPreviewPage(1)
     setBalanceRangeStart(null)
     setBalanceRangeEnd(null)
+    setBalanceSelectedPages([])
   }
 
   useEffect(() => {
@@ -667,19 +689,38 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     setBalancePdfPreviewPage(Math.floor(parsed))
   }
 
+  const toggleBalanceSelectedPage = () => {
+    const currentPage = Number(balancePdfPreviewPage)
+    if (!Number.isFinite(currentPage) || currentPage < 1) return
+
+    setBalanceSelectedPages((prev) => {
+      if (prev.includes(currentPage)) {
+        return prev.filter((page) => page !== currentPage)
+      }
+      return [...prev, currentPage].sort((a, b) => a - b)
+    })
+  }
+
   const handleConfirmBalanceUpload = async () => {
     if (!balanceUploadSolicitud || !selectedBalanceFile) {
       toast.error('Selecciona primero un PDF')
       return
     }
 
-    const rangeStart = balanceRangeStart || balanceRangeEnd || null
-    const rangeEnd = balanceRangeEnd || balanceRangeStart || null
-    const pageFrom = rangeStart && rangeEnd ? Math.min(rangeStart, rangeEnd) : null
-    const pageTo = rangeStart && rangeEnd ? Math.max(rangeStart, rangeEnd) : null
-    const selectedPages = rangeStart && rangeEnd
-      ? Array.from(new Set([rangeStart, rangeEnd].map((n) => Number(n)).filter((n) => Number.isFinite(n) && n >= 1)))
-      : []
+    const explicitPages = Array.from(new Set(balanceSelectedPages.map((n) => Number(n)).filter((n) => Number.isFinite(n) && n >= 1))).sort((a, b) => a - b)
+    const rangeStart = explicitPages.length === 0 ? (balanceRangeStart || balanceRangeEnd || null) : null
+    const rangeEnd = explicitPages.length === 0 ? (balanceRangeEnd || balanceRangeStart || null) : null
+    const pageFrom = explicitPages.length > 0
+      ? Math.min(...explicitPages)
+      : (rangeStart && rangeEnd ? Math.min(rangeStart, rangeEnd) : null)
+    const pageTo = explicitPages.length > 0
+      ? Math.max(...explicitPages)
+      : (rangeStart && rangeEnd ? Math.max(rangeStart, rangeEnd) : null)
+    const selectedPages = explicitPages.length > 0
+      ? explicitPages
+      : (rangeStart && rangeEnd
+        ? Array.from(new Set([rangeStart, rangeEnd].map((n) => Number(n)).filter((n) => Number.isFinite(n) && n >= 1)))
+        : [])
 
     await handleExtractAndSaveBalance(balanceUploadSolicitud, selectedBalanceFile, { pageFrom, pageTo, selectedPages })
   }
@@ -722,8 +763,10 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
       await loadBalanceAntecedentes(solicitudId)
 
       const newCount = await fetchBalanceAntecedentesCount(solicitudId)
+      const empresaId = balanceAntecedentesSolicitud.empresa_id || balanceAntecedentesSolicitud.empresa_modelo_id
+      const hasEmpresaBalance = await fetchEmpresaHasBalances(empresaId)
       setAntecedenteCountBySolicitud(prev => ({ ...prev, [solicitudId]: newCount }))
-      setHasBalanceBySolicitud(prev => ({ ...prev, [solicitudId]: newCount > 0 }))
+      setHasBalanceBySolicitud(prev => ({ ...prev, [solicitudId]: newCount > 0 || hasEmpresaBalance }))
 
       if (expandedBalanceHistoryId === item.id) {
         setExpandedBalanceHistoryId(null)
@@ -765,16 +808,18 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
 
       const results = await Promise.all(rows.map(async (sol) => {
         const count = await fetchBalanceAntecedentesCount(sol.id)
-        return { id: sol.id, count }
+        const empresaId = sol.empresa_id || sol.empresa_modelo_id
+        const hasBalance = await fetchEmpresaHasBalances(empresaId)
+        return { id: sol.id, count, hasBalance }
       }))
 
       if (cancelled) return
 
       const countMap = {}
       const hasBalanceMap = {}
-      results.forEach(({ id, count }) => {
+      results.forEach(({ id, count, hasBalance }) => {
         countMap[id] = count
-        hasBalanceMap[id] = count > 0
+        hasBalanceMap[id] = count > 0 || Boolean(hasBalance)
       })
 
       setAntecedenteCountBySolicitud(countMap)
@@ -2752,7 +2797,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                 <div>
                   <button
                     onClick={() => markBalanceRangeFromPreview('start')}
@@ -2773,11 +2818,21 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                 </div>
                 <div>
                   <button
+                    onClick={toggleBalanceSelectedPage}
+                    disabled={!selectedBalanceFile}
+                    className="w-full px-3 py-2 text-sm font-medium text-sky-700 bg-sky-50 rounded-xl hover:bg-sky-100 disabled:opacity-50"
+                  >
+                    {balanceSelectedPages.includes(Number(balancePdfPreviewPage)) ? 'Quitar pág. actual' : `Agregar pág. ${balancePdfPreviewPage}`}
+                  </button>
+                </div>
+                <div>
+                  <button
                     onClick={() => {
                       const currentPage = Number(balancePdfPreviewPage)
                       if (!Number.isFinite(currentPage) || currentPage < 1) return
                       setBalanceRangeStart(currentPage)
                       setBalanceRangeEnd(currentPage)
+                      setBalanceSelectedPages([currentPage])
                     }}
                     disabled={!selectedBalanceFile}
                     className="w-full px-3 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-xl hover:bg-emerald-100 disabled:opacity-50"
@@ -2788,13 +2843,16 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
               </div>
 
               {(() => {
+                const explicitPages = Array.from(new Set(balanceSelectedPages)).sort((a, b) => a - b)
                 const rangeStart = balanceRangeStart || balanceRangeEnd
                 const rangeEnd = balanceRangeEnd || balanceRangeStart
                 const from = rangeStart && rangeEnd ? Math.min(rangeStart, rangeEnd) : null
                 const to = rangeStart && rangeEnd ? Math.max(rangeStart, rangeEnd) : null
-                const pagesText = from
-                  ? (to && to !== from ? `${from} y ${to}` : `${from}`)
-                  : null
+                const pagesText = explicitPages.length > 0
+                  ? explicitPages.join(', ')
+                  : (from
+                    ? (to && to !== from ? `${from} y ${to}` : `${from}`)
+                    : null)
                 return (
               <p className="text-xs text-gray-500 mb-5">
                 {pagesText

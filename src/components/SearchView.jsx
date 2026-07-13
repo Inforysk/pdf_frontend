@@ -1034,6 +1034,15 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
       const nextHistory = balanceGeneralHistory.filter((entry) => entry.id !== item.id)
       setBalanceGeneralHistory(nextHistory)
       setBalanceGeneralByEmpresa(prev => ({ ...prev, [selectedBalanceEmpresa.id]: nextHistory.length }))
+      const shouldHideBalance = Number(res.data?.remaining_antecedentes || 0) === 0 && Number(res.data?.remaining_balances || 0) === 0
+      if (shouldHideBalance) {
+        setResults((prev) => prev.map((empresa) => (
+          empresa.id === selectedBalanceEmpresa.id
+            ? { ...empresa, has_balance_general: false }
+            : empresa
+        )))
+        setSelectedBalanceEmpresa((prev) => prev ? { ...prev, has_balance_general: false } : prev)
+      }
       toast.success('Antecedente PDF eliminado')
     } catch (err) {
       toast.error(err.response?.data?.error || 'No se pudo eliminar el antecedente PDF')
