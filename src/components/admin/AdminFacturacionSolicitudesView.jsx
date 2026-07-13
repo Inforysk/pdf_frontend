@@ -1658,7 +1658,7 @@ export default function AdminFacturacionSolicitudesView() {
 
                             <div className="flex items-center justify-between gap-3 text-xs text-gray-500 pt-2 border-t">
                               <span>Actualizada</span>
-                              <span>{sol.updated_at}</span>
+                              <span>{sol.fecha_completado || sol.updated_at}</span>
                             </div>
                           </div>
                         ))}
@@ -1780,7 +1780,7 @@ export default function AdminFacturacionSolicitudesView() {
                                   </span>
                                 )}
                               </td>
-                              <td className="px-3 py-2 text-center text-xs text-gray-500">{sol.updated_at}</td>
+                              <td className="px-3 py-2 text-center text-xs text-gray-500">{sol.fecha_completado || sol.updated_at}</td>
                               <td className="px-3 py-2 text-center">
                                 {sol.facturado ? (
                                   (() => {
