@@ -193,6 +193,15 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
   }
 
   const inferPaisDisplay = (sol) => {
+    const digits = (sol.cuit || '').replace(/\D/g, '')
+    const paisTexto = String(sol.pais || '').trim().toLowerCase()
+    const razonTexto = String(sol.razon_social || '').trim().toLowerCase()
+
+    // Priorizar señales fuertes de Uruguay para evitar clasificaciones erróneas a Chile.
+    if (paisTexto.includes('uruguay') || razonTexto.includes('uruguay') || digits.length === 12) {
+      return 'Uruguay'
+    }
+
     const resolvedByCode = resolvePaisNombre(sol.pais, sol.codigo_pais)
     if (resolvedByCode && resolvedByCode !== 'Argentina') return resolvedByCode
 
@@ -213,7 +222,6 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
     if (tipo === 'RTN') return 'Honduras'
     if (tipo === 'CEDULA JURIDICA') return 'Costa Rica'
     if (tipo === 'DPI') return 'Guatemala'
-    const digits = (sol.cuit || '').replace(/\D/g, '')
     if (digits.length === 12) return 'Uruguay'
     if (digits.length === 9) return 'Rep. Dominicana'
     return sol.pais || 'Argentina'
