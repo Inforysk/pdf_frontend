@@ -1398,6 +1398,8 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     const dateFields = new Set(['fecha_contrato_social', 'fecha_inscripcion_afip', 'fecha_informe'])
     if (dateFields.has(campo)) {
       const dmy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+        || raw.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/)
+        || raw.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/)
       if (dmy) {
         const dd = dmy[1].padStart(2, '0')
         const mm = dmy[2].padStart(2, '0')
