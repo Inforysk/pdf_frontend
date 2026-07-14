@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 import {
   TrendingUp, TrendingDown, DollarSign, Users, AlertCircle,
   BarChart3, PieChart, RefreshCw, Loader2, ArrowUpRight, ArrowDownRight,
-  Calendar, Target, Building2, CreditCard
+  Calendar, Target, Building2, CreditCard, FileText, ChevronDown, ChevronRight
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart as RePieChart, Pie, Cell,
@@ -15,8 +15,167 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 
 export default function AdminRevenueView() {
   const [data, setData] = useState(null)
+  const [billingData, setBillingData] = useState(null)
+  const [clientesAnalytics, setClientesAnalytics] = useState(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [activeTab, setActiveTab] = useState('clientes')
+  const [showAnalytics, setShowAnalytics] = useState(false)
+
+  const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+
+  const buildClientesAnalytics = (facturas = []) => {
+    const now = new Date()
+    const months = []
+    for (let i = 11; i >= 0; i -= 1) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const key = monthKey(d)
+      months.push({
+        key,
+        periodo: key,
+        periodo_label: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        facturas: 0,
+        revenue_total: 0,
+        revenue_cobrado: 0,
+        revenue_base: 0,
+        revenue_excedentes: 0,
+        facturas_pagadas: 0,
+      })
+    }
+    const monthMap = new Map(months.map(m => [m.key, m]))
+
+    const byProvider = new Map()
+    const byClient = new Map()
+
+    facturas.forEach((f) => {
+      const total = Number(f.total_eur || 0)
+      const estado = String(f.estado_pago || '').toLowerCase()
+      const created = f.created_at ? new Date(f.created_at) : null
+      if (!created || Number.isNaN(created.getTime())) return
+
+      const mk = monthKey(created)
+      const bucket = monthMap.get(mk)
+      if (bucket) {
+        bucket.facturas += 1
+        bucket.revenue_total += total
+        if (estado === 'pagada') {
+          bucket.revenue_cobrado += total
+          bucket.facturas_pagadas += 1
+        }
+      }
+
+      const provName = f.proveedor_nombre || f.proveedor_codigo || 'Sin proveedor'
+      if (!byProvider.has(provName)) byProvider.set(provName, { plan_nombre: provName, facturas: 0, revenue: 0, clientes: new Set() })
+      const prov = byProvider.get(provName)
+      prov.facturas += 1
+      prov.revenue += total
+      if (f.usuario_abono) prov.clientes.add(f.usuario_abono)
+
+      const clientKey = f.usuario_abono || `SIN-${f.id}`
+      if (!byClient.has(clientKey)) {
+        byClient.set(clientKey, {
+          id: clientKey,
+          nombre: f.usuario_nombre || clientKey,
+          revenue_total: 0,
+          facturas: 0,
+          ultima_factura: null,
+        })
+      }
+      const cli = byClient.get(clientKey)
+      cli.revenue_total += total
+      cli.facturas += 1
+      if (!cli.ultima_factura || new Date(cli.ultima_factura) < created) cli.ultima_factura = created.toISOString()
+    })
+
+    months.forEach((m) => {
+      m.revenue_total = Number(m.revenue_total.toFixed(2))
+      m.revenue_cobrado = Number(m.revenue_cobrado.toFixed(2))
+    })
+
+    const growth = []
+    for (let i = 1; i < months.length; i += 1) {
+      const prev = months[i - 1].revenue_cobrado
+      const curr = months[i].revenue_cobrado
+      growth.push({
+        periodo: months[i].periodo,
+        growth_pct: prev > 0 ? Number((((curr - prev) / prev) * 100).toFixed(1)) : 0,
+      })
+    }
+
+    const revenuePorPlan = Array.from(byProvider.values())
+      .map(p => ({ ...p, revenue: Number(p.revenue.toFixed(2)), clientes: p.clientes.size }))
+      .sort((a, b) => b.revenue - a.revenue)
+
+    const topClientes = Array.from(byClient.values())
+      .map(c => ({ ...c, revenue_total: Number(c.revenue_total.toFixed(2)) }))
+      .sort((a, b) => b.revenue_total - a.revenue_total)
+      .slice(0, 5)
+
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    let mesFacturas = 0
+    let mesPagadas = 0
+    let mesRevenue = 0
+    let mesCobrado = 0
+    const clientesActivosSet = new Set()
+
+    facturas.forEach((f) => {
+      const total = Number(f.total_eur || 0)
+      const estado = String(f.estado_pago || '').toLowerCase()
+      const created = f.created_at ? new Date(f.created_at) : null
+      if (!created || Number.isNaN(created.getTime())) return
+      if (f.usuario_abono) clientesActivosSet.add(f.usuario_abono)
+
+      if (created >= startOfMonth) {
+        mesFacturas += 1
+        mesRevenue += total
+      }
+
+      const pagoDate = f.fecha_pago ? new Date(`${f.fecha_pago}T00:00:00`) : created
+      if (estado === 'pagada' && pagoDate >= startOfMonth) {
+        mesPagadas += 1
+        mesCobrado += total
+      }
+    })
+
+    const ultimos3 = months.slice(-3)
+    const promedio = ultimos3.length ? (ultimos3.reduce((acc, m) => acc + m.revenue_cobrado, 0) / ultimos3.length) : 0
+    const tendencia = months.length >= 3 ? (months[months.length - 1].revenue_cobrado - months[months.length - 3].revenue_cobrado) / 2 : 0
+
+    return {
+      mrr: {
+        valor: Number(months.reduce((acc, m) => acc + m.revenue_cobrado, 0).toFixed(2)),
+        clientes_activos: clientesActivosSet.size,
+        clientes_mensuales: clientesActivosSet.size,
+        clientes_anuales: 0,
+      },
+      mes_actual: {
+        revenue: Number(mesRevenue.toFixed(2)),
+        cobrado: Number(mesCobrado.toFixed(2)),
+        facturas: mesFacturas,
+        pagadas: mesPagadas,
+        variacion_mom: growth.length ? growth[growth.length - 1].growth_pct : 0,
+      },
+      churn: {
+        rate: 0,
+        clientes_perdidos: 0,
+        clientes_anterior: clientesActivosSet.size,
+      },
+      proyecciones: {
+        mes_siguiente: Number(Math.max(0, promedio + tendencia).toFixed(2)),
+        trimestre: Number(Math.max(0, promedio * 3 + tendencia * 3).toFixed(2)),
+        anual: Number(Math.max(0, promedio * 12 + tendencia * 6).toFixed(2)),
+      },
+      historico: {
+        revenue_mensual: months,
+        growth_mom: growth,
+        nuevos_clientes: months.map(m => ({ periodo: m.periodo, nuevos_clientes: 0 })),
+      },
+      desglose: {
+        por_plan: revenuePorPlan,
+        top_clientes: topClientes,
+      },
+    }
+  }
 
   useEffect(() => {
     loadDashboard()
@@ -27,9 +186,24 @@ export default function AdminRevenueView() {
     else setLoading(true)
     
     try {
-      const res = await axios.get('/api/admin/revenue/dashboard')
-      if (res.data.success) {
-        setData(res.data.dashboard)
+      const [revenueRes, billingRes] = await Promise.all([
+        axios.get('/api/admin/revenue/dashboard'),
+        axios.get('/api/admin/dashboard')
+      ])
+
+      if (revenueRes.data.success && billingRes.data) {
+        setData(revenueRes.data.dashboard)
+        setBillingData(billingRes.data)
+        try {
+          const hist = await axios.get('/api/admin/facturas-proveedores/historial', { params: { _ts: Date.now() } })
+          if (hist?.data?.success) {
+            setClientesAnalytics(buildClientesAnalytics(hist.data.facturas || []))
+          } else {
+            setClientesAnalytics(null)
+          }
+        } catch {
+          setClientesAnalytics(null)
+        }
       } else {
         toast.error('Error cargando dashboard')
       }
@@ -63,7 +237,7 @@ export default function AdminRevenueView() {
     )
   }
 
-  if (!data) {
+  if (!data || !billingData) {
     return (
       <div className="text-center py-20">
         <AlertCircle className="w-12 h-12 mx-auto text-gray-400 mb-4" />
@@ -75,7 +249,17 @@ export default function AdminRevenueView() {
     )
   }
 
-  const { mrr, mes_actual, churn, proyecciones, historico, desglose } = data
+  const analytics = activeTab === 'clientes' && clientesAnalytics ? clientesAnalytics : data
+  const { mrr, mes_actual, churn, proyecciones, historico, desglose } = analytics
+  const eurUsd = billingData?.eur_usd || 1.2
+  const fmtDual = (eur) => {
+    const e = parseFloat(eur || 0)
+    return `€${e.toLocaleString()} | $${Math.round(e * eurUsd).toLocaleString()}`
+  }
+
+  const clientes = billingData?.facturas_proveedores || {}
+  const suscripciones = billingData?.facturas_clientes || {}
+  const totalMesOperativo = Number(clientes.pagado_mes || 0) + Number(suscripciones.pagado_mes || 0)
 
   return (
     <div className="space-y-6 px-1 sm:px-0">
@@ -95,7 +279,109 @@ export default function AdminRevenueView() {
         </button>
       </div>
 
-      {/* KPI Cards */}
+      {/* Bloque principal: Ingresos operativos (alineado a Facturación Global) */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-4 sm:p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Ingresos Operativos</h2>
+            <p className="text-sm text-gray-500">Vista por Clientes y Suscripciones con los mismos montos de Facturación Global</p>
+          </div>
+          <div className="bg-gray-100 p-1 rounded-lg inline-flex gap-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab('clientes')}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-2 ${
+                activeTab === 'clientes' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              <CreditCard className="w-4 h-4" />
+              Clientes
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('suscripciones')}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-2 ${
+                activeTab === 'suscripciones' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              Suscripciones
+            </button>
+          </div>
+        </div>
+
+        {activeTab === 'clientes' ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-amber-50 rounded-lg p-3 text-center">
+              <div className="text-xl font-bold text-amber-600">{clientes.pendientes || 0}</div>
+              <div className="text-xs text-amber-700">Pendientes</div>
+              <div className="text-xs text-amber-500 mt-0.5">{fmtDual(clientes.total_pendiente)}</div>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-3 text-center">
+              <div className="text-xl font-bold text-blue-600">{clientes.facturadas || 0}</div>
+              <div className="text-xs text-blue-700">Facturadas</div>
+              <div className="text-xs text-blue-500 mt-0.5">{fmtDual(clientes.total_facturado)}</div>
+            </div>
+            <div className="bg-green-50 rounded-lg p-3 text-center">
+              <div className="text-xl font-bold text-green-600">{clientes.pagadas || 0}</div>
+              <div className="text-xs text-green-700">Pagadas</div>
+              <div className="text-xs text-green-500 mt-0.5">{fmtDual(clientes.total_pagado)}</div>
+            </div>
+            <div className="bg-emerald-50 rounded-lg p-3 text-center">
+              <div className="text-xl font-bold text-emerald-600">{fmtDual(clientes.pagado_mes)}</div>
+              <div className="text-xs text-emerald-700">Pagado este mes</div>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-amber-50 rounded-lg p-3 text-center">
+              <div className="text-xl font-bold text-amber-600">{suscripciones.pendientes || 0}</div>
+              <div className="text-xs text-amber-700">Pendientes</div>
+              <div className="text-xs text-amber-500 mt-0.5">{fmtDual(suscripciones.total_pendiente)}</div>
+            </div>
+            <div className="bg-red-50 rounded-lg p-3 text-center">
+              <div className="text-xl font-bold text-red-600">{suscripciones.vencidas || 0}</div>
+              <div className="text-xs text-red-700">Vencidas</div>
+            </div>
+            <div className="bg-green-50 rounded-lg p-3 text-center">
+              <div className="text-xl font-bold text-green-600">{suscripciones.pagadas || 0}</div>
+              <div className="text-xs text-green-700">Pagadas</div>
+              <div className="text-xs text-green-500 mt-0.5">{fmtDual(suscripciones.total_pagado)}</div>
+            </div>
+            <div className="bg-emerald-50 rounded-lg p-3 text-center">
+              <div className="text-xl font-bold text-emerald-600">{fmtDual(suscripciones.pagado_mes)}</div>
+              <div className="text-xs text-emerald-700">Cobrado este mes</div>
+            </div>
+          </div>
+        )}
+
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center justify-between">
+          <span className="text-sm text-slate-600">Ingreso total del mes (Clientes + Suscripciones)</span>
+          <span className="text-lg font-semibold text-slate-900">{fmtDual(totalMesOperativo)}</span>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+        <button
+          type="button"
+          onClick={() => setShowAnalytics(prev => !prev)}
+          className="w-full flex items-center justify-between gap-3 text-left"
+        >
+          <div>
+            <h3 className="font-semibold text-gray-900">Analítica avanzada de Revenue</h3>
+            <p className="text-sm text-gray-500">MRR, churn, proyecciones y tendencias históricas</p>
+          </div>
+          {showAnalytics ? (
+            <ChevronDown className="w-5 h-5 text-gray-500 shrink-0" />
+          ) : (
+            <ChevronRight className="w-5 h-5 text-gray-500 shrink-0" />
+          )}
+        </button>
+      </div>
+
+      {showAnalytics && (
+        <>
+      {/* KPI Cards (analítica de revenue) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* MRR */}
         <div className="col-span-2 lg:col-span-1 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-4 sm:p-5 text-white">
@@ -103,7 +389,7 @@ export default function AdminRevenueView() {
             <div className="p-2 bg-white/20 rounded-lg shrink-0">
               <DollarSign className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[11px] sm:text-xs bg-white/20 px-2 py-1 rounded-full whitespace-nowrap">MRR</span>
+                <span className="text-[11px] sm:text-xs bg-white/20 px-2 py-1 rounded-full whitespace-nowrap">{activeTab === 'clientes' ? 'Clientes' : 'MRR'}</span>
           </div>
           <p className="text-2xl sm:text-3xl font-bold break-words">{formatCurrency(mrr.valor)}</p>
           <p className="text-xs sm:text-sm text-blue-100 mt-1">
@@ -428,6 +714,8 @@ export default function AdminRevenueView() {
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   )
 }
