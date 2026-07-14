@@ -27,6 +27,10 @@ const ESTADO_PAGO_PROV = {
 export default function AdminFacturacionView() {
   const currencySymbol = (moneda) => (moneda === 'USD' ? '$' : '€')
   const formatByCurrency = (amount, moneda) => `${currencySymbol(moneda)}${parseFloat(amount || 0).toFixed(2)}`
+  const normalizeEstadoPago = (estado) => {
+    const normalized = String(estado || 'pendiente').trim().toLowerCase()
+    return ESTADO_PAGO_PROV[normalized] ? normalized : 'pendiente'
+  }
   const formatFechaPago = (rawDate) => {
     if (!rawDate) return ''
     try {
@@ -72,13 +76,14 @@ export default function AdminFacturacionView() {
   const [showDeleteModal, setShowDeleteModal] = useState(null)
   const [deleting, setDeleting] = useState(false)
 
-  // Tab activa: 'clientes' o 'proveedores'
-  const [activeTab, setActiveTab] = useState('clientes')
+  // Tab activa: 'clientes' (suscripciones) o 'proveedores' (facturas a clientes)
+  const [activeTab, setActiveTab] = useState('proveedores')
   
   // Facturas a proveedores
   const [facturasProveedores, setFacturasProveedores] = useState([])
   const [loadingProveedores, setLoadingProveedores] = useState(false)
   const [proveedoresStats, setProveedoresStats] = useState({})
+  const [estadoPagoFilter, setEstadoPagoFilter] = useState('')
   const [showEstadoMenu, setShowEstadoMenu] = useState(null)
   const [changingEstado, setChangingEstado] = useState(false)
   const [showProveedorDetail, setShowProveedorDetail] = useState(null) // factura seleccionada para detalle
@@ -202,6 +207,17 @@ export default function AdminFacturacionView() {
 
     return list
   }, [facturasProveedores, sortByProv, sortDirProv])
+
+  const visibleFacturasProveedores = useMemo(() => {
+    if (!estadoPagoFilter) return sortedFacturasProveedores
+    return sortedFacturasProveedores.filter(f => normalizeEstadoPago(f.estado_pago) === estadoPagoFilter)
+  }, [sortedFacturasProveedores, estadoPagoFilter])
+
+  const selectedVisibleCount = useMemo(() => {
+    if (visibleFacturasProveedores.length === 0 || selectedFacturas.length === 0) return 0
+    const visibleIds = new Set(visibleFacturasProveedores.map(f => f.id))
+    return selectedFacturas.filter(id => visibleIds.has(id)).length
+  }, [visibleFacturasProveedores, selectedFacturas])
 
   // Función para descargar PDF con autenticación
   const handleDownloadPdf = async (facturaId) => {
@@ -363,10 +379,10 @@ export default function AdminFacturacionView() {
 
   // Seleccionar/deseleccionar todas las facturas
   const toggleSelectAll = () => {
-    if (selectedFacturas.length === facturasProveedores.length) {
+    if (selectedFacturas.length === visibleFacturasProveedores.length) {
       setSelectedFacturas([])
     } else {
-      setSelectedFacturas(facturasProveedores.map(f => f.id))
+      setSelectedFacturas(visibleFacturasProveedores.map(f => f.id))
     }
   }
 
@@ -397,6 +413,7 @@ export default function AdminFacturacionView() {
         setBulkEstado('')
         setBulkFecha('')
         setShowBulkConfirm(false)
+        setEstadoPagoFilter('')
         loadFacturasProveedores()
       } else {
         toast.error(res.data.error || 'Error al cambiar estados')
@@ -603,7 +620,7 @@ export default function AdminFacturacionView() {
                 className="min-w-0 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
               >
                 <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">Nueva Factura</span>
+                <span className="hidden sm:inline">Nueva Suscripción</span>
                 <span className="sm:hidden">Nueva</span>
               </button>
               <button
@@ -632,17 +649,6 @@ export default function AdminFacturacionView() {
       <div className="bg-gray-100 p-1 rounded-lg">
         <div className="grid grid-cols-1 sm:flex gap-1 sm:min-w-max">
         <button
-          onClick={() => setActiveTab('clientes')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center sm:justify-start gap-2 min-w-0 ${
-            activeTab === 'clientes' 
-              ? 'bg-white text-blue-600 shadow-sm' 
-              : 'text-gray-600 hover:text-gray-800'
-          }`}
-        >
-          <DollarSign className="w-4 h-4" />
-          <span className="truncate">Facturas a Clientes</span>
-        </button>
-        <button
           onClick={() => setActiveTab('proveedores')}
           className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center sm:justify-start gap-2 min-w-0 ${
             activeTab === 'proveedores' 
@@ -651,7 +657,18 @@ export default function AdminFacturacionView() {
           }`}
         >
           <Receipt className="w-4 h-4" />
-          <span className="truncate">Facturas a Proveedores</span>
+          <span className="truncate">Facturas a Clientes</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('clientes')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center sm:justify-start gap-2 min-w-0 ${
+            activeTab === 'clientes' 
+              ? 'bg-white text-blue-600 shadow-sm' 
+              : 'text-gray-600 hover:text-gray-800'
+          }`}
+        >
+          <DollarSign className="w-4 h-4" />
+          <span className="truncate">Suscripciones</span>
         </button>
         </div>
       </div>
@@ -980,8 +997,23 @@ export default function AdminFacturacionView() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {Object.entries(ESTADO_PAGO_PROV).map(([key, cfg]) => {
                 const stat = proveedoresStats[key] || { cantidad: 0, total_eur: 0, total_usd: 0 }
+                    const isAllMode = !estadoPagoFilter
+                    const isActiveCard = key === 'pendiente' ? isAllMode : estadoPagoFilter === key
                 return (
-                  <div key={key} className={`${cfg.color} rounded-xl p-3 sm:p-4 min-w-0`}>
+                  <button
+                    key={key}
+                    type="button"
+                        onClick={() => {
+                          if (key === 'pendiente') {
+                            setEstadoPagoFilter('')
+                            return
+                          }
+                          setEstadoPagoFilter(prev => (prev === key ? '' : key))
+                        }}
+                    className={`${cfg.color} rounded-xl p-3 sm:p-4 min-w-0 text-left transition-all ${
+                          isActiveCard ? 'ring-2 ring-blue-500' : 'hover:opacity-95'
+                    }`}
+                  >
                     <div className="flex items-center gap-2 min-w-0">
                       <cfg.icon className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
                       <span className="font-medium">{cfg.label}</span>
@@ -993,7 +1025,7 @@ export default function AdminFacturacionView() {
                         return `€${totals.eur.toFixed(2)} | $${totals.usd.toFixed(2)}`
                       })()}
                     </p>
-                  </div>
+                  </button>
                 )
               })}
             </div>
@@ -1001,21 +1033,44 @@ export default function AdminFacturacionView() {
 
           {/* Tabla de facturas a proveedores */}
           <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+            {estadoPagoFilter && (
+              <div className="px-4 pt-4 pb-2 flex items-center justify-between gap-3">
+                <p className="text-sm text-gray-600">
+                  Filtro activo: <span className="font-medium">{ESTADO_PAGO_PROV[estadoPagoFilter]?.label || estadoPagoFilter}</span>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setEstadoPagoFilter('')}
+                  className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 border border-blue-600 rounded-lg shadow-sm hover:bg-blue-700"
+                >
+                  Ver todas
+                </button>
+              </div>
+            )}
             {loadingProveedores ? (
               <div className="p-8 flex justify-center">
                 <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
               </div>
-            ) : facturasProveedores.length === 0 ? (
+            ) : visibleFacturasProveedores.length === 0 ? (
               <div className="p-8 text-center text-gray-500">
                 <Receipt className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                <p>No hay facturas a proveedores generadas</p>
-                <p className="text-sm mt-1">Ve a Facturación de Solicitudes para generar facturas</p>
+                <p>No hay facturas para el filtro seleccionado</p>
+                <p className="text-sm mt-1">Haz clic nuevamente en la card para limpiar el filtro</p>
+                {estadoPagoFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setEstadoPagoFilter('')}
+                    className="mt-3 px-4 py-2 text-sm font-semibold text-white bg-blue-600 border border-blue-600 rounded-lg shadow-sm hover:bg-blue-700"
+                  >
+                    Ver todas
+                  </button>
+                )}
               </div>
             ) : (
               <>
                 <div className="md:hidden divide-y divide-gray-100">
-                  {sortedFacturasProveedores.map(f => {
-                    const estadoKey = f.estado_pago || 'pendiente'
+                  {visibleFacturasProveedores.map(f => {
+                    const estadoKey = normalizeEstadoPago(f.estado_pago)
                     const estadoCfg = ESTADO_PAGO_PROV[estadoKey] || ESTADO_PAGO_PROV.pendiente
                     const monedaFactura = f.moneda || 'EUR'
                     return (
@@ -1036,7 +1091,7 @@ export default function AdminFacturacionView() {
 
                         <div className="grid grid-cols-2 gap-3 text-xs">
                           <div className="col-span-2">
-                            <p className="text-gray-400 mb-1">Cliente</p>
+                            <p className="text-gray-400 mb-1">Usuarios</p>
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{f.usuario_abono}</span>
                               {f.usuario_nombre && <span className="text-gray-700">{f.usuario_nombre}</span>}
@@ -1127,10 +1182,10 @@ export default function AdminFacturacionView() {
                       <th className="px-3 py-3 w-10">
                         <input
                           type="checkbox"
-                          checked={sortedFacturasProveedores.length > 0 && selectedFacturas.length === sortedFacturasProveedores.length}
+                          checked={visibleFacturasProveedores.length > 0 && selectedVisibleCount === visibleFacturasProveedores.length}
                           onChange={toggleSelectAll}
                           className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                          title={selectedFacturas.length === sortedFacturasProveedores.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                          title={selectedVisibleCount === visibleFacturasProveedores.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
                         />
                       </th>
                       <th className="px-4 py-3 text-left">
@@ -1145,7 +1200,7 @@ export default function AdminFacturacionView() {
                       </th>
                       <th className="px-4 py-3 text-left">
                         <button onClick={() => handleSortProveedores('cliente')} className="inline-flex items-center gap-1 hover:text-gray-700">
-                          Cliente <span>{getSortIndicator('cliente')}</span>
+                          Usuarios <span>{getSortIndicator('cliente')}</span>
                         </button>
                       </th>
                       <th className="px-4 py-3 text-center">
@@ -1167,8 +1222,8 @@ export default function AdminFacturacionView() {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {sortedFacturasProveedores.map(f => {
-                      const estadoKey = f.estado_pago || 'pendiente'
+                    {visibleFacturasProveedores.map(f => {
+                      const estadoKey = normalizeEstadoPago(f.estado_pago)
                       const estadoCfg = ESTADO_PAGO_PROV[estadoKey] || ESTADO_PAGO_PROV.pendiente
                       const monedaFactura = f.moneda || 'EUR'
                       return (
@@ -1852,7 +1907,7 @@ function CreateFacturaModal({ empresas, onClose, onSuccess }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl max-w-md w-full p-6">
-        <h2 className="text-lg font-semibold mb-4">Nueva Factura</h2>
+        <h2 className="text-lg font-semibold mb-4">Nueva Suscripción</h2>
 
         {/* Tabs para tipo de factura */}
         <div className="flex gap-2 mb-4">

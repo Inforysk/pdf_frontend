@@ -681,22 +681,28 @@ function App() {
   if (isAdmin || user?.rol === 'analista') {
     sidebarItems.push({ id: '_sep_sistema', separator: true, label: t('nav.system') })
   }
-  if (isAdmin || user?.rol === 'analista') sidebarItems.push({ id: 'usuarios-pedidos', label: 'Usuarios Clientes', icon: Users2, color: 'cyan' })
-  if (isAdmin) sidebarItems.push({ id: 'creditos', label: t('nav.credits'), icon: CreditCard, color: 'amber' })
-  if (isAdmin) sidebarItems.push({ id: 'planes', label: t('nav.plans'), icon: Package, color: 'indigo' })
-  if (isAdmin) sidebarItems.push({ id: 'cupones', label: t('nav.coupons'), icon: Ticket, color: 'purple' })
-  if (isAdmin) sidebarItems.push({ id: 'dunning', label: t('nav.paymentsDunning'), icon: AlertTriangle, color: 'red' })
+  if (isAdmin) sidebarItems.push({ id: '_sep_ops', separator: true, label: 'Operación' })
+  if (isAdmin || user?.rol === 'analista') sidebarItems.push({ id: 'facturacion-solicitudes', label: 'Facturación Solicitudes', icon: CreditCard, color: 'emerald' })
   if (isAdmin) sidebarItems.push({ id: 'facturacion-admin', label: t('nav.billing'), icon: FileText, color: 'blue' })
-  if (isAdmin) sidebarItems.push({ id: 'revenue', label: t('nav.revenue'), icon: TrendingUp, color: 'green' })
+  if (isAdmin) sidebarItems.push({ id: 'dunning', label: 'Cobranza', icon: AlertTriangle, color: 'red' })
+  if (isAdmin) sidebarItems.push({ id: 'revenue', label: 'Ingresos', icon: TrendingUp, color: 'green' })
+  if (isAdmin) sidebarItems.push({ id: 'alertas', label: t('nav.alerts'), icon: Bell, color: alertasCount > 0 ? 'amber' : 'blue', alertCount: alertasCount })
+
+  if (isAdmin) sidebarItems.push({ id: '_sep_comercial', separator: true, label: 'Comercial' })
+  if (isAdmin || user?.rol === 'analista') sidebarItems.push({ id: 'usuarios-pedidos', label: 'Cuentas de Clientes', icon: Users2, color: 'cyan' })
+  if (isAdmin) sidebarItems.push({ id: 'planes', label: t('nav.plans'), icon: Package, color: 'indigo' })
+  if (isAdmin) sidebarItems.push({ id: 'creditos', label: t('nav.credits'), icon: CreditCard, color: 'amber' })
+  if (isAdmin) sidebarItems.push({ id: 'cupones', label: t('nav.coupons'), icon: Ticket, color: 'purple' })
+  if (isAdmin) sidebarItems.push({ id: 'productos-admin', label: t('nav.products'), icon: Package, color: 'violet' })
+
+  if (isAdmin) sidebarItems.push({ id: '_sep_config', separator: true, label: 'Configuración' })
   if (isAdmin) sidebarItems.push({ id: 'pasarelas', label: t('nav.paymentGateways'), icon: Webhook, color: 'purple' })
   if (isAdmin) sidebarItems.push({ id: 'precios-pais', label: t('nav.countryPricing'), icon: Globe, color: 'teal' })
   if (isAdmin) sidebarItems.push({ id: 'proveedores-pricing', label: t('nav.pricingEngine'), icon: Calculator, color: 'cyan' })
-  if (isAdmin || user?.rol === 'analista') sidebarItems.push({ id: 'facturacion-solicitudes', label: 'Fact. Solicitudes', icon: CreditCard, color: 'emerald' })
-  if (isAdmin) sidebarItems.push({ id: 'productos-admin', label: t('nav.products'), icon: Package, color: 'violet' })
-  if (isAdmin) sidebarItems.push({ id: 'alertas', label: t('nav.alerts'), icon: Bell, color: alertasCount > 0 ? 'amber' : 'blue', alertCount: alertasCount })
+
   if (isAdmin) sidebarItems.push({ 
     id: 'admin', 
-    label: 'Panel Administración', 
+    label: 'Administración', 
     icon: Shield, 
     color: aprobacionesCount > 0 ? 'amber' : 'red', 
     alertCount: aprobacionesCount,
@@ -790,7 +796,7 @@ function App() {
                     }`}
                   >
                     <Icon className={`h-5 w-5 flex-shrink-0 ${isActive ? activeIcon : item.alertCount > 0 ? 'text-amber-500' : 'text-gray-400'}`} />
-                    <span className="flex-1 text-left">{item.label}</span>
+                    <span className="flex-1 text-left truncate">{item.label}</span>
                     {item.alertCount > 0 && (
                       <span className="flex items-center justify-center rounded-full text-[10px] text-white font-bold h-4 w-4 bg-amber-500 mr-1">
                         {item.alertCount > 9 ? '9+' : item.alertCount}
@@ -852,7 +858,7 @@ function App() {
                 title={!sidebarOpen ? item.label : undefined}
               >
                 <Icon className={`h-5 w-5 flex-shrink-0 ${isActive ? activeIcon : item.alertCount > 0 ? 'text-amber-500' : 'text-gray-400'}`} />
-                {sidebarOpen && <span>{item.label}</span>}
+                {sidebarOpen && <span className="truncate">{item.label}</span>}
                 {item.alertCount > 0 && (
                   <span className={`absolute top-1 right-1 flex items-center justify-center rounded-full text-[10px] text-white font-bold ${item.alertCount > 9 ? 'h-5 w-5 bg-amber-500' : 'h-4 w-4 bg-amber-500'}`}>
                     {item.alertCount > 99 ? '99+' : item.alertCount}
@@ -937,7 +943,7 @@ function App() {
                         }`}
                       >
                         <Icon className={`h-5 w-5 ${isActive ? activeIcon : item.alertCount > 0 ? 'text-amber-500' : 'text-gray-400'}`} />
-                        <span className="flex-1 text-left">{item.label}</span>
+                        <span className="flex-1 text-left truncate">{item.label}</span>
                         {item.alertCount > 0 && (
                           <span className="flex items-center justify-center rounded-full text-[10px] text-white font-bold h-4 w-4 bg-amber-500 mr-1">
                             {item.alertCount > 9 ? '9+' : item.alertCount}
@@ -991,7 +997,7 @@ function App() {
                     }`}
                   >
                     <Icon className={`h-5 w-5 ${isActive ? activeIcon : item.alertCount > 0 ? 'text-amber-500' : 'text-gray-400'}`} />
-                    <span>{item.label}</span>
+                    <span className="truncate">{item.label}</span>
                     {item.alertCount > 0 && (
                       <span className={`ml-auto flex items-center justify-center rounded-full text-[10px] text-white font-bold ${item.alertCount > 9 ? 'h-5 w-5 bg-amber-500' : 'h-4 w-4 bg-amber-500'}`}>
                         {item.alertCount > 99 ? '99+' : item.alertCount}
