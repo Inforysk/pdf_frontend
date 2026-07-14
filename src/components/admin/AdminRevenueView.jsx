@@ -138,8 +138,9 @@ export default function AdminRevenueView() {
     })
 
     const ultimos3 = months.slice(-3)
-    const promedio = ultimos3.length ? (ultimos3.reduce((acc, m) => acc + m.revenue_cobrado, 0) / ultimos3.length) : 0
-    const tendencia = months.length >= 3 ? (months[months.length - 1].revenue_cobrado - months[months.length - 3].revenue_cobrado) / 2 : 0
+    // Para clientes, la proyeccion incluye pipeline (pagadas + pendientes).
+    const promedio = ultimos3.length ? (ultimos3.reduce((acc, m) => acc + m.revenue_total, 0) / ultimos3.length) : 0
+    const tendencia = months.length >= 3 ? (months[months.length - 1].revenue_total - months[months.length - 3].revenue_total) / 2 : 0
 
     return {
       mrr: {
@@ -151,8 +152,10 @@ export default function AdminRevenueView() {
       mes_actual: {
         revenue: Number(mesRevenue.toFixed(2)),
         cobrado: Number(mesCobrado.toFixed(2)),
+        pendiente: Number((mesRevenue - mesCobrado).toFixed(2)),
         facturas: mesFacturas,
         pagadas: mesPagadas,
+        pendientes: Math.max(0, mesFacturas - mesPagadas),
         variacion_mom: growth.length ? growth[growth.length - 1].growth_pct : 0,
       },
       churn: {
@@ -259,7 +262,6 @@ export default function AdminRevenueView() {
 
   const clientes = billingData?.facturas_proveedores || {}
   const suscripciones = billingData?.facturas_clientes || {}
-  const totalMesOperativo = Number(clientes.pagado_mes || 0) + Number(suscripciones.pagado_mes || 0)
 
   return (
     <div className="space-y-6 px-1 sm:px-0">
@@ -310,54 +312,8 @@ export default function AdminRevenueView() {
           </div>
         </div>
 
-        {activeTab === 'clientes' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-amber-50 rounded-lg p-3 text-center">
-              <div className="text-xl font-bold text-amber-600">{clientes.pendientes || 0}</div>
-              <div className="text-xs text-amber-700">Pendientes</div>
-              <div className="text-xs text-amber-500 mt-0.5">{fmtDual(clientes.total_pendiente)}</div>
-            </div>
-            <div className="bg-blue-50 rounded-lg p-3 text-center">
-              <div className="text-xl font-bold text-blue-600">{clientes.facturadas || 0}</div>
-              <div className="text-xs text-blue-700">Facturadas</div>
-              <div className="text-xs text-blue-500 mt-0.5">{fmtDual(clientes.total_facturado)}</div>
-            </div>
-            <div className="bg-green-50 rounded-lg p-3 text-center">
-              <div className="text-xl font-bold text-green-600">{clientes.pagadas || 0}</div>
-              <div className="text-xs text-green-700">Pagadas</div>
-              <div className="text-xs text-green-500 mt-0.5">{fmtDual(clientes.total_pagado)}</div>
-            </div>
-            <div className="bg-emerald-50 rounded-lg p-3 text-center">
-              <div className="text-xl font-bold text-emerald-600">{fmtDual(clientes.pagado_mes)}</div>
-              <div className="text-xs text-emerald-700">Pagado este mes</div>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-amber-50 rounded-lg p-3 text-center">
-              <div className="text-xl font-bold text-amber-600">{suscripciones.pendientes || 0}</div>
-              <div className="text-xs text-amber-700">Pendientes</div>
-              <div className="text-xs text-amber-500 mt-0.5">{fmtDual(suscripciones.total_pendiente)}</div>
-            </div>
-            <div className="bg-red-50 rounded-lg p-3 text-center">
-              <div className="text-xl font-bold text-red-600">{suscripciones.vencidas || 0}</div>
-              <div className="text-xs text-red-700">Vencidas</div>
-            </div>
-            <div className="bg-green-50 rounded-lg p-3 text-center">
-              <div className="text-xl font-bold text-green-600">{suscripciones.pagadas || 0}</div>
-              <div className="text-xs text-green-700">Pagadas</div>
-              <div className="text-xs text-green-500 mt-0.5">{fmtDual(suscripciones.total_pagado)}</div>
-            </div>
-            <div className="bg-emerald-50 rounded-lg p-3 text-center">
-              <div className="text-xl font-bold text-emerald-600">{fmtDual(suscripciones.pagado_mes)}</div>
-              <div className="text-xs text-emerald-700">Cobrado este mes</div>
-            </div>
-          </div>
-        )}
-
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center justify-between">
-          <span className="text-sm text-slate-600">Ingreso total del mes (Clientes + Suscripciones)</span>
-          <span className="text-lg font-semibold text-slate-900">{fmtDual(totalMesOperativo)}</span>
+        <div className="text-sm text-gray-500 bg-slate-50 border border-slate-200 rounded-lg p-3">
+          Selecciona una pestaña para analizar Clientes o Suscripciones.
         </div>
       </div>
 
@@ -419,10 +375,17 @@ export default function AdminRevenueView() {
               {formatPercent(mes_actual.variacion_mom)}
             </div>
           </div>
-          <p className="text-xl sm:text-2xl font-bold text-gray-900 break-words">{formatCurrency(mes_actual.cobrado)}</p>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1">Cobrado este mes</p>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 break-words">
+            {activeTab === 'clientes' ? formatCurrency(mes_actual.revenue) : formatCurrency(mes_actual.cobrado)}
+          </p>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">
+            {activeTab === 'clientes' ? 'Evaluado este mes (incluye pendientes)' : 'Cobrado este mes'}
+          </p>
           <div className="flex justify-between mt-3 text-[11px] sm:text-xs text-gray-500">
-            <span>{mes_actual.pagadas}/{mes_actual.facturas} facturas pagadas</span>
+            <span>
+              {mes_actual.pagadas}/{mes_actual.facturas} facturas pagadas
+              {activeTab === 'clientes' ? ` | ${mes_actual.pendientes || 0} pendientes` : ''}
+            </span>
           </div>
         </div>
 
