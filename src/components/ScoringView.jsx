@@ -359,6 +359,131 @@ function RadarChart({ scores, size = 280 }) {
   )
 }
 
+function buildConfidenceSummary(scoreData) {
+  const detalle = scoreData?.detalle || {}
+  const fields = Object.values(detalle?.cumplimiento_legal?.campos_verificados || {})
+  const fieldsChecked = fields.length
+  const fieldsPresent = fields.filter(Boolean).length
+  const hasBcra = Boolean(detalle?.bcra?.disponible)
+  const hasOsint = !String(detalle?.osint?.nota || '').toLowerCase().includes('sin datos osint')
+  const hasAge = detalle?.fortaleza_comercial?.antiguedad_factor && detalle.fortaleza_comercial.antiguedad_factor !== 'desconocida'
+  const hasIndustry = Boolean(detalle?.riesgo_mercado?.industria?.risk_level)
+
+  let score = 30
+  if (hasBcra) score += 25
+  if (hasOsint) score += 20
+  if (hasAge) score += 10
+  if (hasIndustry) score += 10
+  if (fieldsChecked > 0) score += Math.round((fieldsPresent / fieldsChecked) * 15)
+
+  const value = Math.max(0, Math.min(100, score))
+  const level = value >= 80 ? 'Alta' : value >= 55 ? 'Media' : 'Baja'
+  const tone = value >= 80
+    ? 'bg-green-50 border-green-200 text-green-800'
+    : value >= 55
+      ? 'bg-amber-50 border-amber-200 text-amber-800'
+      : 'bg-red-50 border-red-200 text-red-800'
+
+  const reasons = [
+    hasBcra ? 'BCRA consultado' : 'Sin respaldo BCRA en esta corrida',
+    hasOsint ? 'OSINT con evidencia verificable' : 'OSINT parcial o neutro por falta de datos',
+    hasAge ? `Antiguedad detectada: ${detalle?.fortaleza_comercial?.antiguedad}` : 'Antiguedad no determinada',
+    hasIndustry ? 'Riesgo sectorial identificado' : 'Sector sin match robusto de industria',
+    fieldsChecked > 0
+      ? `Consistencia registral: ${fieldsPresent}/${fieldsChecked} campos clave completos`
+      : 'Sin medicion de completitud registral',
+  ]
+
+  return { value, level, tone, reasons }
+}
+
+function buildCriticalEvidence(scoreData) {
+  const detalle = scoreData?.detalle || {}
+  const evidence = []
+
+  if (detalle?.bcra?.disponible) {
+    const deudas = detalle.bcra.deudas || {}
+    const cheques = detalle.bcra.cheques || {}
+    evidence.push({
+      title: 'BCRA',
+      text: `Situacion ${deudas.peor_situacion || 1} · cheques rechazados: ${cheques.total_rechazados || 0} · entidades con deuda: ${deudas.entidades_con_deuda || 0}`,
+      severity: (deudas.peor_situacion || 1) >= 3 || (cheques.total_rechazados || 0) > 0 ? 'negative' : 'positive',
+    })
+  }
+
+  if (detalle?.ofac?.disponible || scoreData?.ofac?.disponible) {
+    const ofac = detalle.ofac || scoreData.ofac || {}
+    evidence.push({
+      title: 'Sanciones',
+      text: ofac.in_ofac_list
+        ? `Coincidencia detectada · riesgo ${ofac.risk_level || 'alto'} · confianza ${ofac.confidence_percent || 0}%`
+        : `Sin coincidencias relevantes · riesgo ${ofac.risk_level || 'clear'}`,
+      severity: ofac.in_ofac_list ? 'negative' : 'positive',
+    })
+  }
+
+  if (detalle?.cumplimiento_legal?.consistencia_registral) {
+    evidence.push({
+      title: 'Registral',
+      text: detalle.cumplimiento_legal.consistencia_registral,
+      severity: ['baja', 'muy_baja'].includes(detalle?.cumplimiento_legal?.consistencia_factor) ? 'negative' : 'neutral',
+    })
+  }
+
+  if (detalle?.fortaleza_comercial?.antiguedad) {
+    evidence.push({
+      title: 'Trayectoria',
+      text: detalle.fortaleza_comercial.antiguedad,
+      severity: ['reciente', 'muy_reciente'].includes(detalle?.fortaleza_comercial?.antiguedad_factor) ? 'negative' : 'positive',
+    })
+  }
+
+  if (detalle?.osint) {
+    evidence.push({
+      title: 'OSINT',
+      text: detalle.osint.en_lista_negra
+        ? 'Se detectaron alertas o coincidencias en fuentes abiertas'
+        : `Noticias: ${detalle.osint.noticias_encontradas || 0} · Google: ${detalle.osint.google_presence || 0}/100 · LinkedIn: ${detalle.osint.linkedin_score || 0}/100`,
+      severity: detalle.osint.en_lista_negra ? 'negative' : 'neutral',
+    })
+  }
+
+  return evidence.slice(0, 5)
+}
+
+function buildCommercialRecommendation(scoreData, confidence) {
+  const score = Number(scoreData?.score_total || 0)
+  const bcraSituation = scoreData?.detalle?.bcra?.deudas?.peor_situacion || 1
+  const rejectedChecks = scoreData?.detalle?.bcra?.cheques?.total_rechazados || 0
+  const sanctionsHit = Boolean(scoreData?.detalle?.ofac?.in_ofac_list || scoreData?.ofac?.in_ofac_list || scoreData?.detalle?.osint?.en_lista_negra)
+
+  let decision = 'Revisar manualmente'
+  let tone = 'bg-amber-50 border-amber-200 text-amber-800'
+  let rationale = 'El score requiere validacion adicional antes de tomar una decision comercial.'
+
+  if (sanctionsHit || bcraSituation >= 4) {
+    decision = 'No aprobar sin comite'
+    tone = 'bg-red-50 border-red-200 text-red-800'
+    rationale = 'Hay alertas criticas regulatorias o crediticias que exigen escalamiento.'
+  } else if (score >= 75 && confidence.value >= 75 && rejectedChecks === 0) {
+    decision = 'Aprobar'
+    tone = 'bg-green-50 border-green-200 text-green-800'
+    rationale = 'La combinacion de score alto y buena cobertura de evidencia respalda una aprobacion comercial.'
+  } else if (score >= 60 && confidence.value >= 55) {
+    decision = 'Aprobar con limite'
+    tone = 'bg-blue-50 border-blue-200 text-blue-800'
+    rationale = 'El perfil es aceptable, pero conviene limitar cupo o plazo hasta tener mas historial verificable.'
+  }
+
+  const actions = [
+    score >= 75 ? 'Definir cupo y plazo comercial segun politica interna.' : 'Solicitar validacion adicional de documentacion financiera.',
+    rejectedChecks > 0 ? `Revisar detalle de ${rejectedChecks} cheque(s) rechazado(s).` : 'Confirmar continuidad operativa y referencias comerciales.',
+    confidence.value < 55 ? 'Completar fuentes faltantes antes de automatizar la decision.' : 'Registrar esta corrida como evidencia de soporte de la decision.',
+  ]
+
+  return { decision, tone, rationale, actions }
+}
+
 // ═══════════════════════════════════════════════
 // Mini chart de evolución para el historial
 // ═══════════════════════════════════════════════
@@ -809,6 +934,9 @@ function ScoringView({ empresaId, cuit, onBack }) {
   // Get scores data from either saved result or fresh calculation
   const scoreData = scoring?.data || scoring
   const hasScoring = scoreData && scoreData.score_total !== undefined
+  const confidenceSummary = hasScoring ? buildConfidenceSummary(scoreData) : null
+  const criticalEvidence = hasScoring ? buildCriticalEvidence(scoreData) : []
+  const recommendation = hasScoring && confidenceSummary ? buildCommercialRecommendation(scoreData, confidenceSummary) : null
 
   // Generar insights ejecutivos para el cliente
   const insights = (() => {
@@ -835,7 +963,11 @@ function ScoringView({ empresaId, cuit, onBack }) {
     else if (scoreData.scores?.osint !== undefined) msgs.push({ icon: '🛡️', text: 'Sin coincidencias en listas de sanciones' })
 
     if (scoreData.detalle?.fortaleza_comercial?.antiguedad) {
-      msgs.push({ icon: '🏢', text: `Antigüedad: ${scoreData.detalle.fortaleza_comercial.antiguedad}` })
+      const ageSource = scoreData.detalle?.fortaleza_comercial?.antiguedad_fuente_label
+      msgs.push({
+        icon: '🏢',
+        text: `Antigüedad: ${scoreData.detalle.fortaleza_comercial.antiguedad}${ageSource ? ` (fuente: ${ageSource})` : ''}`,
+      })
     }
 
     return msgs.slice(0, 5)
@@ -1007,6 +1139,90 @@ function ScoringView({ empresaId, cuit, onBack }) {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700">Metodologia y Confianza del Score</h3>
+                  <p className="text-xs text-gray-500 mt-1">Trazabilidad del calculo, cobertura y calidad de evidencia.</p>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-bold border ${confidenceSummary.tone}`}>
+                  Confianza {confidenceSummary.level} · {confidenceSummary.value}/100
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Score base</p>
+                  <p className="text-2xl font-bold text-slate-900 mt-1">{Number(scoreData.score_base ?? scoreData.score_total).toFixed(2)}</p>
+                </div>
+                <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Factor BCRA</p>
+                  <p className="text-2xl font-bold text-slate-900 mt-1">×{Number(scoreData.factor_bcra ?? 1).toFixed(2)}</p>
+                </div>
+                <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Factor sanciones</p>
+                  <p className="text-2xl font-bold text-slate-900 mt-1">×{Number(scoreData.factor_ofac ?? 1).toFixed(2)}</p>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Como interpretar este score</p>
+                <ul className="space-y-2 text-sm text-gray-700">
+                  {confidenceSummary.reasons.map((reason, idx) => (
+                    <li key={idx}>• {reason}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700">Evidencia critica y recomendacion comercial</h3>
+                  <p className="text-xs text-gray-500 mt-1">Hechos verificables para sostener una decision comercial.</p>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-bold border ${recommendation.tone}`}>
+                  {recommendation.decision}
+                </span>
+              </div>
+
+              <div className={`rounded-xl border p-4 ${recommendation.tone}`}>
+                <p className="text-xs font-semibold uppercase tracking-wide mb-1">Recomendacion</p>
+                <p className="text-sm font-medium">{recommendation.rationale}</p>
+              </div>
+
+              <div className="space-y-3">
+                {criticalEvidence.map((item, idx) => (
+                  <div key={`${item.title}-${idx}`} className="rounded-xl border border-gray-200 p-3 bg-gray-50">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-gray-800">{item.title}</p>
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                        item.severity === 'positive'
+                          ? 'bg-green-100 text-green-700'
+                          : item.severity === 'negative'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-gray-200 text-gray-700'
+                      }`}>
+                        {item.severity === 'positive' ? 'Favorable' : item.severity === 'negative' ? 'Alerta' : 'Neutro'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">{item.text}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Acciones sugeridas</p>
+                <ul className="space-y-2 text-sm text-slate-700">
+                  {recommendation.actions.map((action, idx) => (
+                    <li key={idx}>• {action}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+
           {/* Monto sugerido de crédito */}
           {/* Monto sugerido de crédito */}
           {scoreData.credito && scoreData.credito.monto_sugerido && (
@@ -1031,6 +1247,11 @@ function ScoringView({ empresaId, cuit, onBack }) {
                 {scoreData.credito.capital_base && (
                   <p className="text-xs text-gray-400 mt-1">
                     Capital base: {formatCurrencyAmount(scoreData.credito.capital_base, scoreData.credito.moneda)}
+                  </p>
+                )}
+                {scoreData.credito.antiguedad_fuente_label && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    Antigüedad tomada desde: {scoreData.credito.antiguedad_fuente_label}
                   </p>
                 )}
               </div>

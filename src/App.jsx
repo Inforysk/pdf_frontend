@@ -71,6 +71,7 @@ function App() {
   const [boAlertasCount, setBoAlertasCount] = useState(0) // Contador de alertas críticas BO (quiebra/concurso/liquidación)
   const [showRegister, setShowRegister] = useState(false) // Mostrar página de registro
   const [routePath, setRoutePath] = useState(window.location.pathname)
+  const [scoringSelectorKey, setScoringSelectorKey] = useState(0)
   const [loadingSolicitudView, setLoadingSolicitudView] = useState(false)
   const prevUserRef = useRef(user?.id)
 
@@ -523,6 +524,16 @@ function App() {
     setCurrentView('search')
   }
 
+  const handleBackFromScoringDetail = () => {
+    setSelectedEmpresaId(null)
+    setSelectedEmpresaCuit(null)
+    setSelectedEmpresaMode(null)
+    setPreviousView(null)
+    setOriginView(null)
+    // Mantener la vista de scoring para volver al selector principal.
+    setCurrentView('scoring')
+  }
+
   // Volver a la vista anterior según de dónde vino
   const handleBackFromView = () => {
     setRefreshKey(k => k + 1)
@@ -722,6 +733,34 @@ function App() {
   sidebarItems.push({ id: '_sep_bo', separator: true, label: t('nav.externalServices') })
   sidebarItems.push({ id: 'boletin-oficial', label: t('nav.officialGazette'), icon: Newspaper, color: boAlertasCount > 0 ? 'red' : 'indigo', alertCount: boAlertasCount })
 
+  const handleSidebarNavigation = (itemId) => {
+    if (itemId === 'new-blank') {
+      setExtractedData(null)
+      setSelectedEmpresaId(null)
+      setSelectedEmpresaCuit(null)
+      setSelectedEmpresaMode(null)
+      setNewReportCountry(null)
+      setPreviousView(currentView)
+    }
+
+    if (itemId === 'search') {
+      setRefreshKey(k => k + 1)
+    }
+
+    if (itemId === 'scoring') {
+      // Siempre volver al selector principal de scoring y recargar su listado.
+      setSelectedEmpresaId(null)
+      setSelectedEmpresaCuit(null)
+      setSelectedEmpresaMode(null)
+      setPreviousView(null)
+      setOriginView(null)
+      setScoringSelectorKey(k => k + 1)
+    }
+
+    setCurrentView(itemId)
+    setMobileMenuOpen(false)
+  }
+
   const currentLabel = sidebarItems.find(i => i.id === currentView)?.label || 'Inforysk'
 
   return (
@@ -812,7 +851,7 @@ function App() {
                         return (
                           <button
                             key={child.id}
-                            onClick={() => { setCurrentView(child.id); setMobileMenuOpen(false); }}
+                            onClick={() => handleSidebarNavigation(child.id)}
                             className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-sm transition-all relative ${
                               isChildActive ? 'bg-gray-100 text-gray-900 font-medium' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
                             }`}
@@ -844,13 +883,7 @@ function App() {
                     setOpenSubmenu(item.id);
                     return;
                   }
-                  if (item.id === 'new-blank') {
-                    setExtractedData(null); setSelectedEmpresaId(null); setSelectedEmpresaCuit(null); setSelectedEmpresaMode(null); setNewReportCountry(null); setPreviousView(currentView);
-                  }
-                  if (item.id === 'search') {
-                    setRefreshKey(k => k + 1);
-                  }
-                  setCurrentView(item.id); setMobileMenuOpen(false);
+                  handleSidebarNavigation(item.id)
                 }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all relative ${
                   isActive ? `${activeColor} shadow-sm` : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -959,7 +992,7 @@ function App() {
                             return (
                               <button
                                 key={child.id}
-                                onClick={() => { setCurrentView(child.id); setMobileMenuOpen(false); }}
+                                onClick={() => handleSidebarNavigation(child.id)}
                                 className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-sm transition-all relative ${
                                   isChildActive ? 'bg-gray-100 text-gray-900 font-medium' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
                                 }`}
@@ -983,15 +1016,7 @@ function App() {
                 return (
                   <button
                     key={item.id}
-                    onClick={() => {
-                      if (item.id === 'new-blank') {
-                        setExtractedData(null); setSelectedEmpresaId(null); setSelectedEmpresaCuit(null); setSelectedEmpresaMode(null); setNewReportCountry(null); setPreviousView(currentView);
-                      }
-                      if (item.id === 'search') {
-                        setRefreshKey(k => k + 1);
-                      }
-                      setCurrentView(item.id); setMobileMenuOpen(false);
-                    }}
+                    onClick={() => handleSidebarNavigation(item.id)}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all relative ${
                       isActive ? activeColor : 'text-gray-600 hover:bg-gray-50'
                     }`}
@@ -1239,10 +1264,10 @@ function App() {
               <ScoringView
                 empresaId={selectedEmpresaId}
                 cuit={selectedEmpresaCuit}
-                onBack={handleBackFromView}
+                onBack={handleBackFromScoringDetail}
               />
             ) : (
-              <ScoringSelector onSelect={(empresaId, cuit) => {
+              <ScoringSelector key={scoringSelectorKey} onSelect={(empresaId, cuit) => {
                 setSelectedEmpresaId(empresaId)
                 setSelectedEmpresaCuit(cuit)
               }} />
@@ -1410,6 +1435,7 @@ function ScoringSelector({ onSelect }) {
   const [allEmpresas, setAllEmpresas] = useState([])
   const [loading, setLoading] = useState(true)
   const [countryFilter, setCountryFilter] = useState('all')
+  const [onlyWithCapital, setOnlyWithCapital] = useState(true)
   const [countryOpen, setCountryOpen] = useState(false)
   const countryRef = useRef(null)
 
@@ -1426,6 +1452,31 @@ function ScoringSelector({ onSelect }) {
     CUIT: 'Argentina', RUT: 'Uruguay', NIT: 'Colombia', RUC: 'Peru',
     RNC: 'Rep. Dominicana', RTN: 'Honduras', RFC: 'Mexico', TRN: 'Jamaica',
     'CEDULA JURIDICA': 'Costa Rica', VAT: 'Union Europea',
+  }
+
+  const hasCapitalSupport = (empresa) => {
+    const directCapital = Number(empresa?.capital_social)
+    if (Number.isFinite(directCapital) && directCapital > 0) return true
+
+    const text = [
+      empresa?.sinopsis,
+      empresa?.historia,
+      empresa?.objeto_social,
+      empresa?.cumplimiento_concepto,
+      empresa?.conclusion,
+      empresa?.actividad_principal,
+    ].filter(Boolean).join(' ')
+
+    if (!text) return false
+
+    const capitalMatch = text.match(/capital(?:\s+social)?[^0-9]{0,20}([0-9][0-9\.,\s]{2,24})/i)
+    if (!capitalMatch) return false
+
+    const digits = String(capitalMatch[1]).replace(/\D/g, '')
+    if (!digits) return false
+
+    const candidate = Number(digits)
+    return Number.isFinite(candidate) && candidate >= 1000
   }
 
   useEffect(() => {
@@ -1464,6 +1515,11 @@ function ScoringSelector({ onSelect }) {
     const termClean = term.replace(/[-.\s]/g, '')
 
     let base = allEmpresas
+
+    if (onlyWithCapital) {
+      base = base.filter(hasCapitalSupport)
+    }
+
     // Filtro por país
     if (countryFilter !== 'all') {
       base = base.filter(e => {
@@ -1473,7 +1529,7 @@ function ScoringSelector({ onSelect }) {
     }
 
     if (!term) {
-      setResults(countryFilter !== 'all' ? base : [])
+      setResults((countryFilter !== 'all' || onlyWithCapital) ? base : [])
       setPage(1)
       return
     }
@@ -1486,7 +1542,7 @@ function ScoringSelector({ onSelect }) {
     })
     setResults(filtered)
     setPage(1)
-  }, [search, allEmpresas, countryFilter])
+  }, [search, allEmpresas, countryFilter, onlyWithCapital])
 
   const totalPages = Math.ceil(results.length / PER_PAGE)
   const paginatedResults = results.slice((page - 1) * PER_PAGE, page * PER_PAGE)
@@ -1513,6 +1569,16 @@ function ScoringSelector({ onSelect }) {
 
         {/* Filtro por país */}
         <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <label className="inline-flex items-center gap-2 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+            <input
+              type="checkbox"
+              checked={onlyWithCapital}
+              onChange={(e) => setOnlyWithCapital(e.target.checked)}
+              className="rounded border-gray-300 text-blue-600"
+            />
+            Solo con capital social
+          </label>
+
           <div className="relative" ref={countryRef}>
             <button
               type="button"
@@ -1566,7 +1632,14 @@ function ScoringSelector({ onSelect }) {
           </div>
           {selectedCountry && (
             <span className="text-xs text-gray-500">
-              {allEmpresas.filter(e => TIPO_TO_PAIS[(e.tipo_identificacion || '').toUpperCase()] === countryFilter).length} empresas
+              {allEmpresas
+                .filter(e => TIPO_TO_PAIS[(e.tipo_identificacion || '').toUpperCase()] === countryFilter)
+                .filter(e => !onlyWithCapital || hasCapitalSupport(e)).length} empresas
+            </span>
+          )}
+          {onlyWithCapital && !selectedCountry && (
+            <span className="text-xs text-gray-500">
+              {allEmpresas.filter(hasCapitalSupport).length} empresas
             </span>
           )}
         </div>

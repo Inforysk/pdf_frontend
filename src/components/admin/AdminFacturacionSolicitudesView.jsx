@@ -31,6 +31,15 @@ const MESES = [
   { value: 12, label: 'Diciembre' },
 ]
 
+const ROW_ORDER_OPTIONS = [
+  { value: 'empresa', label: 'Empresa' },
+  { value: 'id_pais', label: 'ID / País' },
+  { value: 'prioridad', label: 'Prioridad' },
+  { value: 'precio', label: 'Precio' },
+  { value: 'fecha', label: 'Fecha' },
+  { value: 'estado', label: 'Estado' },
+]
+
 export default function AdminFacturacionSolicitudesView() {
   const { isAdmin } = useAuth()
   const [loading, setLoading] = useState(true)
@@ -78,6 +87,24 @@ export default function AdminFacturacionSolicitudesView() {
     return `${yyyy}-${mm}-${dd}`
   }
 
+  const formatDateTime = (value) => {
+    if (!value) return '-'
+    const normalized = typeof value === 'string' ? value.replace(' ', 'T') : value
+    const d = new Date(normalized)
+    if (Number.isNaN(d.getTime())) {
+      return String(value).replace('T', ' ').replace(/([+-]\d{2}:\d{2})$/, '')
+    }
+    return d.toLocaleString('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    })
+  }
+
   const isEstadoPendiente = (sol) => (sol?.factura_estado_pago || '').toLowerCase() === 'pendiente'
   const isFacturable = (sol) => !sol?.facturado || isEstadoPendiente(sol)
 
@@ -98,6 +125,11 @@ export default function AdminFacturacionSolicitudesView() {
   const [editingPrecio, setEditingPrecio] = useState(null) // sol.id
   const [editPrecioValue, setEditPrecioValue] = useState('')
   const [savingPrecio, setSavingPrecio] = useState(false)
+  const [showMonitoreoHistorialModal, setShowMonitoreoHistorialModal] = useState(false)
+  const [loadingMonitoreoHistorial, setLoadingMonitoreoHistorial] = useState(false)
+  const [monitoreoHistorialData, setMonitoreoHistorialData] = useState(null)
+  const [rowOrderBy, setRowOrderBy] = useState('fecha')
+  const [rowOrderDir, setRowOrderDir] = useState('desc')
 
   // Filtros
   const now = new Date()
@@ -211,6 +243,160 @@ export default function AdminFacturacionSolicitudesView() {
   }
   const getPrecioByMoneda = (sol, moneda) => {
     return moneda === 'USD' ? getPrecioUsd(sol) : getPrecioEur(sol)
+  }
+
+  const getMonitoreoUsoLabel = (sol = {}) => {
+    const uso = Number(sol?.monitoreo_prepago_uso_numero || 0)
+    const total = Number(sol?.monitoreo_prepago_total_cupo || 0)
+    if (uso > 0 && total > 0) return `${uso}/${total}`
+    return null
+  }
+
+  const getMonitoreoStatusBadge = (sol = {}) => {
+    if ((sol?.prioridad || '').toLowerCase() !== 'monitoreo') return null
+    const usoLabel = getMonitoreoUsoLabel(sol)
+    if (!usoLabel) return null
+
+    const precio = Number(sol?.precio_eur || 0)
+    if (precio <= 0) {
+      return {
+        label: usoLabel,
+        title: `Ya pagado ${usoLabel}`,
+        className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      }
+    }
+
+    return {
+      label: usoLabel,
+      title: `Validado ${usoLabel}`,
+      className: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    }
+  }
+
+  const getPriorityRank = (value) => {
+    const p = String(value || '').toLowerCase()
+    if (p === 'urgente') return 1
+    if (p === 'monitoreo') return 2
+    if (p === '72h') return 3
+    return 4
+  }
+
+  const getEstadoSortRank = (sol = {}) => {
+    if (isFacturable(sol)) return 1 // pendiente
+    const estado = String(sol?.factura_estado_pago || 'facturada').toLowerCase()
+    if (estado === 'facturada') return 2
+    if (estado === 'pagada') return 3
+    if (estado === 'cancelada') return 4
+    return 5
+  }
+
+  const getSortDateValue = (sol = {}) => {
+    const raw = sol?.fecha_completado_ts || sol?.updated_at || sol?.fecha_completado
+    if (!raw) return 0
+    if (typeof raw === 'number') return raw
+
+    const text = String(raw).trim()
+
+    // ISO u otros formatos parseables por Date.
+    const normalized = text.replace(' ', 'T')
+    const t1 = new Date(normalized).getTime()
+    if (!Number.isNaN(t1)) return t1
+
+    // Formato local: dd/mm/yyyy hh:mm[:ss]
+    const m = text.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/)
+    if (m) {
+      const day = Number(m[1])
+      const month = Number(m[2]) - 1
+      const year = Number(m[3])
+      const hour = Number(m[4] || 0)
+      const minute = Number(m[5] || 0)
+      const second = Number(m[6] || 0)
+      return new Date(year, month, day, hour, minute, second).getTime()
+    }
+
+    return 0
+  }
+
+  const compareRows = (a, b, monedaCliente) => {
+    let av
+    let bv
+
+    if (rowOrderBy === 'empresa') {
+      av = String(a?.razon_social || '').trim().toUpperCase()
+      bv = String(b?.razon_social || '').trim().toUpperCase()
+    } else if (rowOrderBy === 'id_pais') {
+      av = `${String(a?.cuit || '').trim()}|${String(a?.pais_codigo || '').trim()}`
+      bv = `${String(b?.cuit || '').trim()}|${String(b?.pais_codigo || '').trim()}`
+    } else if (rowOrderBy === 'prioridad') {
+      av = getPriorityRank(a?.prioridad)
+      bv = getPriorityRank(b?.prioridad)
+    } else if (rowOrderBy === 'precio') {
+      av = getPrecioByMoneda(a, monedaCliente)
+      bv = getPrecioByMoneda(b, monedaCliente)
+    } else if (rowOrderBy === 'estado') {
+      av = getEstadoSortRank(a)
+      bv = getEstadoSortRank(b)
+    } else {
+      av = getSortDateValue(a)
+      bv = getSortDateValue(b)
+    }
+
+    let base = 0
+    if (typeof av === 'string' || typeof bv === 'string') {
+      base = String(av).localeCompare(String(bv), 'es', { sensitivity: 'base', numeric: true })
+    } else {
+      base = Number(av || 0) - Number(bv || 0)
+    }
+
+    // Empate estable para evitar sensación de "no ordena" cuando hay valores iguales.
+    if (base === 0) {
+      base = Number(a?.id || 0) - Number(b?.id || 0)
+    }
+
+    return rowOrderDir === 'asc' ? base : -base
+  }
+
+  const applySortField = (field, keepDirection = false) => {
+    if (keepDirection) {
+      setRowOrderBy(field)
+      return
+    }
+    setRowOrderBy(field)
+    setRowOrderDir(field === 'fecha' ? 'desc' : 'asc')
+  }
+
+  const toggleSort = (field) => {
+    if (rowOrderBy === field) {
+      setRowOrderDir(prev => (prev === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+    applySortField(field)
+  }
+
+  const getSortIndicator = (field) => {
+    if (rowOrderBy !== field) return '↕'
+    return rowOrderDir === 'asc' ? '↑' : '↓'
+  }
+
+  const openMonitoreoHistorialModal = async (sol) => {
+    const prepagoId = Number(sol?.monitoreo_prepago_id || 0)
+    if (!prepagoId) return
+
+    setShowMonitoreoHistorialModal(true)
+    setLoadingMonitoreoHistorial(true)
+    setMonitoreoHistorialData(null)
+    try {
+      const res = await axios.get(`/api/monitoreo-prepagos/${prepagoId}/historial`)
+      if (res.data?.success) {
+        setMonitoreoHistorialData(res.data)
+      } else {
+        toast.error(res.data?.error || 'No se pudo cargar el historial de monitoreo')
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error cargando historial de monitoreo')
+    } finally {
+      setLoadingMonitoreoHistorial(false)
+    }
   }
 
   const buildPendingStatsFromSolicitudes = (solicitudes = [], rate = 1.2) => {
@@ -1505,6 +1691,32 @@ export default function AdminFacturacionSolicitudesView() {
               Facturar ({selectedIds.length})
             </button>
           )}
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+            <div className="inline-flex items-center gap-2">
+              <span className="text-xs text-gray-500">Ordenar por:</span>
+              <select
+                value={rowOrderBy}
+                onChange={(e) => applySortField(e.target.value)}
+                className="px-2 py-1 text-xs border rounded bg-white"
+              >
+                {ROW_ORDER_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRowOrderDir(prev => prev === 'asc' ? 'desc' : 'asc')}
+              className="inline-flex items-center justify-center gap-1 px-2 py-1 text-xs border rounded bg-white hover:bg-gray-50 w-fit"
+              title="Cambiar dirección del orden"
+            >
+              {rowOrderDir === 'asc' ? 'Ascendente ↑' : 'Descendente ↓'}
+            </button>
+            <span className="text-xs text-gray-500">
+              Orden actual: {ROW_ORDER_OPTIONS.find(o => o.value === rowOrderBy)?.label || rowOrderBy} {rowOrderDir === 'asc' ? '↑' : '↓'}
+            </span>
+          </div>
         </div>
 
         <div className={`${showMobileDetalle ? 'block' : 'hidden'} md:block`}>
@@ -1524,18 +1736,19 @@ export default function AdminFacturacionSolicitudesView() {
               // Verificar si el cliente tiene precios en USD (al menos una solicitud con precio_usd > 0)
               const monedaCliente = monedaPorCliente[abono] || 'EUR'
               const simboloMoneda = monedaCliente === 'USD' ? '$' : '€'
+              const sortedSolicitudes = [...grupo.solicitudes].sort((a, b) => compareRows(a, b, monedaCliente))
               
               // Calcular total usando la moneda seleccionada
-              const totalGrupo = grupo.solicitudes.reduce((sum, s) => {
+              const totalGrupo = sortedSolicitudes.reduce((sum, s) => {
                 const precio = getPrecioByMoneda(s, monedaCliente)
                 return sum + precio
               }, 0)
               
               // Calcular estado del grupo
-              const solsPendientes = grupo.solicitudes.filter(s => isFacturable(s))
-              const solsFacturadas = grupo.solicitudes.filter(s => !isFacturable(s))
-              const todasFacturadas = solsFacturadas.length === grupo.solicitudes.length
-              const todasPendientes = solsPendientes.length === grupo.solicitudes.length
+              const solsPendientes = sortedSolicitudes.filter(s => isFacturable(s))
+              const solsFacturadas = sortedSolicitudes.filter(s => !isFacturable(s))
+              const todasFacturadas = solsFacturadas.length === sortedSolicitudes.length
+              const todasPendientes = solsPendientes.length === sortedSolicitudes.length
               
               // Determinar el estado de pago real (de las solicitudes facturadas)
               // Priorizar el estado más relevante: pagada > cancelada > facturada > pendiente
@@ -1610,7 +1823,7 @@ export default function AdminFacturacionSolicitudesView() {
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 sm:gap-4 sm:justify-end">
-                      <span className="text-sm text-gray-500">{grupo.solicitudes.length} informes</span>
+                      <span className="text-sm text-gray-500">{sortedSolicitudes.length} informes</span>
                       <select
                         value={monedaCliente}
                         onChange={(e) => {
@@ -1631,7 +1844,10 @@ export default function AdminFacturacionSolicitudesView() {
                   {isExpanded && (
                     <div>
                       <div className="md:hidden divide-y divide-gray-100 bg-white">
-                        {grupo.solicitudes.map(sol => (
+                        {sortedSolicitudes.map(sol => (
+                          (() => {
+                            const monitoreoStatusBadge = getMonitoreoStatusBadge(sol)
+                            return (
                           <div key={sol.id} className={`p-4 space-y-3 ${!isFacturable(sol) ? 'bg-green-50' : ''} ${selectedIds.includes(sol.id) ? 'bg-blue-50' : ''}`}>
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex items-start gap-3 min-w-0">
@@ -1698,14 +1914,26 @@ export default function AdminFacturacionSolicitudesView() {
                             </div>
 
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                sol.prioridad === 'urgente' ? 'bg-red-100 text-red-700' :
-                                sol.prioridad === 'monitoreo' ? 'bg-violet-100 text-violet-700' :
-                                sol.prioridad === '72h' ? 'bg-orange-100 text-orange-700' :
-                                'bg-blue-100 text-blue-700'
-                              }`}>
-                                {sol.prioridad === 'urgente' ? 'Urgente' : sol.prioridad === 'monitoreo' ? 'Monitoreo' : sol.prioridad === '72h' ? '72h' : 'Normal'}
-                              </span>
+                              <div className="inline-flex items-center gap-1">
+                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                  sol.prioridad === 'urgente' ? 'bg-red-100 text-red-700' :
+                                  sol.prioridad === 'monitoreo' ? 'bg-violet-100 text-violet-700' :
+                                  sol.prioridad === '72h' ? 'bg-orange-100 text-orange-700' :
+                                  'bg-blue-100 text-blue-700'
+                                }`}>
+                                  {sol.prioridad === 'urgente' ? 'Urgente' : sol.prioridad === 'monitoreo' ? 'Monitoreo' : sol.prioridad === '72h' ? '72h' : 'Normal'}
+                                </span>
+                                {monitoreoStatusBadge && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openMonitoreoHistorialModal(sol)}
+                                    className={`px-2 py-0.5 rounded text-xs border hover:opacity-90 ${monitoreoStatusBadge.className}`}
+                                    title={monitoreoStatusBadge.title || 'Ver árbol/historial del monitoreo asociado'}
+                                  >
+                                    {monitoreoStatusBadge.label}
+                                  </button>
+                                )}
+                              </div>
                               {!isFacturable(sol) ? (
                                 (() => {
                                   const estadoSol = sol.factura_estado_pago || 'facturada'
@@ -1729,6 +1957,8 @@ export default function AdminFacturacionSolicitudesView() {
                               <span>{sol.fecha_completado || sol.updated_at}</span>
                             </div>
                           </div>
+                            )
+                          })()
                         ))}
                       </div>
 
@@ -1737,16 +1967,49 @@ export default function AdminFacturacionSolicitudesView() {
                         <thead className="bg-gray-100">
                           <tr>
                             <th className="w-10 px-3 py-2"></th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">Empresa</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">ID / País</th>
-                            <th className="px-3 py-2 text-center font-medium text-gray-600">Prioridad</th>
-                            <th className="px-3 py-2 text-right font-medium text-gray-600">Precio</th>
-                            <th className="px-3 py-2 text-center font-medium text-gray-600">Fecha</th>
-                            <th className="px-3 py-2 text-center font-medium text-gray-600">Estado</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">
+                              <button type="button" onClick={() => toggleSort('empresa')} className="w-full inline-flex items-center justify-start gap-1 hover:text-gray-900 cursor-pointer">
+                                <span>Empresa</span>
+                                <span className={`text-xs ${rowOrderBy === 'empresa' ? 'text-gray-900' : 'text-gray-400'}`}>{getSortIndicator('empresa')}</span>
+                              </button>
+                            </th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">
+                              <button type="button" onClick={() => toggleSort('id_pais')} className="w-full inline-flex items-center justify-start gap-1 hover:text-gray-900 cursor-pointer">
+                                <span>ID / País</span>
+                                <span className={`text-xs ${rowOrderBy === 'id_pais' ? 'text-gray-900' : 'text-gray-400'}`}>{getSortIndicator('id_pais')}</span>
+                              </button>
+                            </th>
+                            <th className="px-3 py-2 text-center font-medium text-gray-600">
+                              <button type="button" onClick={() => toggleSort('prioridad')} className="w-full inline-flex items-center justify-center gap-1 hover:text-gray-900 cursor-pointer">
+                                <span>Prioridad</span>
+                                <span className={`text-xs ${rowOrderBy === 'prioridad' ? 'text-gray-900' : 'text-gray-400'}`}>{getSortIndicator('prioridad')}</span>
+                              </button>
+                            </th>
+                            <th className="px-3 py-2 text-right font-medium text-gray-600">
+                              <button type="button" onClick={() => toggleSort('precio')} className="w-full inline-flex items-center justify-end gap-1 hover:text-gray-900 cursor-pointer">
+                                <span>Precio</span>
+                                <span className={`text-xs ${rowOrderBy === 'precio' ? 'text-gray-900' : 'text-gray-400'}`}>{getSortIndicator('precio')}</span>
+                              </button>
+                            </th>
+                            <th className="px-3 py-2 text-center font-medium text-gray-600">
+                              <button type="button" onClick={() => toggleSort('fecha')} className="w-full inline-flex items-center justify-center gap-1 hover:text-gray-900 cursor-pointer">
+                                <span>Fecha</span>
+                                <span className={`text-xs ${rowOrderBy === 'fecha' ? 'text-gray-900' : 'text-gray-400'}`}>{getSortIndicator('fecha')}</span>
+                              </button>
+                            </th>
+                            <th className="px-3 py-2 text-center font-medium text-gray-600">
+                              <button type="button" onClick={() => toggleSort('estado')} className="w-full inline-flex items-center justify-center gap-1 hover:text-gray-900 cursor-pointer">
+                                <span>Estado</span>
+                                <span className={`text-xs ${rowOrderBy === 'estado' ? 'text-gray-900' : 'text-gray-400'}`}>{getSortIndicator('estado')}</span>
+                              </button>
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y">
-                          {grupo.solicitudes.map(sol => (
+                          {sortedSolicitudes.map(sol => (
+                            (() => {
+                              const monitoreoStatusBadge = getMonitoreoStatusBadge(sol)
+                              return (
                             <tr key={sol.id} className={`hover:bg-gray-50 ${!isFacturable(sol) ? 'bg-green-50' : ''} ${selectedIds.includes(sol.id) ? 'bg-blue-50' : ''}`}>
                               <td className="px-3 py-2">
                                 {isFacturable(sol) ? (
@@ -1802,14 +2065,26 @@ export default function AdminFacturacionSolicitudesView() {
                                 </div>
                               </td>
                               <td className="px-3 py-2 text-center">
-                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                  sol.prioridad === 'urgente' ? 'bg-red-100 text-red-700' :
-                                  sol.prioridad === 'monitoreo' ? 'bg-violet-100 text-violet-700' :
-                                  sol.prioridad === '72h' ? 'bg-orange-100 text-orange-700' :
-                                  'bg-blue-100 text-blue-700'
-                                }`}>
-                                  {sol.prioridad === 'urgente' ? 'Urgente' : sol.prioridad === 'monitoreo' ? 'Monitoreo' : sol.prioridad === '72h' ? '72h' : 'Normal'}
-                                </span>
+                                <div className="inline-flex items-center gap-1">
+                                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                    sol.prioridad === 'urgente' ? 'bg-red-100 text-red-700' :
+                                    sol.prioridad === 'monitoreo' ? 'bg-violet-100 text-violet-700' :
+                                    sol.prioridad === '72h' ? 'bg-orange-100 text-orange-700' :
+                                    'bg-blue-100 text-blue-700'
+                                  }`}>
+                                    {sol.prioridad === 'urgente' ? 'Urgente' : sol.prioridad === 'monitoreo' ? 'Monitoreo' : sol.prioridad === '72h' ? '72h' : 'Normal'}
+                                  </span>
+                                  {monitoreoStatusBadge && (
+                                    <button
+                                      type="button"
+                                      onClick={() => openMonitoreoHistorialModal(sol)}
+                                      className={`px-2 py-0.5 rounded text-[11px] border hover:opacity-90 ${monitoreoStatusBadge.className}`}
+                                      title={monitoreoStatusBadge.title || 'Ver árbol/historial del monitoreo asociado'}
+                                    >
+                                      {monitoreoStatusBadge.label}
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-3 py-2 text-right font-medium">
                                 {editingPrecio === sol.id ? (
@@ -1868,6 +2143,8 @@ export default function AdminFacturacionSolicitudesView() {
                                 )}
                               </td>
                             </tr>
+                              )
+                            })()
                           ))}
                         </tbody>
                       </table>
@@ -2064,6 +2341,118 @@ export default function AdminFacturacionSolicitudesView() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {showMonitoreoHistorialModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[88vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Árbol de Monitoreo Asociado</h3>
+                <p className="text-sm text-gray-500">Solicitud padre + historial de todas las asociadas</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowMonitoreoHistorialModal(false)
+                  setMonitoreoHistorialData(null)
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {loadingMonitoreoHistorial ? (
+                <div className="flex justify-center py-10">
+                  <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+                </div>
+              ) : !monitoreoHistorialData?.success ? (
+                <div className="text-center py-8 text-red-600">No se pudo cargar el historial asociado.</div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <p className="text-indigo-700 font-semibold uppercase tracking-wide">Prepago</p>
+                      <p className="text-indigo-900 font-medium">#{monitoreoHistorialData.prepago?.id}</p>
+                    </div>
+                    <div>
+                      <p className="text-indigo-700 font-semibold uppercase tracking-wide">Cliente</p>
+                      <p className="text-indigo-900 font-medium truncate">{monitoreoHistorialData.prepago?.cliente_nombre || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-indigo-700 font-semibold uppercase tracking-wide">Uso</p>
+                      <p className="text-indigo-900 font-medium">{monitoreoHistorialData.resumen?.usados || 0}/{monitoreoHistorialData.resumen?.total_cupo || 0}</p>
+                    </div>
+                    <div>
+                      <p className="text-indigo-700 font-semibold uppercase tracking-wide">Disponibles</p>
+                      <p className="text-indigo-900 font-medium">{monitoreoHistorialData.resumen?.disponibles || 0}</p>
+                    </div>
+                  </div>
+
+                  {monitoreoHistorialData.parent && (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                      <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">Solicitud Padre (raíz)</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                        <p><span className="text-gray-500">ID:</span> <span className="font-medium">#{monitoreoHistorialData.parent.id}</span></p>
+                        <p><span className="text-gray-500">Uso:</span> <span className="font-medium">{monitoreoHistorialData.parent.uso_numero}/{monitoreoHistorialData.prepago?.total_cupo || '?'}</span></p>
+                        <p className="sm:col-span-2"><span className="text-gray-500">Empresa:</span> <span className="font-medium">{monitoreoHistorialData.parent.razon_social || '-'}</span></p>
+                        <p><span className="text-gray-500">Identificador:</span> <span className="font-medium">{monitoreoHistorialData.parent.cuit || '-'}</span></p>
+                        <p><span className="text-gray-500">Fecha:</span> <span className="font-medium">{formatDateTime(monitoreoHistorialData.parent.created_at)}</span></p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-gray-200 p-4">
+                    <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">Árbol / Historial de Asociadas</p>
+                    {(monitoreoHistorialData.asociadas || []).length === 0 ? (
+                      <p className="text-sm text-gray-500 text-center py-4">No hay solicitudes asociadas.</p>
+                    ) : (
+                      <div className="relative pl-6 space-y-3">
+                        <div className="absolute left-2 top-1 bottom-1 w-px bg-gray-200" />
+                        {(monitoreoHistorialData.asociadas || []).map((nodo) => {
+                          const isParent = monitoreoHistorialData.parent?.id === nodo.id
+                          return (
+                            <div key={nodo.id} className="relative">
+                              <div className={`absolute -left-5 top-4 h-3 w-3 rounded-full border-2 ${isParent ? 'bg-emerald-500 border-emerald-100' : 'bg-white border-gray-300'}`} />
+                              <div className={`border rounded-xl p-3 ${isParent ? 'border-emerald-200 bg-emerald-50/40' : 'border-gray-200 bg-white'}`}>
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <p className="text-sm font-semibold text-gray-900">#{nodo.id} · {nodo.razon_social || 'Sin razón social'}</p>
+                                  <span className={`text-[11px] px-2 py-0.5 rounded-full border ${Number(nodo.precio_eur || 0) === 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-indigo-50 text-indigo-700 border-indigo-200'}`}>
+                                    {Number(nodo.precio_eur || 0) === 0 ? 'Ya pagado' : 'Validado'} {nodo.uso_numero || '?'}/{monitoreoHistorialData.prepago?.total_cupo || '?'}
+                                  </span>
+                                </div>
+                                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-gray-600">
+                                  <p><span className="text-gray-500">Identificador:</span> {nodo.cuit || '-'}</p>
+                                  <p><span className="text-gray-500">Estado:</span> {nodo.estado || '-'}</p>
+                                  <p><span className="text-gray-500">Fecha:</span> {formatDateTime(nodo.created_at)}</p>
+                                  <p className="sm:col-span-2"><span className="text-gray-500">Solicitado por:</span> {nodo.solicitante_nombre || '-'}</p>
+                                  <p><span className="text-gray-500">Precio EUR:</span> {Number(nodo.precio_eur || 0).toFixed(2)}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t bg-gray-50 rounded-b-xl flex justify-end">
+              <button
+                onClick={() => {
+                  setShowMonitoreoHistorialModal(false)
+                  setMonitoreoHistorialData(null)
+                }}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg font-medium"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

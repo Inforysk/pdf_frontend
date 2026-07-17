@@ -129,6 +129,13 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
   const [creandoSolicitud, setCreandoSolicitud] = useState(false)
   const [prioridadSeleccionada, setPrioridadSeleccionada] = useState('normal')
   const [monitoreoFacturar, setMonitoreoFacturar] = useState(true) // true = facturar con precio configurado, false = precio 0
+  const [monitoreoPrepagos, setMonitoreoPrepagos] = useState([])
+  const [loadingMonitoreoPrepagos, setLoadingMonitoreoPrepagos] = useState(false)
+  const [monitoreoPrepagoModo, setMonitoreoPrepagoModo] = useState('existing')
+  const [monitoreoPrepagoId, setMonitoreoPrepagoId] = useState('')
+  const [monitoreoPrepagoTotal, setMonitoreoPrepagoTotal] = useState('')
+  const [monitoreoPrepagoTotalFacturado, setMonitoreoPrepagoTotalFacturado] = useState('')
+  const [prioridadEditModal, setPrioridadEditModal] = useState(null)
   const [modalSearchType, setModalSearchType] = useState('all') // 'all', 'cuit', 'nombre'
   const [modalCountryFilter, setModalCountryFilter] = useState('all')
   const [modalCountryOpen, setModalCountryOpen] = useState(false)
@@ -143,6 +150,10 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
   const [solicitudAccion, setSolicitudAccion] = useState(null)
   const [motivoAccion, setMotivoAccion] = useState('')
   const [procesandoAccion, setProcesandoAccion] = useState(false)
+  const [selectedSolicitudIds, setSelectedSolicitudIds] = useState([])
+  const [showCancelarLoteModal, setShowCancelarLoteModal] = useState(false)
+  const [motivoCancelacionLote, setMotivoCancelacionLote] = useState('')
+  const [cancelandoLote, setCancelandoLote] = useState(false)
   const [uploadingBalanceSolicitudId, setUploadingBalanceSolicitudId] = useState(null)
   const [balanceUploadSolicitud, setBalanceUploadSolicitud] = useState(null)
   const [showBalanceUploadModal, setShowBalanceUploadModal] = useState(false)
@@ -165,6 +176,9 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
   const [hasBalanceBySolicitud, setHasBalanceBySolicitud] = useState({})
   const [deletingAntecedenteId, setDeletingAntecedenteId] = useState(null)
   const [pendingDeleteAntecedente, setPendingDeleteAntecedente] = useState(null)
+  const [showMonitoreoHistorialModal, setShowMonitoreoHistorialModal] = useState(false)
+  const [loadingMonitoreoHistorial, setLoadingMonitoreoHistorial] = useState(false)
+  const [monitoreoHistorialData, setMonitoreoHistorialData] = useState(null)
   const dropdownRef = useRef(null)
   const balanceFileInputRef = useRef(null)
 
@@ -230,6 +244,16 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     return sol.pais || 'Argentina'
   }
 
+  const formatPrepagoOptionLabel = (item) => {
+    const usados = Number(item?.usados || 0)
+    const total = Number(item?.total_cupo || 0)
+    const disponibles = Number(item?.disponibles || 0)
+    const siguiente = total > 0 ? Math.min(usados + 1, total) : 1
+    const estado = String(item?.estado || '').toLowerCase()
+    const estadoLabel = estado === 'completo' ? 'COMPLETO' : 'VALIDADO'
+    return `#${item.id} - ${siguiente}/${total || '?'} (disp: ${disponibles}) - ${estadoLabel}`
+  }
+
   const normalizarMesInput = (value) => {
     const raw = String(value || '').trim().toLowerCase()
     if (!raw) return ''
@@ -286,6 +310,72 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     })
   }
 
+  const isMonitoreoPrepagado = (sol = {}) => {
+    return (sol?.prioridad === 'monitoreo') && Number(sol?.precio_eur || 0) === 0
+  }
+
+  const getMonitoreoUsoLabel = (sol = {}) => {
+    const uso = Number(sol?.monitoreo_prepago_uso_numero || 0)
+    const total = Number(sol?.monitoreo_prepago_total_cupo || 0)
+    if (uso > 0 && total > 0) return `${uso}/${total}`
+    return null
+  }
+
+  const getMonitoreoStatusBadge = (sol = {}) => {
+    if (sol?.prioridad !== 'monitoreo') return null
+    const usoLabel = getMonitoreoUsoLabel(sol)
+    const total = Number(sol?.monitoreo_prepago_total_cupo || 0)
+    const usados = Number(sol?.monitoreo_prepago_usados || 0)
+    const completo = total > 0 && usados >= total
+
+    if (isMonitoreoPrepagado(sol)) {
+      return {
+        label: usoLabel ? `Ya pagado ${usoLabel}` : 'Ya pagado',
+        className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      }
+    }
+
+    if (usoLabel) {
+      return {
+        label: completo ? `Validado ${usoLabel}` : `Validado ${usoLabel}`,
+        className: completo ? 'bg-slate-100 text-slate-700 border-slate-200' : 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      }
+    }
+
+    return null
+  }
+
+  const getFacturaEstadoPago = (sol = {}) => {
+    const key = String(sol?.factura_estado_pago || 'pendiente').trim().toLowerCase()
+    if (['pendiente', 'facturada', 'pagada', 'cancelada'].includes(key)) return key
+    return 'pendiente'
+  }
+
+  const canEditarPrioridadByFacturacion = (sol = {}) => {
+    const estadoPago = getFacturaEstadoPago(sol)
+    if (estadoPago === 'facturada' || estadoPago === 'pagada' || estadoPago === 'cancelada') return false
+    if (estadoPago === 'pendiente') return true
+    return !sol?.facturado
+  }
+
+  const canEditarEstadoByFacturacion = (sol = {}) => canEditarPrioridadByFacturacion(sol)
+
+  const getBloqueoFacturacionBadge = (sol = {}) => {
+    if (canEditarPrioridadByFacturacion(sol)) return null
+    const estadoPago = getFacturaEstadoPago(sol)
+    const map = {
+      facturada: { label: 'Facturada', className: 'bg-blue-50 text-blue-700 border-blue-200' },
+      pagada: { label: 'Pagada', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+      cancelada: { label: 'Cancelada', className: 'bg-gray-100 text-gray-600 border-gray-200' },
+    }
+    return map[estadoPago] || null
+  }
+
+  const canSelectForCancelLote = (sol = {}) => {
+    const estadoPago = getFacturaEstadoPago(sol)
+    return !['facturada', 'pagada'].includes(estadoPago)
+  }
+
   const getAntecedentePagesText = (item) => {
     if (!item) return 'Sin paginas informadas'
     if (item.page_from && item.page_to) {
@@ -312,6 +402,48 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
   // Key para forzar recargas
   const [reloadKey, setReloadKey] = useState(0)
   const reload = () => setReloadKey(k => k + 1)
+
+  const loadMonitoreoPrepagos = async (clienteId) => {
+    if (!clienteId) {
+      setMonitoreoPrepagos([])
+      return
+    }
+    setLoadingMonitoreoPrepagos(true)
+    try {
+      const res = await axios.get('/api/monitoreo-prepagos', { params: { cliente_id: clienteId } })
+      if (res.data?.success) {
+        const items = (res.data.items || []).filter((item) => Number(item?.disponibles || 0) > 0)
+        setMonitoreoPrepagos(items)
+      } else {
+        setMonitoreoPrepagos([])
+      }
+    } catch {
+      setMonitoreoPrepagos([])
+    } finally {
+      setLoadingMonitoreoPrepagos(false)
+    }
+  }
+
+  const openMonitoreoHistorialModal = async (sol) => {
+    const prepagoId = Number(sol?.monitoreo_prepago_id || 0)
+    if (!prepagoId) return
+
+    setShowMonitoreoHistorialModal(true)
+    setLoadingMonitoreoHistorial(true)
+    setMonitoreoHistorialData(null)
+    try {
+      const res = await axios.get(`/api/monitoreo-prepagos/${prepagoId}/historial`)
+      if (res.data?.success) {
+        setMonitoreoHistorialData(res.data)
+      } else {
+        toast.error(res.data?.error || 'No se pudo cargar el historial de monitoreo')
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error cargando historial de monitoreo')
+    } finally {
+      setLoadingMonitoreoHistorial(false)
+    }
+  }
 
   // Cargar clientes para filtro al inicio
   useEffect(() => {
@@ -383,6 +515,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
         if (responses[0].data.success) {
           setSolicitudes(responses[0].data.solicitudes)
           setPagination(responses[0].data.pagination || { total: 0, total_pages: 1 })
+          setSelectedSolicitudIds([])
         }
         if (responses[1]?.data?.success) {
           setStats(responses[1].data.stats)
@@ -408,8 +541,86 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
         reloadStats()
         if (detalle?.id === id) setDetalle(prev => ({ ...prev, estado: nuevoEstado }))
       }
-    } catch {
-      toast.error('Error al actualizar')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al actualizar')
+    }
+  }
+
+  const toggleSelectSolicitud = (id) => {
+    const sol = solicitudes.find(s => s.id === id)
+    if (!sol || !canSelectForCancelLote(sol)) return
+    setSelectedSolicitudIds(prev => (
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    ))
+  }
+
+  const toggleSelectAllVisibles = () => {
+    const visibleIds = solicitudes.filter(canSelectForCancelLote).map(s => s.id)
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedSolicitudIds.includes(id))
+    if (allSelected) {
+      setSelectedSolicitudIds(prev => prev.filter(id => !visibleIds.includes(id)))
+      return
+    }
+    setSelectedSolicitudIds(prev => Array.from(new Set([...prev, ...visibleIds])))
+  }
+
+  const getResumenSeleccionCancelacion = () => {
+    const selected = solicitudes.filter(s => selectedSolicitudIds.includes(s.id))
+    const resumen = { total: selected.length, pendiente: 0, en_proceso: 0, completada: 0, cancelada: 0 }
+    selected.forEach((s) => {
+      const key = String(s.estado || '').toLowerCase()
+      if (key in resumen) resumen[key] += 1
+    })
+    return resumen
+  }
+
+  const abrirCancelarLoteModal = () => {
+    if (selectedSolicitudIds.length === 0) {
+      toast.error('Seleccioná al menos una solicitud')
+      return
+    }
+    setShowCancelarLoteModal(true)
+  }
+
+  const cancelarSolicitudesLote = async () => {
+    if (selectedSolicitudIds.length === 0) {
+      toast.error('No hay solicitudes seleccionadas')
+      return
+    }
+    const motivo = String(motivoCancelacionLote || '').trim()
+    if (!motivo) {
+      toast.error('Ingresá un motivo de cancelación')
+      return
+    }
+
+    setCancelandoLote(true)
+    try {
+      const res = await axios.post('/api/pedidos-solicitudes/cancelar-lote', {
+        ids: selectedSolicitudIds,
+        motivo_cambio: motivo,
+      })
+      if (res.data?.success) {
+        const total = Number(res.data?.summary?.total_solicitudes || selectedSolicitudIds.length)
+        const canceladas = Number(res.data?.summary?.canceladas || 0)
+        const yaCanceladas = Number(res.data?.summary?.ya_canceladas || 0)
+        const bloqueadasFacturacion = Number(res.data?.summary?.bloqueadas_facturacion || 0)
+        toast.success(
+          `Cancelación masiva: ${canceladas}/${total} canceladas`
+          + `${yaCanceladas > 0 ? ` (${yaCanceladas} ya estaban canceladas)` : ''}`
+          + `${bloqueadasFacturacion > 0 ? ` (${bloqueadasFacturacion} bloqueadas por facturación)` : ''}`
+        )
+        setShowCancelarLoteModal(false)
+        setMotivoCancelacionLote('')
+        setSelectedSolicitudIds([])
+        reload()
+        reloadStats()
+      } else {
+        toast.error(res.data?.error || 'No se pudo cancelar el lote')
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al cancelar solicitudes')
+    } finally {
+      setCancelandoLote(false)
     }
   }
 
@@ -456,13 +667,83 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const actualizarPrioridad = async (id, prioridad) => {
+  const actualizarPrioridad = async (id, prioridad, extraPayload = {}) => {
     try {
-      await axios.put(`/api/pedidos-solicitudes/${id}`, { prioridad })
+      await axios.put(`/api/pedidos-solicitudes/${id}`, { prioridad, ...extraPayload })
+      toast.success('Prioridad actualizada')
+      if (detalle?.id === id) {
+        setDetalle(prev => ({ ...prev, prioridad, ...extraPayload }))
+      }
       reload()
-    } catch {
-      toast.error('Error al actualizar prioridad')
+      reloadStats()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al actualizar prioridad')
     }
+  }
+
+  const handleCambiarPrioridad = async (sol, nuevaPrioridad) => {
+    if (!sol || !nuevaPrioridad) return
+    if (nuevaPrioridad === (sol.prioridad || 'normal')) return
+
+    if (!canEditarPrioridadByFacturacion(sol)) {
+      const estadoPago = getFacturaEstadoPago(sol)
+      toast.error(`No se puede cambiar prioridad: facturación en estado ${estadoPago}`)
+      return
+    }
+
+    const monitoreoPrepagoId = Number(sol.monitoreo_prepago_id || 0)
+    const monitoreoUsoNumero = Number(sol.monitoreo_prepago_uso_numero || 0)
+    const monitoreoUsados = Number(sol.monitoreo_prepago_usados || 0)
+    const prioridadBloqueadaMonitoreo =
+      (sol.prioridad || '').toLowerCase() === 'monitoreo'
+      && monitoreoPrepagoId > 0
+      && (monitoreoUsoNumero > 1 || monitoreoUsados > 1)
+
+    if (prioridadBloqueadaMonitoreo) {
+      toast.error('No se puede cambiar: este monitoreo ya tiene solicitudes asociadas en el mismo prepago')
+      return
+    }
+
+    if (nuevaPrioridad !== 'monitoreo') {
+      await actualizarPrioridad(sol.id, nuevaPrioridad)
+      return
+    }
+
+    const clienteId = sol.cliente_id || sol.solicitado_por
+    setPrioridadEditModal({
+      sol,
+      facturar: true,
+      prepagoModo: 'existing',
+      prepagoId: '',
+      prepagoTotal: ''
+    })
+    await loadMonitoreoPrepagos(clienteId)
+  }
+
+  const confirmarCambioPrioridadMonitoreo = async () => {
+    if (!prioridadEditModal?.sol) return
+
+    const payload = {}
+    if (!prioridadEditModal.facturar) {
+      payload.facturar_monitoreo = false
+      if (prioridadEditModal.prepagoModo === 'existing') {
+        if (!prioridadEditModal.prepagoId) {
+          toast.error('Seleccioná un prepago existente')
+          return
+        }
+        payload.monitoreo_prepago_id = Number(prioridadEditModal.prepagoId)
+      } else {
+        const total = Number(prioridadEditModal.prepagoTotal)
+        if (!Number.isInteger(total) || total < 1) {
+          toast.error('Ingresá un total válido de monitoreos prepagados')
+          return
+        }
+        payload.monitoreo_prepago_total_cupo = total
+      }
+    }
+
+    await actualizarPrioridad(prioridadEditModal.sol.id, 'monitoreo', payload)
+    setPrioridadEditModal(null)
   }
 
   const loadBalanceAntecedentes = async (solicitudId) => {
@@ -1034,7 +1315,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     }
     setCreandoSolicitud(true)
     try {
-      const res = await axios.post('/api/pedidos-solicitudes', {
+      const payload = {
         cuit: empresaData.cuit || '',
         razon_social: empresaData.razon_social,
         pais: empresaData.pais || 'Argentina',
@@ -1045,6 +1326,39 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
         facturar_monitoreo: prioridadSeleccionada === 'monitoreo' ? monitoreoFacturar : undefined,
         notas: `Solicitud creada por analista para cliente: ${clienteSeleccionado.numero_abono || clienteSeleccionado.id} - ${clienteSeleccionado.nombre_completo}`,
         cliente_id: clienteSeleccionado.id
+      }
+
+      if (prioridadSeleccionada === 'monitoreo' && monitoreoFacturar) {
+        const totalFacturado = Number(monitoreoPrepagoTotalFacturado)
+        if (!Number.isInteger(totalFacturado) || totalFacturado < 1) {
+          toast.error('Ingresá el máximo de asociados para este monitoreo facturado')
+          setCreandoSolicitud(false)
+          return
+        }
+        payload.monitoreo_prepago_total_cupo = totalFacturado
+      }
+
+      if (prioridadSeleccionada === 'monitoreo' && !monitoreoFacturar) {
+        if (monitoreoPrepagoModo === 'existing') {
+          if (!monitoreoPrepagoId) {
+            toast.error('Seleccioná un prepago existente')
+            setCreandoSolicitud(false)
+            return
+          }
+          payload.monitoreo_prepago_id = Number(monitoreoPrepagoId)
+        } else {
+          const total = Number(monitoreoPrepagoTotal)
+          if (!Number.isInteger(total) || total < 1) {
+            toast.error('Ingresá un total válido de monitoreos prepagados')
+            setCreandoSolicitud(false)
+            return
+          }
+          payload.monitoreo_prepago_total_cupo = total
+        }
+      }
+
+      const res = await axios.post('/api/pedidos-solicitudes', {
+        ...payload
       })
       if (res.data.success) {
         toast.success('Solicitud creada exitosamente')
@@ -1075,6 +1389,12 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     setModalCountryOpen(false)
     setPrioridadSeleccionada('normal')
     setMonitoreoFacturar(true)
+    setMonitoreoPrepagos([])
+    setMonitoreoPrepagoModo('existing')
+    setMonitoreoPrepagoId('')
+    setMonitoreoPrepagoTotal('')
+    setMonitoreoPrepagoTotalFacturado('')
+    setPrioridadEditModal(null)
     setShowConfirmacion(false)
   }
 
@@ -1084,6 +1404,13 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     loadPaisesEmpresas()
     setShowNuevaSolicitud(true)
   }
+
+  useEffect(() => {
+    if (!showNuevaSolicitud || modalStep !== 2) return
+    if (prioridadSeleccionada !== 'monitoreo' || monitoreoFacturar) return
+    if (!clienteSeleccionado?.id) return
+    loadMonitoreoPrepagos(clienteSeleccionado.id)
+  }, [showNuevaSolicitud, modalStep, prioridadSeleccionada, monitoreoFacturar, clienteSeleccionado?.id])
 
   const clientesFiltrados = clientes.filter(c => {
     if (!clienteSearch.trim()) return true
@@ -1432,11 +1759,55 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
         </div>
       ) : (
         <>
+        <div className="mb-3 rounded-xl border border-indigo-100 bg-indigo-50/70 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="text-sm text-indigo-900">
+            <span className="font-semibold">{selectedSolicitudIds.length}</span> solicitud(es) seleccionada(s)
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleSelectAllVisibles}
+              className="px-3 py-1.5 text-xs rounded-lg border border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50"
+            >
+              Seleccionar visibles
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedSolicitudIds([])}
+              disabled={selectedSolicitudIds.length === 0}
+              className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              Limpiar
+            </button>
+            <button
+              type="button"
+              onClick={abrirCancelarLoteModal}
+              disabled={selectedSolicitudIds.length === 0}
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              <Ban className="h-3.5 w-3.5" />
+              Cancelar seleccionadas
+            </button>
+          </div>
+        </div>
+
         <div className="bg-white rounded-xl border">
           <div className="overflow-x-auto overflow-y-visible">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
+                  <th className="px-3 py-3 text-left font-medium text-gray-600 w-10">
+                    <input
+                      type="checkbox"
+                      checked={(() => {
+                        const visibleSelectableIds = solicitudes.filter(canSelectForCancelLote).map(s => s.id)
+                        return visibleSelectableIds.length > 0 && visibleSelectableIds.every(id => selectedSolicitudIds.includes(id))
+                      })()}
+                      onChange={toggleSelectAllVisibles}
+                      disabled={solicitudes.filter(canSelectForCancelLote).length === 0}
+                      className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Empresa</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Identificador</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Tipo Informe</th>
@@ -1461,9 +1832,43 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                   const hasBalance = Boolean(hasBalanceBySolicitud[sol.id])
 
                   const fechaFin = sol.fecha_fin || (sol.estado === 'completada' || sol.estado === 'cancelada' ? sol.updated_at : null)
+                  const monitoreoStatusBadge = getMonitoreoStatusBadge(sol)
+                  const prioridadEditablePorFacturacion = canEditarPrioridadByFacturacion(sol)
+                  const estadoEditablePorFacturacion = canEditarEstadoByFacturacion(sol)
+                  const bloqueoFacturacionBadge = getBloqueoFacturacionBadge(sol)
+                  const monitoreoPrepagoId = Number(sol.monitoreo_prepago_id || 0)
+                  const monitoreoUsoNumero = Number(sol.monitoreo_prepago_uso_numero || 0)
+                  const monitoreoUsados = Number(sol.monitoreo_prepago_usados || 0)
+                  const prioridadBloqueadaMonitoreo =
+                    (sol.prioridad || '').toLowerCase() === 'monitoreo'
+                    && monitoreoPrepagoId > 0
+                    && (monitoreoUsoNumero > 1 || monitoreoUsados > 1)
+                  const prioridadDeshabilitada = !prioridadEditablePorFacturacion || prioridadBloqueadaMonitoreo
+                  const prioridadDisabledTitle = !prioridadEditablePorFacturacion
+                    ? `Bloqueada por facturación: ${getFacturaEstadoPago(sol)}`
+                    : (prioridadBloqueadaMonitoreo ? 'Bloqueada: este monitoreo ya tiene solicitudes asociadas' : '')
+                  const estadoDisabledTitle = !estadoEditablePorFacturacion
+                    ? `Bloqueada por facturación: ${getFacturaEstadoPago(sol)}`
+                    : ''
 
                   return (
                     <tr key={sol.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-3 py-3 align-top">
+                        {(() => {
+                          const canSelect = canSelectForCancelLote(sol)
+                          const estadoPago = getFacturaEstadoPago(sol)
+                          return (
+                        <input
+                          type="checkbox"
+                          checked={selectedSolicitudIds.includes(sol.id)}
+                          onChange={() => toggleSelectSolicitud(sol.id)}
+                          disabled={!canSelect}
+                          title={!canSelect ? `No seleccionable: facturación ${estadoPago}` : 'Seleccionar para cancelación masiva'}
+                          className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                          )
+                        })()}
+                      </td>
                       {/* Empresa */}
                       <td className="px-4 py-3">
                         <p className="font-medium text-gray-900 truncate max-w-[250px]" title={sol.razon_social}>
@@ -1490,17 +1895,61 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                       </td>
                       {/* Prioridad */}
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                          sol.prioridad === 'urgente'
-                            ? 'bg-red-100 text-red-700 border border-red-200'
-                            : sol.prioridad === 'monitoreo'
-                              ? 'bg-violet-100 text-violet-700 border border-violet-200'
-                            : sol.prioridad === '72h'
-                              ? 'bg-orange-100 text-orange-700 border border-orange-200'
-                              : 'bg-blue-50 text-blue-700 border border-blue-200'
-                        }`}>
-                          {sol.prioridad === 'urgente' ? '🔴 Urgente' : sol.prioridad === 'monitoreo' ? '🟣 Monitoreo' : sol.prioridad === '72h' ? '🟠 72 Horas' : '🔵 Normal'}
-                        </span>
+                        {prioridadEditablePorFacturacion ? (
+                          <div className="space-y-1">
+                            <select
+                              value={sol.prioridad || 'normal'}
+                              onChange={(e) => handleCambiarPrioridad(sol, e.target.value)}
+                              disabled={prioridadDeshabilitada}
+                              className={`px-2 py-1 text-xs border rounded-lg ${prioridadDeshabilitada ? 'border-gray-100 bg-gray-100 text-gray-500 cursor-not-allowed' : 'border-gray-200 bg-white'}`}
+                              title={prioridadDisabledTitle}
+                            >
+                              <option value="normal">Normal</option>
+                              <option value="monitoreo">Monitoreo</option>
+                              <option value="72h">72 Horas</option>
+                              <option value="urgente">Urgente</option>
+                            </select>
+                            {monitoreoStatusBadge && (
+                              <button
+                                type="button"
+                                onClick={() => openMonitoreoHistorialModal(sol)}
+                                className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] border hover:opacity-90 ${monitoreoStatusBadge.className}`}
+                                title="Ver árbol/historial del monitoreo asociado"
+                              >
+                                {monitoreoStatusBadge.label}
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                              sol.prioridad === 'urgente'
+                                ? 'bg-red-100 text-red-700 border border-red-200'
+                                : sol.prioridad === 'monitoreo'
+                                  ? 'bg-violet-100 text-violet-700 border border-violet-200'
+                                  : sol.prioridad === '72h'
+                                    ? 'bg-orange-100 text-orange-700 border border-orange-200'
+                                    : 'bg-blue-50 text-blue-700 border border-blue-200'
+                            }`}>
+                              {sol.prioridad === 'urgente' ? '🔴 Urgente' : sol.prioridad === 'monitoreo' ? '🟣 Monitoreo' : sol.prioridad === '72h' ? '🟠 72 Horas' : '🔵 Normal'}
+                            </span>
+                            {bloqueoFacturacionBadge && (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] border ${bloqueoFacturacionBadge.className}`}>
+                                {bloqueoFacturacionBadge.label}
+                              </span>
+                            )}
+                            {monitoreoStatusBadge && (
+                              <button
+                                type="button"
+                                onClick={() => openMonitoreoHistorialModal(sol)}
+                                className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] border hover:opacity-90 ${monitoreoStatusBadge.className}`}
+                                title="Ver árbol/historial del monitoreo asociado"
+                              >
+                                {monitoreoStatusBadge.label}
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </td>
                       {/* Solicitado por */}
                       <td className="px-4 py-3">
@@ -1599,16 +2048,29 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                                   zIndex: 9999
                                 }}
                               >
+                                {!estadoEditablePorFacturacion && bloqueoFacturacionBadge && (
+                                  <div className="px-3 py-2 border-b border-gray-100">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] border ${bloqueoFacturacionBadge.className}`}>
+                                      {bloqueoFacturacionBadge.label}
+                                    </span>
+                                    <p className="mt-1 text-[11px] text-gray-500" title={estadoDisabledTitle}>
+                                      Sin cambios de estado por facturación.
+                                    </p>
+                                  </div>
+                                )}
+
                                 {/* Opciones según estado */}
                                 {sol.estado === 'pendiente' && (
                                   <>
-                                    <button
-                                      onClick={() => { setSolicitudAccion(sol); setModalAccion('aceptar'); setActionDropdownId(null) }}
-                                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-green-50"
-                                    >
-                                      <ArrowRight className="h-4 w-4 text-green-500" />
-                                      <span>Aceptar</span>
-                                    </button>
+                                    {estadoEditablePorFacturacion && (
+                                      <button
+                                        onClick={() => { setSolicitudAccion(sol); setModalAccion('aceptar'); setActionDropdownId(null) }}
+                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-green-50"
+                                      >
+                                        <ArrowRight className="h-4 w-4 text-green-500" />
+                                        <span>Aceptar</span>
+                                      </button>
+                                    )}
                                     {canUploadBalance && (
                                       <button
                                         onClick={() => handleSubirBalanceClick(sol)}
@@ -1623,13 +2085,15 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                                         <span>Subir Balance PDF</span>
                                       </button>
                                     )}
-                                    <button
-                                      onClick={() => { setSolicitudAccion(sol); setModalAccion('cancelar'); setActionDropdownId(null) }}
-                                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-red-50"
-                                    >
-                                      <X className="h-4 w-4 text-red-500" />
-                                      <span>Cancelar</span>
-                                    </button>
+                                    {estadoEditablePorFacturacion && (
+                                      <button
+                                        onClick={() => { setSolicitudAccion(sol); setModalAccion('cancelar'); setActionDropdownId(null) }}
+                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-red-50"
+                                      >
+                                        <X className="h-4 w-4 text-red-500" />
+                                        <span>Cancelar</span>
+                                      </button>
+                                    )}
                                   </>
                                 )}
                                 {sol.estado === 'en_proceso' && (
@@ -1665,7 +2129,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                                         <span>Subir Balance PDF</span>
                                       </button>
                                     )}
-                                    {puedeCompletar && (
+                                    {puedeCompletar && estadoEditablePorFacturacion && (
                                       <button
                                         onClick={() => { setSolicitudAccion(sol); setModalAccion('completar'); setActionDropdownId(null) }}
                                         className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-green-50"
@@ -1674,21 +2138,25 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                                         <span>Completar</span>
                                       </button>
                                     )}
-                                    <button
-                                      onClick={() => { setSolicitudAccion(sol); setModalAccion('devolver'); setActionDropdownId(null) }}
-                                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-orange-50"
-                                    >
-                                      <ArrowLeft className="h-4 w-4 text-orange-500" />
-                                      <span>Devolver</span>
-                                    </button>
-                                    <div className="border-t border-gray-100 my-1" />
-                                    <button
-                                      onClick={() => { setSolicitudAccion(sol); setModalAccion('cancelar'); setActionDropdownId(null) }}
-                                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-red-50"
-                                    >
-                                      <X className="h-4 w-4 text-red-500" />
-                                      <span>Cancelar</span>
-                                    </button>
+                                    {estadoEditablePorFacturacion && (
+                                      <>
+                                        <button
+                                          onClick={() => { setSolicitudAccion(sol); setModalAccion('devolver'); setActionDropdownId(null) }}
+                                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-orange-50"
+                                        >
+                                          <ArrowLeft className="h-4 w-4 text-orange-500" />
+                                          <span>Devolver</span>
+                                        </button>
+                                        <div className="border-t border-gray-100 my-1" />
+                                        <button
+                                          onClick={() => { setSolicitudAccion(sol); setModalAccion('cancelar'); setActionDropdownId(null) }}
+                                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-red-50"
+                                        >
+                                          <X className="h-4 w-4 text-red-500" />
+                                          <span>Cancelar</span>
+                                        </button>
+                                      </>
+                                    )}
                                   </>
                                 )}
                                 {(sol.estado === 'completada' || sol.estado === 'cancelada') && (
@@ -1707,13 +2175,15 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                                         <span>Subir Balance PDF</span>
                                       </button>
                                     )}
-                                    <button
-                                      onClick={() => { setSolicitudAccion(sol); setModalAccion('reabrir'); setActionDropdownId(null) }}
-                                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50"
-                                    >
-                                      <RotateCw className="h-4 w-4 text-blue-500" />
-                                      <span>Reabrir</span>
-                                    </button>
+                                    {estadoEditablePorFacturacion && (
+                                      <button
+                                        onClick={() => { setSolicitudAccion(sol); setModalAccion('reabrir'); setActionDropdownId(null) }}
+                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50"
+                                      >
+                                        <RotateCw className="h-4 w-4 text-blue-500" />
+                                        <span>Reabrir</span>
+                                      </button>
+                                    )}
                                   </>
                                 )}
                               </div>
@@ -1819,6 +2289,16 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                   }`}>
                     {PRIORIDAD_CONFIG[detalle.prioridad]?.label || detalle.prioridad}
                   </span>
+                )}
+                {getMonitoreoStatusBadge(detalle) && (
+                  <button
+                    type="button"
+                    onClick={() => openMonitoreoHistorialModal(detalle)}
+                    className={`text-xs px-2 py-0.5 rounded-full border hover:opacity-90 ${getMonitoreoStatusBadge(detalle).className}`}
+                    title="Ver árbol/historial del monitoreo asociado"
+                  >
+                    {getMonitoreoStatusBadge(detalle).label}
+                  </button>
                 )}
               </div>
 
@@ -2419,7 +2899,16 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                           <label className="text-xs text-gray-500">Prioridad</label>
                           <select
                             value={prioridadSeleccionada}
-                            onChange={(e) => { setPrioridadSeleccionada(e.target.value); if (e.target.value !== 'monitoreo') setMonitoreoFacturar(true) }}
+                            onChange={(e) => {
+                              setPrioridadSeleccionada(e.target.value)
+                              if (e.target.value !== 'monitoreo') {
+                                setMonitoreoFacturar(true)
+                                setMonitoreoPrepagoModo('existing')
+                                setMonitoreoPrepagoId('')
+                                setMonitoreoPrepagoTotal('')
+                                setMonitoreoPrepagoTotalFacturado('')
+                              }
+                            }}
                             className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm mt-1"
                           >
                             <option value="normal">Normal</option>
@@ -2430,7 +2919,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                         </div>
                         {/* Sub-opción de facturación para Monitoreo */}
                         {prioridadSeleccionada === 'monitoreo' && (
-                          <div className="col-span-2 mt-1">
+                          <div className="col-span-2 mt-1 space-y-2">
                             <label className="text-xs text-gray-500">¿Se debe facturar este monitoreo?</label>
                             <div className="flex gap-3 mt-1">
                               <label className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer text-sm ${
@@ -2446,6 +2935,83 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                                 No, ya pagado (monto $0)
                               </label>
                             </div>
+
+                            {monitoreoFacturar && (
+                              <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 space-y-1">
+                                <label className="text-xs text-gray-600">Máximo asociados para este pago</label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  value={monitoreoPrepagoTotalFacturado}
+                                  onChange={(e) => setMonitoreoPrepagoTotalFacturado(e.target.value)}
+                                  className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white"
+                                  placeholder="Ej: 4"
+                                />
+                                <p className="text-xs text-gray-500">
+                                  Esta solicitud quedará como 1/{Number(monitoreoPrepagoTotalFacturado) > 0 ? Number(monitoreoPrepagoTotalFacturado) : '?' }.
+                                </p>
+                              </div>
+                            )}
+
+                            {!monitoreoFacturar && (
+                              <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 space-y-2">
+                                <div className="flex flex-wrap gap-2 text-xs">
+                                  <button
+                                    type="button"
+                                    onClick={() => setMonitoreoPrepagoModo('existing')}
+                                    className={`px-2 py-1 rounded border ${monitoreoPrepagoModo === 'existing' ? 'bg-indigo-100 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-600'}`}
+                                  >
+                                    Usar prepago existente
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMonitoreoPrepagoModo('new')}
+                                    className={`px-2 py-1 rounded border ${monitoreoPrepagoModo === 'new' ? 'bg-indigo-100 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-600'}`}
+                                  >
+                                    Crear nuevo prepago
+                                  </button>
+                                </div>
+
+                                {monitoreoPrepagoModo === 'existing' ? (
+                                  <div>
+                                    <label className="text-xs text-gray-600">Prepago asociado</label>
+                                    <select
+                                      value={monitoreoPrepagoId}
+                                      onChange={(e) => setMonitoreoPrepagoId(e.target.value)}
+                                      className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white"
+                                    >
+                                      <option value="">Seleccionar prepago...</option>
+                                      {monitoreoPrepagos.map((item) => (
+                                        <option key={item.id} value={item.id}>
+                                          {formatPrepagoOptionLabel(item)}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {loadingMonitoreoPrepagos && <p className="text-xs text-gray-500 mt-1">Cargando prepagos...</p>}
+                                    {!loadingMonitoreoPrepagos && monitoreoPrepagos.length === 0 && (
+                                      <p className="text-xs text-amber-600 mt-1">No hay prepagos con cupo disponible para este cliente.</p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <label className="text-xs text-gray-600">Total de monitoreos incluidos en este pago</label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      step="1"
+                                      value={monitoreoPrepagoTotal}
+                                      onChange={(e) => setMonitoreoPrepagoTotal(e.target.value)}
+                                      className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white"
+                                      placeholder="Ej: 4"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Esta solicitud tomará el primer cupo: 1/{Number(monitoreoPrepagoTotal) > 0 ? Number(monitoreoPrepagoTotal) : '?'}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -2565,6 +3131,183 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                 >
                   {creandoSolicitud ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   Confirmar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: cambio de prioridad a monitoreo */}
+      {prioridadEditModal && (
+        <div className="fixed inset-0 z-[70] overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div className="fixed inset-0 bg-black/50" onClick={() => setPrioridadEditModal(null)} />
+            <div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4">
+              <h3 className="text-lg font-bold text-gray-900">Cambiar a prioridad Monitoreo</h3>
+              <p className="text-sm text-gray-600">
+                Empresa: <span className="font-medium">{prioridadEditModal.sol?.razon_social}</span>
+              </p>
+
+              <div className="space-y-2">
+                <label className="text-xs text-gray-500">¿Cómo facturar este monitoreo?</label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPrioridadEditModal(prev => ({ ...prev, facturar: true }))}
+                    className={`px-3 py-2 rounded-lg border text-sm ${prioridadEditModal.facturar ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600'}`}
+                  >
+                    Facturar (precio configurado)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrioridadEditModal(prev => ({ ...prev, facturar: false }))}
+                    className={`px-3 py-2 rounded-lg border text-sm ${!prioridadEditModal.facturar ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600'}`}
+                  >
+                    Ya pagado ($0)
+                  </button>
+                </div>
+              </div>
+
+              {!prioridadEditModal.facturar && (
+                <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 space-y-2">
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setPrioridadEditModal(prev => ({ ...prev, prepagoModo: 'existing' }))}
+                      className={`px-2 py-1 rounded border ${prioridadEditModal.prepagoModo === 'existing' ? 'bg-indigo-100 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-600'}`}
+                    >
+                      Usar prepago existente
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrioridadEditModal(prev => ({ ...prev, prepagoModo: 'new' }))}
+                      className={`px-2 py-1 rounded border ${prioridadEditModal.prepagoModo === 'new' ? 'bg-indigo-100 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-600'}`}
+                    >
+                      Crear nuevo prepago
+                    </button>
+                  </div>
+
+                  {prioridadEditModal.prepagoModo === 'existing' ? (
+                    <div>
+                      <label className="text-xs text-gray-600">Prepago asociado</label>
+                      <select
+                        value={prioridadEditModal.prepagoId}
+                        onChange={(e) => setPrioridadEditModal(prev => ({ ...prev, prepagoId: e.target.value }))}
+                        className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white"
+                      >
+                        <option value="">Seleccionar prepago...</option>
+                        {monitoreoPrepagos.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {formatPrepagoOptionLabel(item)}
+                          </option>
+                        ))}
+                      </select>
+                      {loadingMonitoreoPrepagos && <p className="text-xs text-gray-500 mt-1">Cargando prepagos...</p>}
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="text-xs text-gray-600">Total de monitoreos incluidos en este pago</label>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={prioridadEditModal.prepagoTotal}
+                        onChange={(e) => setPrioridadEditModal(prev => ({ ...prev, prepagoTotal: e.target.value }))}
+                        className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white"
+                        placeholder="Ej: 4"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Esta solicitud quedará como 1/{Number(prioridadEditModal.prepagoTotal) > 0 ? Number(prioridadEditModal.prepagoTotal) : '?' }.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => setPrioridadEditModal(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmarCambioPrioridadMonitoreo}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                >
+                  Confirmar cambio
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCancelarLoteModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div
+              className="fixed inset-0 bg-black/50 transition-opacity"
+              onClick={() => { if (!cancelandoLote) setShowCancelarLoteModal(false) }}
+            />
+            <div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-3 bg-red-100 rounded-xl">
+                  <Ban className="h-6 w-6 text-red-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-gray-900">Cancelar Solicitudes Seleccionadas</h3>
+                  <p className="text-sm text-gray-500">Acción masiva para pendientes, en proceso y completadas.</p>
+                </div>
+                <button
+                  onClick={() => setShowCancelarLoteModal(false)}
+                  disabled={cancelandoLote}
+                  className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-40"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {(() => {
+                const resumen = getResumenSeleccionCancelacion()
+                return (
+                  <div className="bg-gray-50 rounded-xl p-4 mb-4 text-sm text-gray-700 space-y-2">
+                    <div className="flex justify-between"><span>Total seleccionadas</span><span className="font-semibold">{resumen.total}</span></div>
+                    <div className="flex justify-between"><span>Pendientes</span><span>{resumen.pendiente}</span></div>
+                    <div className="flex justify-between"><span>En proceso</span><span>{resumen.en_proceso}</span></div>
+                    <div className="flex justify-between"><span>Completadas</span><span>{resumen.completada}</span></div>
+                    <div className="flex justify-between"><span>Ya canceladas</span><span>{resumen.cancelada}</span></div>
+                  </div>
+                )
+              })()}
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Motivo de cancelación (obligatorio)</label>
+                <textarea
+                  value={motivoCancelacionLote}
+                  onChange={(e) => setMotivoCancelacionLote(e.target.value)}
+                  placeholder="Ej: solicitud duplicada, cambio de requerimiento del cliente..."
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 resize-none"
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowCancelarLoteModal(false)}
+                  disabled={cancelandoLote}
+                  className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 disabled:opacity-50"
+                >
+                  Volver
+                </button>
+                <button
+                  onClick={cancelarSolicitudesLote}
+                  disabled={cancelandoLote}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-xl disabled:opacity-50"
+                >
+                  {cancelandoLote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
+                  Confirmar cancelación masiva
                 </button>
               </div>
             </div>
@@ -3064,6 +3807,126 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                 >
                   {deletingAntecedenteId === pendingDeleteAntecedente.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMonitoreoHistorialModal && (
+        <div className="fixed inset-0 z-[70] overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div
+              className="fixed inset-0 bg-black/50 transition-opacity"
+              onClick={() => {
+                setShowMonitoreoHistorialModal(false)
+                setMonitoreoHistorialData(null)
+              }}
+            />
+            <div className="relative bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-6 max-h-[88vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Árbol de Monitoreo Asociado</h3>
+                  <p className="text-sm text-gray-500">Historial completo de la solicitud padre y sus asociadas.</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowMonitoreoHistorialModal(false)
+                    setMonitoreoHistorialData(null)
+                  }}
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {loadingMonitoreoHistorial ? (
+                <div className="flex items-center gap-2 text-sm text-gray-500 py-10 justify-center">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Cargando árbol/historial...
+                </div>
+              ) : !monitoreoHistorialData?.success ? (
+                <p className="text-sm text-red-600 py-8 text-center">No se pudo cargar el historial asociado.</p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <p className="text-indigo-700 font-semibold uppercase tracking-wide">Prepago</p>
+                      <p className="text-indigo-900 font-medium">#{monitoreoHistorialData.prepago?.id}</p>
+                    </div>
+                    <div>
+                      <p className="text-indigo-700 font-semibold uppercase tracking-wide">Cliente</p>
+                      <p className="text-indigo-900 font-medium truncate">{monitoreoHistorialData.prepago?.cliente_nombre || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-indigo-700 font-semibold uppercase tracking-wide">Uso</p>
+                      <p className="text-indigo-900 font-medium">{monitoreoHistorialData.resumen?.usados || 0}/{monitoreoHistorialData.resumen?.total_cupo || 0}</p>
+                    </div>
+                    <div>
+                      <p className="text-indigo-700 font-semibold uppercase tracking-wide">Disponibles</p>
+                      <p className="text-indigo-900 font-medium">{monitoreoHistorialData.resumen?.disponibles || 0}</p>
+                    </div>
+                  </div>
+
+                  {monitoreoHistorialData.parent && (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                      <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">Solicitud Padre (raíz)</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                        <p><span className="text-gray-500">ID:</span> <span className="font-medium">#{monitoreoHistorialData.parent.id}</span></p>
+                        <p><span className="text-gray-500">Uso:</span> <span className="font-medium">{monitoreoHistorialData.parent.uso_numero}/{monitoreoHistorialData.prepago?.total_cupo || '?'}</span></p>
+                        <p className="sm:col-span-2"><span className="text-gray-500">Empresa:</span> <span className="font-medium">{monitoreoHistorialData.parent.razon_social || '-'}</span></p>
+                        <p><span className="text-gray-500">Identificador:</span> <span className="font-medium">{monitoreoHistorialData.parent.cuit || '-'}</span></p>
+                        <p><span className="text-gray-500">Fecha:</span> <span className="font-medium">{formatFechaHora(monitoreoHistorialData.parent.created_at)}</span></p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-gray-200 p-4">
+                    <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">Árbol / Historial de Asociadas</p>
+                    {(monitoreoHistorialData.asociadas || []).length === 0 ? (
+                      <p className="text-sm text-gray-500 text-center py-4">No hay solicitudes asociadas.</p>
+                    ) : (
+                      <div className="relative pl-6 space-y-3">
+                        <div className="absolute left-2 top-1 bottom-1 w-px bg-gray-200" />
+                        {(monitoreoHistorialData.asociadas || []).map((nodo) => {
+                          const isParent = monitoreoHistorialData.parent?.id === nodo.id
+                          return (
+                            <div key={nodo.id} className="relative">
+                              <div className={`absolute -left-5 top-4 h-3 w-3 rounded-full border-2 ${isParent ? 'bg-emerald-500 border-emerald-100' : 'bg-white border-gray-300'}`} />
+                              <div className={`border rounded-xl p-3 ${isParent ? 'border-emerald-200 bg-emerald-50/40' : 'border-gray-200 bg-white'}`}>
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <p className="text-sm font-semibold text-gray-900">#{nodo.id} · {nodo.razon_social || 'Sin razón social'}</p>
+                                  <span className={`text-[11px] px-2 py-0.5 rounded-full border ${Number(nodo.precio_eur || 0) === 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-indigo-50 text-indigo-700 border-indigo-200'}`}>
+                                    {Number(nodo.precio_eur || 0) === 0 ? 'Ya pagado' : 'Validado'} {nodo.uso_numero || '?'}/{monitoreoHistorialData.prepago?.total_cupo || '?'}
+                                  </span>
+                                </div>
+                                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-gray-600">
+                                  <p><span className="text-gray-500">Identificador:</span> {nodo.cuit || '-'}</p>
+                                  <p><span className="text-gray-500">Estado:</span> {nodo.estado || '-'}</p>
+                                  <p><span className="text-gray-500">Fecha:</span> {formatFechaHora(nodo.created_at)}</p>
+                                  <p className="sm:col-span-2"><span className="text-gray-500">Solicitado por:</span> {nodo.solicitante_nombre || '-'}</p>
+                                  <p><span className="text-gray-500">Precio EUR:</span> {Number(nodo.precio_eur || 0).toFixed(2)}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end mt-5">
+                <button
+                  onClick={() => {
+                    setShowMonitoreoHistorialModal(false)
+                    setMonitoreoHistorialData(null)
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                >
+                  Cerrar
                 </button>
               </div>
             </div>
