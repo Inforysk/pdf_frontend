@@ -167,8 +167,8 @@ export default function AdminFacturacionView() {
       let vb
 
       if (sortByProv === 'fecha') {
-        va = new Date(a.created_at || 0).getTime()
-        vb = new Date(b.created_at || 0).getTime()
+        va = new Date(a.fecha_facturacion || a.created_at || 0).getTime()
+        vb = new Date(b.fecha_facturacion || b.created_at || 0).getTime()
       } else if (sortByProv === 'numero_factura') {
         va = String(a.numero_factura || '')
         vb = String(b.numero_factura || '')
@@ -845,7 +845,7 @@ export default function AdminFacturacionView() {
                         <p className="font-medium text-gray-900 break-words">{formatMonto(factura.precio_total, factura.currency_code)}</p>
                       </div>
                       <div>
-                        <p className="text-gray-400 mb-1">Fecha</p>
+                        <p className="text-gray-400 mb-1">Fecha facturación</p>
                         <p className="text-gray-700">{formatDate(factura.created_at)}</p>
                       </div>
                     </div>
@@ -887,7 +887,7 @@ export default function AdminFacturacionView() {
                   <th className="px-4 py-3 text-left">Descripción</th>
                   <th className="px-4 py-3 text-right">Total</th>
                   <th className="px-4 py-3 text-center">Estado</th>
-                  <th className="px-4 py-3 text-center">Fecha</th>
+                  <th className="px-4 py-3 text-center">Fecha facturación</th>
                   <th className="px-4 py-3 text-center">Acciones</th>
                 </tr>
               </thead>
@@ -1080,7 +1080,7 @@ export default function AdminFacturacionView() {
                             <p className="font-mono font-medium text-blue-600 break-all">{f.numero_factura}</p>
                             <div className="flex items-center gap-1 mt-1 text-gray-600 text-xs">
                               <Clock className="h-3 w-3" />
-                              {new Date(f.created_at).toLocaleDateString('es-AR')}
+                              {new Date(f.fecha_facturacion || f.created_at).toLocaleDateString('es-AR')}
                             </div>
                           </div>
                           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium whitespace-nowrap ${estadoCfg.color}`}>
@@ -1190,7 +1190,7 @@ export default function AdminFacturacionView() {
                       </th>
                       <th className="px-4 py-3 text-left">
                         <button onClick={() => handleSortProveedores('fecha')} className="inline-flex items-center gap-1 hover:text-gray-700">
-                          Fecha <span>{getSortIndicator('fecha')}</span>
+                          Fecha facturación <span>{getSortIndicator('fecha')}</span>
                         </button>
                       </th>
                       <th className="px-4 py-3 text-left">
@@ -1239,7 +1239,7 @@ export default function AdminFacturacionView() {
                           <td className="px-4 py-3 text-sm">
                             <div className="flex items-center gap-1 text-gray-600">
                               <Clock className="h-3 w-3" />
-                              {new Date(f.created_at).toLocaleDateString('es-AR')}
+                              {new Date(f.fecha_facturacion || f.created_at).toLocaleDateString('es-AR')}
                             </div>
                           </td>
                           <td className="px-4 py-3">
@@ -1353,8 +1353,8 @@ export default function AdminFacturacionView() {
               {/* Detalles */}
               <div className="border rounded-lg divide-y">
                 <div className="p-4 flex justify-between">
-                  <span className="text-gray-600">Fecha</span>
-                  <span className="font-medium">{new Date(showProveedorDetail.created_at).toLocaleDateString('es-AR')}</span>
+                  <span className="text-gray-600">Fecha facturación</span>
+                  <span className="font-medium">{new Date(showProveedorDetail.fecha_facturacion || showProveedorDetail.created_at).toLocaleDateString('es-AR')}</span>
                 </div>
                 <div className="p-4 flex justify-between">
                   <span className="text-gray-600">Periodo</span>
