@@ -31,6 +31,49 @@ export default function AdminFacturacionView() {
     const normalized = String(estado || 'pendiente').trim().toLowerCase()
     return ESTADO_PAGO_PROV[normalized] ? normalized : 'pendiente'
   }
+  const extractDateParts = (rawDate) => {
+    if (!rawDate) return null
+    const raw = String(rawDate).trim()
+
+    const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (isoMatch) {
+      return {
+        y: Number(isoMatch[1]),
+        m: Number(isoMatch[2]),
+        d: Number(isoMatch[3]),
+      }
+    }
+
+    const latamMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+    if (latamMatch) {
+      return {
+        y: Number(latamMatch[3]),
+        m: Number(latamMatch[2]),
+        d: Number(latamMatch[1]),
+      }
+    }
+
+    const parsed = new Date(raw)
+    if (!Number.isNaN(parsed.getTime())) {
+      return {
+        y: parsed.getUTCFullYear(),
+        m: parsed.getUTCMonth() + 1,
+        d: parsed.getUTCDate(),
+      }
+    }
+
+    return null
+  }
+  const formatFechaFacturacion = (rawDate) => {
+    const parts = extractDateParts(rawDate)
+    if (!parts) return '-'
+    return `${parts.d}/${parts.m}/${parts.y}`
+  }
+  const getFechaFacturacionSortValue = (rawDate) => {
+    const parts = extractDateParts(rawDate)
+    if (!parts) return 0
+    return (parts.y * 10000) + (parts.m * 100) + parts.d
+  }
   const formatFechaPago = (rawDate) => {
     if (!rawDate) return ''
     try {
@@ -167,8 +210,8 @@ export default function AdminFacturacionView() {
       let vb
 
       if (sortByProv === 'fecha') {
-        va = new Date(a.fecha_facturacion || a.created_at || 0).getTime()
-        vb = new Date(b.fecha_facturacion || b.created_at || 0).getTime()
+        va = getFechaFacturacionSortValue(a.fecha_facturacion || a.created_at)
+        vb = getFechaFacturacionSortValue(b.fecha_facturacion || b.created_at)
       } else if (sortByProv === 'numero_factura') {
         va = String(a.numero_factura || '')
         vb = String(b.numero_factura || '')
@@ -1080,7 +1123,7 @@ export default function AdminFacturacionView() {
                             <p className="font-mono font-medium text-blue-600 break-all">{f.numero_factura}</p>
                             <div className="flex items-center gap-1 mt-1 text-gray-600 text-xs">
                               <Clock className="h-3 w-3" />
-                              {new Date(f.fecha_facturacion || f.created_at).toLocaleDateString('es-AR')}
+                              {formatFechaFacturacion(f.fecha_facturacion || f.created_at)}
                             </div>
                           </div>
                           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium whitespace-nowrap ${estadoCfg.color}`}>
@@ -1239,7 +1282,7 @@ export default function AdminFacturacionView() {
                           <td className="px-4 py-3 text-sm">
                             <div className="flex items-center gap-1 text-gray-600">
                               <Clock className="h-3 w-3" />
-                              {new Date(f.fecha_facturacion || f.created_at).toLocaleDateString('es-AR')}
+                              {formatFechaFacturacion(f.fecha_facturacion || f.created_at)}
                             </div>
                           </td>
                           <td className="px-4 py-3">
