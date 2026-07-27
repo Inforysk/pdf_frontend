@@ -956,6 +956,14 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     const originalData = normalizeForEditor(data || initialData || {})
     originalDataRef.current = { ...originalData }
 
+    // Si viene desde una solicitud (Continuar informe), priorizar datos de BD/solicitud
+    // y evitar que un borrador viejo sobrescriba o confunda al analista.
+    if (fromSolicitud) {
+      setPendingDraft(null)
+      setShowDraftModal(false)
+      return
+    }
+
     // Si viene de subir un PDF, limpiar borrador existente y NO mostrar modal
     if (isFromPdfUpload) {
       clearDraft(key)
@@ -984,7 +992,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
         }
       }
     }
-  }, [isFromPdfUpload]) // Solo al montar o cuando cambia isFromPdfUpload
+  }, [isFromPdfUpload, fromSolicitud]) // Solo al montar o cuando cambia el origen
 
   // ── Autosave: guardar borrador cada N segundos SOLO si hay cambios ──
   useEffect(() => {
