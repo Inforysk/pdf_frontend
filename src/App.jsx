@@ -304,6 +304,16 @@ function App() {
   const handleIniciarInformeSolicitud = async (solicitud) => {
     setLoadingSolicitudView(true)
     try {
+      const normalizeCompanyName = (value) => {
+        return String(value || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+          .replace(/[^a-z0-9\s]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+      }
+
       // Marcar como en_proceso en backend y obtener datos del pedido
       let pedidoInfo = null
       try {
@@ -372,13 +382,28 @@ function App() {
           const res = await axios.get(`/api/search?q=${encodeURIComponent(solicitud.razon_social)}&limit=5`)
           
           if (res.data.success && res.data.empresas?.length > 0) {
-            const exactMatch = res.data.empresas.find(e =>
-              e.source === 'empresa' &&
-              e.razon_social?.toLowerCase() === solicitud.razon_social?.toLowerCase()
+            const empresas = res.data.empresas.filter(e => e.source === 'empresa')
+            const requestedName = normalizeCompanyName(solicitud.razon_social)
+
+            const exactNormalized = empresas.find(e =>
+              normalizeCompanyName(e.razon_social) === requestedName
             )
-            if (exactMatch) {
-              console.log('[handleIniciarInformeSolicitud] ¡Empresa encontrada por razón social! ID:', exactMatch.id)
-              abrirEmpresaExistente(exactMatch.id, exactMatch.cuit)
+
+            if (exactNormalized) {
+              console.log('[handleIniciarInformeSolicitud] ¡Empresa encontrada por razón social (normalizada)! ID:', exactNormalized.id)
+              abrirEmpresaExistente(exactNormalized.id, exactNormalized.cuit)
+              return
+            }
+
+            const containsMatches = empresas.filter(e => {
+              const candidate = normalizeCompanyName(e.razon_social)
+              return candidate && requestedName && (candidate.includes(requestedName) || requestedName.includes(candidate))
+            })
+
+            if (containsMatches.length === 1) {
+              const singleMatch = containsMatches[0]
+              console.log('[handleIniciarInformeSolicitud] ¡Empresa encontrada por similitud de razón social! ID:', singleMatch.id)
+              abrirEmpresaExistente(singleMatch.id, singleMatch.cuit)
               return
             }
           }

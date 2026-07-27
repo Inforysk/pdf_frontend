@@ -698,7 +698,21 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
   const isNewReport = !data && !empresaId && !!countryConfig
   const afipData = countryConfig?.afipData || {}
   const afipLocked = !!afipData._afip_validated // Campos traídos de AFIP son de solo lectura
-  const initialData = isNewReport
+  const initialData = (isNewBlank && fromSolicitud)
+    ? {
+        tipo_identificacion: fromSolicitud.tipo_identificacion || 'ID',
+        cuit: fromSolicitud.cuit || '',
+        razon_social: fromSolicitud.razon_social || '',
+        domicilio: fromSolicitud.domicilio || '',
+        actividad_principal: fromSolicitud.actividad_principal || '',
+        pais: fromSolicitud.pais || '',
+        codigo_pais: fromSolicitud.codigo_pais || '',
+        abonado: fromSolicitud.abonado ? String(fromSolicitud.abonado) : '',
+        expediente: fromSolicitud.expediente ? String(fromSolicitud.expediente) : '',
+        referencia: fromSolicitud.referencia || '',
+        fecha_informe: fromSolicitud.fecha_informe || new Date().toISOString().split('T')[0],
+      }
+    : isNewReport
     ? {
         tipo_identificacion: countryConfig.tipo_id_fiscal || 'CUIT',
         cuit: afipData.cuit || '',
@@ -893,22 +907,26 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
             if (paisMatch) {
               setSelectedPais(paisMatch)
               setSelectedPaisSource('manual')
-              setFormData(normalizeForEditor({
-                tipo_identificacion: fromSolicitud.tipo_identificacion || paisMatch.tipo_id_fiscal || 'ID',
-                cuit: fromSolicitud.cuit || '',
-                razon_social: fromSolicitud.razon_social || '',
-                domicilio: fromSolicitud.domicilio || '',
-                actividad_principal: fromSolicitud.actividad_principal || '',
-                pais: fromSolicitud.pais || paisMatch.nombre_pais || '',
-                // Datos del pedido (correlativo, referencia, etc.)
-                abonado: fromSolicitud.abonado ? String(fromSolicitud.abonado) : '',
-                expediente: fromSolicitud.expediente ? String(fromSolicitud.expediente) : '',
-                referencia: fromSolicitud.referencia || '',
-                fecha_informe: fromSolicitud.fecha_informe || new Date().toISOString().split('T')[0],
-              }))
-              setEditMode(true)
-              // Acordeones cerrados por defecto
             }
+
+            // Siempre sembrar datos de solicitud para evitar pantallas vacías
+            // cuando no hay match de país o llega tarde el patrón.
+            setFormData(normalizeForEditor({
+              tipo_identificacion: fromSolicitud.tipo_identificacion || paisMatch?.tipo_id_fiscal || 'ID',
+              cuit: fromSolicitud.cuit || '',
+              razon_social: fromSolicitud.razon_social || '',
+              domicilio: fromSolicitud.domicilio || '',
+              actividad_principal: fromSolicitud.actividad_principal || '',
+              pais: fromSolicitud.pais || paisMatch?.nombre_pais || '',
+              codigo_pais: fromSolicitud.codigo_pais || paisMatch?.codigo_pais || '',
+              // Datos del pedido (correlativo, referencia, etc.)
+              abonado: fromSolicitud.abonado ? String(fromSolicitud.abonado) : '',
+              expediente: fromSolicitud.expediente ? String(fromSolicitud.expediente) : '',
+              referencia: fromSolicitud.referencia || '',
+              fecha_informe: fromSolicitud.fecha_informe || new Date().toISOString().split('T')[0],
+            }))
+            setEditMode(true)
+            // Acordeones cerrados por defecto
           }
         }
       }).catch(() => {}).finally(() => setLoadingPaises(false))
@@ -1133,7 +1151,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     const pais = paisesDisponibles.find(p => p.codigo_pais === codigo)
     setSelectedPais(pais || null)
     setSelectedPaisSource(pais ? 'manual' : null)
-    if (isNewBlank) {
+    if (isNewBlank && !fromSolicitud) {
       // Limpiar todo al cambiar/deseleccionar país en nuevo informe en blanco
       setFormData(normalizeForEditor({
         tipo_identificacion: pais ? (pais.tipo_id_fiscal || 'CUIT') : '',
@@ -1149,6 +1167,12 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
         codigo_pais: pais?.codigo_pais || '',
         tipo_identificacion: pais ? (pais.tipo_id_fiscal || prev.tipo_identificacion || 'ID') : prev.tipo_identificacion,
       }))
+      if (isNewBlank && fromSolicitud) {
+        setTaxIdError(null)
+        setExistingEmpresa(null)
+        setExistingSolicitud(null)
+        if (checkCuitTimerRef.current) clearTimeout(checkCuitTimerRef.current)
+      }
     }
     if (pais) {
       setEditMode(true)
@@ -1206,9 +1230,16 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
       if (selected) {
         setSelectedPais(selected)
         setSelectedPaisSource('manual')
-        setFormData(normalizeForEditor({
-          tipo_identificacion: selected.tipo_id_fiscal || 'ID',
-        }))
+        setFormData(prev => normalizeForEditor(
+          isNewBlank && !fromSolicitud
+            ? { tipo_identificacion: selected.tipo_id_fiscal || 'ID' }
+            : {
+                ...prev,
+                pais: selected.nombre_pais || prev?.pais || '',
+                codigo_pais: selected.codigo_pais || prev?.codigo_pais || '',
+                tipo_identificacion: selected.tipo_id_fiscal || prev?.tipo_identificacion || 'ID',
+              }
+        ))
       } else if (fallbackCountry) {
         // Fallback defensivo: si no vino en country-patterns, usar datos del endpoint de configurados
         setSelectedPais({
@@ -1218,9 +1249,16 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
           bandera: fallbackCountry.bandera || null,
         })
         setSelectedPaisSource('manual')
-        setFormData(normalizeForEditor({
-          tipo_identificacion: fallbackCountry.tipo_id_fiscal || 'ID',
-        }))
+        setFormData(prev => normalizeForEditor(
+          isNewBlank && !fromSolicitud
+            ? { tipo_identificacion: fallbackCountry.tipo_id_fiscal || 'ID' }
+            : {
+                ...prev,
+                pais: fallbackCountry.nombre || prev?.pais || '',
+                codigo_pais: code || prev?.codigo_pais || '',
+                tipo_identificacion: fallbackCountry.tipo_id_fiscal || prev?.tipo_identificacion || 'ID',
+              }
+        ))
       } else {
         return false
       }
@@ -1322,10 +1360,10 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
   }, [empresaId])
 
   useEffect(() => {
-    if (!empresaId && !isNewReport) {
+    if (!empresaId && !isNewReport && !(isNewBlank && fromSolicitud)) {
       setFormData(normalizeForEditor(data || {}))
     }
-  }, [data, empresaId])
+  }, [data, empresaId, isNewReport, isNewBlank, fromSolicitud])
 
   useEffect(() => {
     if (!shouldShowCountrySelector || !paisesDisponibles.length) return
