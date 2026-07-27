@@ -50,11 +50,11 @@ const buildStaticCountryIsoMap = () => {
   return map
 }
 
-const PAISES_DISPONIBLES = ['Argentina', 'Uruguay', 'Chile', 'Colombia', 'Perú', 'Rep. Dominicana', 'Honduras', 'México', 'Costa Rica', 'Guatemala', 'España', 'Saint Lucia', 'Jamaica', 'Antigua & Barbuda', 'Brasil', 'Estados Unidos', 'Alemania']
+const PAISES_DISPONIBLES = ['Argentina', 'Uruguay', 'Chile', 'Colombia', 'Perú', 'Panamá', 'Rep. Dominicana', 'Honduras', 'México', 'Costa Rica', 'Guatemala', 'España', 'Saint Lucia', 'Jamaica', 'Antigua & Barbuda', 'Brasil', 'Estados Unidos', 'Alemania']
 
 const PAIS_TIPO_ID = {
   'Argentina': 'CUIT', 'Uruguay': 'RUT', 'Chile': 'RUT', 'Colombia': 'NIT',
-  'Perú': 'RUC', 'Rep. Dominicana': 'RNC', 'Honduras': 'RTN', 'México': 'RFC',
+  'Perú': 'RUC', 'Panamá': 'RUC', 'Panama': 'RUC', 'Rep. Dominicana': 'RNC', 'Honduras': 'RTN', 'México': 'RFC',
   'Costa Rica': 'CEDULA JURIDICA', 'Guatemala': 'DPI', 'España': 'CIF',
   'Saint Lucia': 'ID', 'Jamaica': 'TRN', 'Antigua & Barbuda': 'ID',
   'Brasil': 'CNPJ', 'Estados Unidos': 'EIN', 'Alemania': 'ID'
@@ -62,10 +62,17 @@ const PAIS_TIPO_ID = {
 
 const PAIS_POR_CODIGO = {
   AR: 'Argentina', UY: 'Uruguay', BR: 'Brasil', CL: 'Chile',
-  CO: 'Colombia', PE: 'Perú', DO: 'Rep. Dominicana', HN: 'Honduras',
+  CO: 'Colombia', PE: 'Perú', PA: 'Panamá', DO: 'Rep. Dominicana', HN: 'Honduras',
   CR: 'Costa Rica', GT: 'Guatemala', MX: 'México', ES: 'España',
   JM: 'Jamaica', LC: 'Saint Lucia', AG: 'Antigua & Barbuda',
   US: 'Estados Unidos', DE: 'Alemania'
+}
+
+const PAIS_ALIAS = {
+  panama: 'Panamá',
+  peru: 'Perú',
+  mexico: 'México',
+  'republica dominicana': 'Rep. Dominicana',
 }
 
 const PER_PAGE = 5
@@ -190,6 +197,8 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
   const resolvePaisNombre = (paisNombre, codigoPais) => {
     const code = String(codigoPais || '').toUpperCase()
     if (code && PAIS_POR_CODIGO[code]) return PAIS_POR_CODIGO[code]
+    const key = normalizeCountryKey(paisNombre)
+    if (key && PAIS_ALIAS[key]) return PAIS_ALIAS[key]
     return paisNombre || 'Argentina'
   }
 
@@ -210,7 +219,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
       return 'Uruguay'
     }
 
-    const resolvedByCode = resolvePaisNombre(sol.pais, sol.codigo_pais)
+    const resolvedByCode = resolvePaisNombre(sol.pais, sol.codigo_pais || sol.codigo)
     if (resolvedByCode && resolvedByCode !== 'Argentina') return resolvedByCode
 
     // Primero usar el país guardado si existe
@@ -986,7 +995,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
       }
     } catch {
       // Fallback a lista principal si falla
-      setPaisesEmpresas(['Argentina', 'Uruguay', 'Perú', 'Rep. Dominicana', 'Honduras', 'México', 'Colombia', 'Costa Rica', 'Guatemala', 'Jamaica', 'Saint Lucia', 'Antigua & Barbuda'])
+      setPaisesEmpresas(['Argentina', 'Uruguay', 'Perú', 'Panamá', 'Rep. Dominicana', 'Honduras', 'México', 'Colombia', 'Costa Rica', 'Guatemala', 'Jamaica', 'Saint Lucia', 'Antigua & Barbuda'])
     }
   }
 
@@ -1079,7 +1088,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
   }, [])
 
   const seleccionarEmpresa = (emp) => {
-    const paisResuelto = resolvePaisNombre(emp.pais, emp.codigo_pais)
+    const paisResuelto = resolvePaisNombre(emp.pais, emp.codigo_pais || emp.codigo)
     setEmpresaData({
       razon_social: emp.razon_social || '',
       cuit: emp.cuit || '',
@@ -2423,7 +2432,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                       )}
                       <div className="border border-gray-200 rounded-xl max-h-64 overflow-y-auto">
                         {empresasEncontradas.map((emp, idx) => {
-                          const empPais = resolvePaisNombre(emp.pais, emp.codigo_pais)
+                          const empPais = resolvePaisNombre(emp.pais, emp.codigo_pais || emp.codigo)
                           const code = getCountryIso(empPais, emp.codigo_pais || emp.codigo)
                           return (
                             <button
@@ -2487,18 +2496,9 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                             disabled={empresaExistente}
                             className={`w-full border rounded-lg px-3 py-1.5 text-sm mt-1 ${empresaExistente ? 'bg-gray-100 border-gray-200 text-gray-600 cursor-not-allowed' : 'border-gray-200'}`}
                           >
-                            <option value="Argentina">Argentina</option>
-                            <option value="Uruguay">Uruguay</option>
-                            <option value="Chile">Chile</option>
-                            <option value="Colombia">Colombia</option>
-                            <option value="Perú">Perú</option>
-                            <option value="México">México</option>
-                            <option value="Rep. Dominicana">Rep. Dominicana</option>
-                            <option value="Honduras">Honduras</option>
-                            <option value="Costa Rica">Costa Rica</option>
-                            <option value="Guatemala">Guatemala</option>
-                            <option value="España">España</option>
-                            <option value="Antigua & Barbuda">Antigua & Barbuda</option>
+                            {PAISES_DISPONIBLES.map((pais) => (
+                              <option key={pais} value={pais}>{pais}</option>
+                            ))}
                           </select>
                         </div>
                         <div>
