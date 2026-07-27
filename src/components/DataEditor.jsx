@@ -959,6 +959,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     // Si viene desde una solicitud (Continuar informe), priorizar datos de BD/solicitud
     // y evitar que un borrador viejo sobrescriba o confunda al analista.
     if (fromSolicitud) {
+      clearDraft(key)
       setPendingDraft(null)
       setShowDraftModal(false)
       return
