@@ -724,10 +724,63 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
   // ── Nuevo Informe en blanco: selector de país inline ──
   const [paisesDisponibles, setPaisesDisponibles] = useState([])
   const [selectedPais, setSelectedPais] = useState(null)
-  const [loadingPaises, setLoadingPaises] = useState(!!isNewBlank)
+  const [selectedPaisSource, setSelectedPaisSource] = useState(null)
+  const [loadingPaises, setLoadingPaises] = useState(!!isNewBlank || mode !== 'view')
   const [countryDDOpen, setCountryDDOpen] = useState(false)
   const [countryDDSearch, setCountryDDSearch] = useState('')
   const countrySelected = !isNewBlank || !!selectedPais
+  const shouldShowCountrySelector = isNewBlank || mode !== 'view'
+  const canModifyCountry = isNewBlank || editMode
+  const [countryEditRequested, setCountryEditRequested] = useState(!!isNewBlank)
+  const canEditCountry = isNewBlank || countryEditRequested
+  const hasDetectedCountry = !!selectedPais
+
+  const resolvePaisMatch = (countryList, sourceData) => {
+    if (!Array.isArray(countryList) || countryList.length === 0 || !sourceData) return null
+
+    let paisMatch = null
+    let source = null
+
+    if (sourceData.codigo_pais) {
+      paisMatch = countryList.find(p => p.codigo_pais?.toUpperCase() === String(sourceData.codigo_pais).toUpperCase())
+      if (paisMatch) source = 'codigo_pais'
+    }
+
+    if (!paisMatch && sourceData.pais) {
+      paisMatch = countryList.find(p =>
+        p.nombre_pais === sourceData.pais ||
+        p.nombre_pais?.toLowerCase() === sourceData.pais?.toLowerCase()
+      )
+      if (paisMatch) source = 'pais'
+    }
+
+    if (!paisMatch && sourceData.tipo_identificacion) {
+      const tipoMap = {
+        'CUIT': 'AR', 'RUT': 'UY', 'RNC': 'DO', 'NIT': 'CO',
+        'RTN': 'HN', 'CEDULA JURIDICA': 'CR', 'RUC': 'PE',
+        'RFC': 'MX', 'ID': null,
+      }
+      const codigoInferido = tipoMap[sourceData.tipo_identificacion?.toUpperCase()]
+      if (codigoInferido) {
+        paisMatch = countryList.find(p => p.codigo_pais === codigoInferido)
+        if (paisMatch) source = 'tipo_identificacion'
+      }
+    }
+
+    if (!paisMatch) {
+      const cuitDigits = (sourceData.cuit || '').replace(/\D/g, '')
+      let codigoPais = ''
+      if (cuitDigits.length === 11) codigoPais = 'AR'
+      else if (cuitDigits.length === 12) codigoPais = 'UY'
+      else if (cuitDigits.length === 9 || cuitDigits.length === 10) codigoPais = 'CO'
+      if (codigoPais) {
+        paisMatch = countryList.find(p => p.codigo_pais === codigoPais)
+        if (paisMatch) source = 'identificador'
+      }
+    }
+
+    return paisMatch ? { match: paisMatch, source } : null
+  }
   
   // ── Modal "Otro país" ──
   const [showOtrosPaisesModal, setShowOtrosPaisesModal] = useState(false)
@@ -781,10 +834,27 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
   useEffect(() => { selectedPaisRef.current = selectedPais }, [selectedPais])
 
   useEffect(() => {
-    if (isNewBlank) {
+    if (shouldShowCountrySelector) {
       axios.get('/api/country-patterns').then(res => {
         if (res.data.paises) {
           setPaisesDisponibles(res.data.paises)
+          const sourceData = isNewBlank
+            ? (fromSolicitud || {})
+            : ({
+                ...data,
+                pais: data?.pais || formData?.pais || countryConfig?.nombre_pais,
+                codigo_pais: data?.codigo_pais || countryConfig?.codigo_pais,
+                tipo_identificacion: data?.tipo_identificacion || formData?.tipo_identificacion || countryConfig?.tipo_id_fiscal,
+                cuit: data?.cuit || formData?.cuit,
+              })
+
+          const paisMatch = resolvePaisMatch(res.data.paises, sourceData)
+
+          if (paisMatch) {
+            setSelectedPais(paisMatch.match)
+            setSelectedPaisSource(paisMatch.source)
+          }
+
           // Si viene de solicitud, auto-seleccionar país y pre-llenar datos
           if (fromSolicitud) {
             // Buscar país: primero por nombre de país, luego por tipo de identificación
@@ -822,6 +892,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
             
             if (paisMatch) {
               setSelectedPais(paisMatch)
+              setSelectedPaisSource('manual')
               setFormData(normalizeForEditor({
                 tipo_identificacion: fromSolicitud.tipo_identificacion || paisMatch.tipo_id_fiscal || 'ID',
                 cuit: fromSolicitud.cuit || '',
@@ -842,7 +913,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
         }
       }).catch(() => {}).finally(() => setLoadingPaises(false))
     }
-  }, [isNewBlank])
+  }, [shouldShowCountrySelector, isNewBlank, fromSolicitud, data, countryConfig])
 
   // Cerrar dropdown país al clic fuera
   useEffect(() => {
@@ -1061,16 +1132,27 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
   const handlePaisChange = (codigo) => {
     const pais = paisesDisponibles.find(p => p.codigo_pais === codigo)
     setSelectedPais(pais || null)
-    // Limpiar todo al cambiar/deseleccionar país
-    setFormData(normalizeForEditor({
-      tipo_identificacion: pais ? (pais.tipo_id_fiscal || 'CUIT') : '',
-    }))
-    setTaxIdError(null)
-    setExistingEmpresa(null)
-    setExistingSolicitud(null)
-    if (checkCuitTimerRef.current) clearTimeout(checkCuitTimerRef.current)
+    setSelectedPaisSource(pais ? 'manual' : null)
+    if (isNewBlank) {
+      // Limpiar todo al cambiar/deseleccionar país en nuevo informe en blanco
+      setFormData(normalizeForEditor({
+        tipo_identificacion: pais ? (pais.tipo_id_fiscal || 'CUIT') : '',
+      }))
+      setTaxIdError(null)
+      setExistingEmpresa(null)
+      setExistingSolicitud(null)
+      if (checkCuitTimerRef.current) clearTimeout(checkCuitTimerRef.current)
+    } else {
+      setFormData(prev => normalizeForEditor({
+        ...prev,
+        pais: pais?.nombre_pais || '',
+        codigo_pais: pais?.codigo_pais || '',
+        tipo_identificacion: pais ? (pais.tipo_id_fiscal || prev.tipo_identificacion || 'ID') : prev.tipo_identificacion,
+      }))
+    }
     if (pais) {
       setEditMode(true)
+      setCountryEditRequested(!isNewBlank)
       // Acordeones cerrados por defecto
     }
   }
@@ -1123,6 +1205,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
 
       if (selected) {
         setSelectedPais(selected)
+        setSelectedPaisSource('manual')
         setFormData(normalizeForEditor({
           tipo_identificacion: selected.tipo_id_fiscal || 'ID',
         }))
@@ -1134,6 +1217,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
           tipo_id_fiscal: fallbackCountry.tipo_id_fiscal || 'ID',
           bandera: fallbackCountry.bandera || null,
         })
+        setSelectedPaisSource('manual')
         setFormData(normalizeForEditor({
           tipo_identificacion: fallbackCountry.tipo_id_fiscal || 'ID',
         }))
@@ -1242,6 +1326,23 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
       setFormData(normalizeForEditor(data || {}))
     }
   }, [data, empresaId])
+
+  useEffect(() => {
+    if (!shouldShowCountrySelector || !paisesDisponibles.length) return
+
+    const sourceData = {
+      pais: formData?.pais || data?.pais || countryConfig?.nombre_pais,
+      codigo_pais: formData?.codigo_pais || data?.codigo_pais || countryConfig?.codigo_pais,
+      tipo_identificacion: formData?.tipo_identificacion || data?.tipo_identificacion || countryConfig?.tipo_id_fiscal,
+      cuit: formData?.cuit || data?.cuit,
+    }
+
+    const paisMatch = resolvePaisMatch(paisesDisponibles, sourceData)
+    if (paisMatch && selectedPais?.codigo_pais !== paisMatch.match.codigo_pais) {
+      setSelectedPais(paisMatch.match)
+      setSelectedPaisSource(paisMatch.source)
+    }
+  }, [shouldShowCountrySelector, paisesDisponibles, formData?.pais, formData?.codigo_pais, formData?.tipo_identificacion, formData?.cuit, data?.pais, data?.codigo_pais, data?.tipo_identificacion, data?.cuit, countryConfig?.nombre_pais, countryConfig?.codigo_pais, countryConfig?.tipo_id_fiscal, selectedPais?.codigo_pais])
 
   useEffect(() => {
     return () => {
@@ -1742,7 +1843,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     try {
       // Incluir país si está seleccionado (nuevo informe)
       const dataToSave = { ...formData }
-      if (isNewBlank && selectedPais) {
+      if (selectedPais) {
         dataToSave.pais = selectedPais.nombre_pais
         dataToSave.codigo_pais = selectedPais.codigo_pais
       }
@@ -2847,7 +2948,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
                   {formData.razon_social || (isNewReport || isNewBlank ? 'Nuevo Informe' : 'Datos Extraídos')}
                 </h2>
                 <p className="text-xs sm:text-sm text-gray-500 mt-1 truncate">
-                  {isNewBlank && selectedPais ? `País: ${selectedPais.nombre_pais} | ` : ''}
+                  {selectedPais ? `País: ${selectedPais.nombre_pais} | ` : ''}
                   {isNewReport && countryConfig ? `País: ${countryConfig.nombre_pais} | ` : ''}{filename ? `Archivo: ${filename} | ` : ''}{inferDisplayedTaxType(formData.tipo_identificacion, formData.cuit)}: {formData.cuit || 'No detectado'} {mode === 'view' && '(Lectura)'}
                 </p>
               </div>
@@ -2942,8 +3043,8 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
             </div>
           )}
 
-      {/* Selector de País — Solo para nuevo informe en blanco */}
-      {isNewBlank && (
+      {/* Selector de País */}
+      {shouldShowCountrySelector && (
         <div className="bg-white rounded-lg shadow-sm border mb-4 sm:mb-6">
           <div className="px-4 sm:px-6 py-4 sm:py-5 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-lg">
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -2951,7 +3052,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
                 <Globe className="h-5 w-5 text-blue-600" />
                 <label className="text-sm font-semibold text-gray-700">País</label>
               </div>
-              {fromSolicitud && selectedPais ? (
+              {isNewBlank && fromSolicitud && selectedPais ? (
                 /* Viene de solicitud: solo mostrar país como referencia */
                 <span className="text-sm font-medium text-gray-700 flex items-center gap-2">
                   <img src={`https://flagcdn.com/20x15/${selectedPais.codigo_pais.toLowerCase()}.png`} alt={selectedPais.nombre_pais} className="inline-block" />
@@ -2962,17 +3063,25 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
                   <Loader2 className="h-4 w-4 animate-spin" /> Cargando...
                 </div>
               ) : (
-                <div className="relative w-full sm:w-96" ref={countryDropdownRef}>
-                  <div className="flex items-center gap-1">
+                <div className="relative w-full sm:w-[30rem]" ref={countryDropdownRef}>
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => { setCountryDDOpen(!countryDDOpen); setCountryDDSearch('') }}
-                      className="flex-1 px-4 py-2.5 border-2 border-gray-200 rounded-xl text-base focus:outline-none focus:border-blue-500 transition-colors bg-white flex items-center justify-between"
+                      onClick={() => {
+                        if (!canEditCountry) return
+                        setCountryDDOpen(!countryDDOpen)
+                        setCountryDDSearch('')
+                      }}
+                      className={`flex-1 px-4 py-2.5 border-2 rounded-xl text-base transition-colors bg-white flex items-center justify-between ${canEditCountry ? 'border-gray-200 focus:outline-none focus:border-blue-500' : 'border-gray-100 text-gray-500 cursor-not-allowed'}`}
+                      disabled={!canEditCountry}
                     >
-                      {selectedPais ? (
-                        <span className="flex items-center gap-2">
+                      {hasDetectedCountry ? (
+                        <span className="flex items-center gap-2 min-w-0">
                           <img src={`https://flagcdn.com/24x18/${selectedPais.codigo_pais.toLowerCase()}.png`} alt="" className="w-6 h-4 object-cover rounded-sm" />
-                          <span>{selectedPais.nombre_pais} — {selectedPais.tipo_id_fiscal}</span>
+                          <span className="truncate">
+                            <span className="font-medium text-gray-900">{selectedPais.nombre_pais} {selectedPaisSource === 'codigo_pais' || selectedPaisSource === 'pais' || selectedPaisSource === 'manual' ? 'actual' : 'detectado'}</span>
+                            <span className="text-gray-500"> — {selectedPais.tipo_id_fiscal}</span>
+                          </span>
                         </span>
                       ) : (
                         <span className="text-gray-400">Selecciona un país para comenzar...</span>
@@ -2981,20 +3090,23 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
                     </button>
-                    {selectedPais && (
+                    {!isNewBlank && (
                       <button
                         type="button"
-                        onClick={() => { handlePaisChange(''); setCountryDDOpen(false) }}
-                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Limpiar selección"
+                        onClick={() => {
+                          if (!canModifyCountry) return
+                          setCountryEditRequested(true)
+                          setCountryDDOpen(true)
+                          setCountryDDSearch('')
+                        }}
+                        disabled={!canModifyCountry}
+                        className={`px-3 py-2.5 rounded-xl border transition-colors text-sm font-medium whitespace-nowrap ${canModifyCountry ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100' : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'}`}
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        Editar país
                       </button>
                     )}
                   </div>
-                  {countryDDOpen && (
+                  {countryDDOpen && canEditCountry && (
                     <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-xl max-h-80 overflow-hidden">
                       <div className="p-2 border-b">
                         <input
@@ -3044,16 +3156,27 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
                   )}
                 </div>
               )}
-              {selectedPais && !fromSolicitud && (
+              {selectedPais && !(isNewBlank && fromSolicitud) && (
                 <span className="text-xs text-green-600 flex items-center gap-1">
                   <CheckCircle className="h-3.5 w-3.5" />
-                  {selectedPais.nombre_pais} seleccionado
+                  {selectedPaisSource === 'codigo_pais' || selectedPaisSource === 'pais' || selectedPaisSource === 'manual'
+                    ? `País actual del informe: ${selectedPais.nombre_pais}`
+                    : `País detectado: ${selectedPais.nombre_pais}`}
                 </span>
               )}
             </div>
-            {!selectedPais && !fromSolicitud && (
+            {!selectedPais && !(isNewBlank && fromSolicitud) && (
               <p className="text-xs text-gray-400 mt-2 ml-7">
-                Todos los campos se habilitarán al seleccionar un país
+                {canEditCountry
+                  ? 'Puedes seleccionar o cambiar el país del informe desde aquí'
+                  : 'Usa Editar país para habilitar el cambio del país del informe'}
+              </p>
+            )}
+            {selectedPais && !isNewBlank && (
+              <p className="text-xs text-gray-500 mt-2 ml-7">
+                {selectedPaisSource === 'codigo_pais' || selectedPaisSource === 'pais' || selectedPaisSource === 'manual'
+                  ? <>El país actual del informe se mantiene bloqueado hasta que uses <strong>Editar país</strong>.</>
+                  : <>Si el país detectado no es correcto, usa <strong>Editar país</strong> para ajustarlo manualmente.</>}
               </p>
             )}
           </div>
