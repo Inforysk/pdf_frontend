@@ -869,8 +869,9 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
             setSelectedPaisSource(paisMatch.source)
           }
 
-          // Si viene de solicitud, auto-seleccionar país y pre-llenar datos
-          if (fromSolicitud) {
+          // Si viene de solicitud en modo nueva empresa, auto-seleccionar país y pre-llenar datos
+          // En flujo de empresa existente (empresaId) NO debemos pisar los datos del informe cargado.
+          if (fromSolicitud && isNewBlank) {
             // Buscar país: primero por nombre de país, luego por tipo de identificación
             let paisMatch = null
             
