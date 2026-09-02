@@ -352,7 +352,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
     const loadClientesFiltro = async () => {
       try {
         const [resClientes, resSolicitantes] = await Promise.all([
-          axios.get('/api/admin/usuarios-pedidos', { params: { per_page: 500 } }),
+          axios.get('/api/admin/usuarios-pedidos', { params: { per_page: 500, only_with_solicitudes: 'true' } }),
           axios.get('/api/admin/usuarios-pedidos', { params: { per_page: 500, include_staff: 'true' } }),
         ])
         if (resClientes.data.success && resClientes.data.usuarios) {

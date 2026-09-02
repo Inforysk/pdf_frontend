@@ -104,6 +104,8 @@ function PreciosPaisTab() {
   const [eurUsd, setEurUsd] = useState(1.2)
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({})
+  const [modeloProveedorId, setModeloProveedorId] = useState('')
+  const [copyingModel, setCopyingModel] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
@@ -205,6 +207,32 @@ function PreciosPaisTab() {
       return
     }
     loadMissingForProvider(filtroProveedor)
+  }
+
+  const handleCopiarModeloProveedor = async () => {
+    if (!filtroProveedor || !modeloProveedorId) {
+      toast.error('Selecciona proveedor destino y proveedor modelo')
+      return
+    }
+    if (String(filtroProveedor) === String(modeloProveedorId)) {
+      toast.error('El proveedor modelo debe ser distinto al destino')
+      return
+    }
+    setCopyingModel(true)
+    try {
+      const res = await axios.post(`/api/admin/proveedores/${filtroProveedor}/precios-pais/copiar-modelo`, {
+        modelo_proveedor_id: Number(modeloProveedorId),
+      })
+      if (res.data.success) {
+        toast.success(res.data.message || `Se copiaron ${res.data.copied || 0} precios`)
+        setModeloProveedorId('')
+        await loadData()
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error copiando precios del modelo')
+    } finally {
+      setCopyingModel(false)
+    }
   }
 
   const syncCountryToProvider = async ({ codigo_pais, providerId, manualValues = null, silent = false }) => {
@@ -339,6 +367,14 @@ function PreciosPaisTab() {
     return true
   })
 
+  const selectedProvider = proveedores.find(p => p.id === parseInt(filtroProveedor))
+  const selectedProviderAllPrices = filtroProveedor
+    ? precios.filter(p => p.proveedor_id === parseInt(filtroProveedor))
+    : []
+  const isSelectedProviderEmpty = !!selectedProvider && selectedProviderAllPrices.length === 0
+  const providerIdsWithPrices = new Set(precios.map(p => p.proveedor_id))
+  const modelProviders = proveedores.filter(p => p.id !== selectedProvider?.id && providerIdsWithPrices.has(p.id))
+
   const formatPrecio = (value, monedaBase) => {
     const amount = Number(value || 0)
     if (filtroMoneda === 'USD') {
@@ -462,6 +498,40 @@ function PreciosPaisTab() {
           <p className="text-[11px] text-gray-500 mt-1">Conversión usando tasa oficial actual: 1 EUR = {Number(eurUsd).toFixed(4)} USD</p>
         </div>
       </div>
+
+      {isSelectedProviderEmpty && (
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+          <div className="flex flex-col lg:flex-row lg:items-end gap-3">
+            <div className="flex-1">
+              <h5 className="text-sm font-semibold text-blue-950">Proveedor sin precios configurados</h5>
+              <p className="text-xs text-blue-800 mt-1">
+                {selectedProvider.codigo} no tiene precios por país. Elegí un proveedor modelo para copiar su lista completa.
+              </p>
+            </div>
+            <div className="w-full lg:w-80">
+              <label className="block text-xs font-medium text-blue-900 mb-1">Proveedor de referencia</label>
+              <select
+                value={modeloProveedorId}
+                onChange={e => setModeloProveedorId(e.target.value)}
+                className="w-full px-3 py-2 border border-blue-200 rounded-md text-sm bg-white"
+              >
+                <option value="">Seleccionar proveedor modelo...</option>
+                {modelProviders.map(p => (
+                  <option key={p.id} value={p.id}>{p.codigo} - {p.nombre}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={handleCopiarModeloProveedor}
+              disabled={copyingModel || !modeloProveedorId}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300"
+            >
+              {copyingModel ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+              Copiar precios
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Tabla */}
       <div className="space-y-6">
@@ -1201,6 +1271,10 @@ function ProveedorForm({ proveedor, onSave, onCancel }) {
       toast.error('Código y nombre son requeridos')
       return
     }
+    if (form.codigo.trim().length > 20) {
+      toast.error('El código debe tener máximo 20 caracteres. Usá un código corto como CREDENDO.')
+      return
+    }
     setSaving(true)
     await onSave(form)
     setSaving(false)
@@ -1217,9 +1291,11 @@ function ProveedorForm({ proveedor, onSave, onCancel }) {
             value={form.codigo}
             onChange={e => setForm({ ...form, codigo: e.target.value.toUpperCase() })}
             disabled={!!proveedor}
+            maxLength={20}
             className="w-full px-3 py-2 border rounded-md text-sm"
-            placeholder="EULER"
+            placeholder="CREDENDO"
           />
+          <p className="mt-1 text-xs text-gray-500">Máx. 20 caracteres. El nombre completo va en Nombre.</p>
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Nombre</label>

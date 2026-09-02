@@ -111,6 +111,7 @@ export default function AdminFacturacionSolicitudesView() {
 
   const isEstadoPendiente = (sol) => (sol?.factura_estado_pago || '').toLowerCase() === 'pendiente'
   const isFacturable = (sol) => !sol?.facturado || isEstadoPendiente(sol)
+  const getClienteBillingKey = (item) => `${item?.usuario_id || 'sin-id'}|${item?.usuario_abono || 'sin-abono'}`
 
   const updateInvoiceHeaderConfig = (key, value) => {
     setInvoiceHeaderConfig(prev => ({ ...prev, [key]: value }))
@@ -865,9 +866,9 @@ export default function AdminFacturacionSolicitudesView() {
     }
   }
 
-  const toggleSelectAll = (clienteAbono) => {
+  const toggleSelectAll = (clienteKey) => {
     // Solo seleccionar solicitudes facturables (sin factura o con estado de pago pendiente)
-    const solsPendientes = data.solicitudes.filter(s => s.usuario_abono === clienteAbono && isFacturable(s))
+    const solsPendientes = data.solicitudes.filter(s => getClienteBillingKey(s) === clienteKey && isFacturable(s))
     const idsPendientes = solsPendientes.map(s => s.id)
     const allSelected = idsPendientes.length > 0 && idsPendientes.every(id => selectedIds.includes(id))
     
@@ -886,9 +887,10 @@ export default function AdminFacturacionSolicitudesView() {
   // Agrupar solicitudes por cliente
   const solicitudesPorCliente = {}
   data.solicitudes.forEach(sol => {
-    const key = sol.usuario_abono
+    const key = getClienteBillingKey(sol)
     if (!solicitudesPorCliente[key]) {
       solicitudesPorCliente[key] = {
+        cliente_key: key,
         usuario_id: sol.usuario_id,
         usuario_nombre: sol.usuario_nombre,
         usuario_abono: sol.usuario_abono,
@@ -904,9 +906,11 @@ export default function AdminFacturacionSolicitudesView() {
   const resumenCalculado = useMemo(() => {
     const resumen = {}
     data.solicitudes.forEach(sol => {
-      const key = sol.usuario_abono
+      const key = getClienteBillingKey(sol)
       if (!resumen[key]) {
         resumen[key] = {
+          cliente_key: key,
+          usuario_id: sol.usuario_id,
           usuario_abono: sol.usuario_abono,
           usuario_nombre: sol.usuario_nombre,
           proveedor_codigos: new Set(),
@@ -944,7 +948,7 @@ export default function AdminFacturacionSolicitudesView() {
     const detalle = {}
 
     data.solicitudes.forEach(sol => {
-      const clienteKey = sol.usuario_abono || 'SIN_ABONO'
+      const clienteKey = getClienteBillingKey(sol)
       const paisCodigo = sol.pais_codigo || '??'
       const paisNombre = sol.pais_nombre || 'Sin país'
       const paisKey = `${paisCodigo}|${paisNombre}`
@@ -1470,12 +1474,12 @@ export default function AdminFacturacionSolicitudesView() {
                       <td className="px-3 py-2 font-mono text-blue-600">
                         <button
                           type="button"
-                          onClick={() => toggleExpandedResumenCliente(r.usuario_abono)}
+                          onClick={() => toggleExpandedResumenCliente(r.cliente_key)}
                           className="inline-flex items-center gap-1 hover:underline"
                           title="Ver detalle por país"
                         >
                           {r.usuario_abono}
-                          {expandedResumenCliente === r.usuario_abono ? (
+                          {expandedResumenCliente === r.cliente_key ? (
                             <ChevronDown className="h-3.5 w-3.5 text-gray-500" />
                           ) : (
                             <ChevronRight className="h-3.5 w-3.5 text-gray-500" />
@@ -1485,7 +1489,7 @@ export default function AdminFacturacionSolicitudesView() {
                       <td className="px-3 py-2">
                         <button
                           type="button"
-                          onClick={() => toggleExpandedResumenCliente(r.usuario_abono)}
+                          onClick={() => toggleExpandedResumenCliente(r.cliente_key)}
                           className="text-left hover:underline"
                           title="Ver detalle por país"
                         >
@@ -1510,11 +1514,11 @@ export default function AdminFacturacionSolicitudesView() {
                         {monedaResumen === 'USD' ? '$' : '€'}{(monedaResumen === 'USD' ? r.total_usd : r.total_eur).toFixed(2)}
                       </td>
                     </tr>
-                    {expandedResumenCliente === r.usuario_abono && (
+                    {expandedResumenCliente === r.cliente_key && (
                       <tr key={`detail-${i}`} className="bg-gray-50/60">
                         <td colSpan={9} className="px-3 py-3">
                           {(() => {
-                            const detalleClienteRows = detalleResumenPorCliente[r.usuario_abono] || []
+                            const detalleClienteRows = detalleResumenPorCliente[r.cliente_key] || []
                             const detalleClienteTotals = detalleClienteRows.reduce((acc, d) => {
                               acc.qty_normal += d.qty_normal
                               acc.eur_normal += d.eur_normal
@@ -1783,8 +1787,9 @@ export default function AdminFacturacionSolicitudesView() {
           </div>
         ) : (
           <div className="space-y-2">
-            {Object.entries(solicitudesPorCliente).map(([abono, grupo]) => {
-              const isExpanded = expandedCliente === abono
+            {Object.entries(solicitudesPorCliente).map(([clienteKey, grupo]) => {
+              const abono = grupo.usuario_abono
+              const isExpanded = expandedCliente === clienteKey
               
               // Verificar si el cliente tiene precios en USD (al menos una solicitud con precio_usd > 0)
               const monedaCliente = monedaPorCliente[abono] || 'EUR'
@@ -1822,16 +1827,16 @@ export default function AdminFacturacionSolicitudesView() {
               const allPendientesSelected = idsPendientes.length > 0 && idsPendientes.every(id => selectedIds.includes(id))
 
               return (
-                <div key={abono} className="border rounded-lg overflow-hidden">
+                <div key={clienteKey} className="border rounded-lg overflow-hidden">
                   {/* Header del grupo */}
                   <div
                     className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-3 sm:px-4 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100"
-                    onClick={() => setExpandedCliente(isExpanded ? null : abono)}
+                    onClick={() => setExpandedCliente(isExpanded ? null : clienteKey)}
                   >
                     <div className="flex items-start gap-3 min-w-0">
                       {/* Checkbox solo si hay pendientes */}
                       {solsPendientes.length > 0 ? (
-                        <button onClick={(e) => { e.stopPropagation(); toggleSelectAll(abono) }} className="shrink-0 mt-0.5">
+                        <button onClick={(e) => { e.stopPropagation(); toggleSelectAll(clienteKey) }} className="shrink-0 mt-0.5">
                           <div className={`w-5 h-5 rounded border flex items-center justify-center ${
                             allPendientesSelected ? 'bg-blue-500 border-blue-500' : 'border-gray-300'
                           }`}>
@@ -1911,7 +1916,7 @@ export default function AdminFacturacionSolicitudesView() {
                                         setSelectedIds(prev => prev.filter(id => id !== sol.id))
                                       } else {
                                         const otroCliente = selectedIds.length > 0 && 
-                                          data.solicitudes.find(s => selectedIds.includes(s.id))?.usuario_abono !== sol.usuario_abono
+                                          getClienteBillingKey(data.solicitudes.find(s => selectedIds.includes(s.id))) !== getClienteBillingKey(sol)
 
                                         if (otroCliente) {
                                           setSelectedIds([sol.id])
@@ -2074,7 +2079,7 @@ export default function AdminFacturacionSolicitudesView() {
                                     } else {
                                       // Verificar si ya hay seleccionados de otro cliente
                                       const otroCliente = selectedIds.length > 0 && 
-                                        data.solicitudes.find(s => selectedIds.includes(s.id))?.usuario_abono !== sol.usuario_abono
+                                        getClienteBillingKey(data.solicitudes.find(s => selectedIds.includes(s.id))) !== getClienteBillingKey(sol)
                                       
                                       if (otroCliente) {
                                         // Limpiar y seleccionar solo este (nuevo cliente)
