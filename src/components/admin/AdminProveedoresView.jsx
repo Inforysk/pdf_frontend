@@ -1150,13 +1150,50 @@ function ProveedoresTab() {
 // FORM: PROVEEDOR
 // ============================================
 function ProveedorForm({ proveedor, onSave, onCancel }) {
+  const facturaConfig = proveedor?.factura_config_resuelta || proveedor?.factura_config || {}
+  const bancoInfo = facturaConfig.banco_info || {}
   const [form, setForm] = useState({
     codigo: proveedor?.codigo || '',
     nombre: proveedor?.nombre || '',
     descripcion: proveedor?.descripcion || '',
     moneda_defecto: proveedor?.moneda_defecto || 'EUR',
+    factura_config: {
+      cliente_nombre: facturaConfig.cliente_nombre || '',
+      cliente_linea2: facturaConfig.cliente_linea2 || '',
+      cliente_direccion: facturaConfig.cliente_direccion || '',
+      vat_number: facturaConfig.vat_number || '',
+      doc_tipo: facturaConfig.doc_tipo || 'Invoice',
+      emisor_nombre: facturaConfig.emisor_nombre || '',
+      emisor_direccion: facturaConfig.emisor_direccion || '',
+      emisor_cp: facturaConfig.emisor_cp || '',
+      mostrar_banco: facturaConfig.mostrar_banco !== false,
+      mostrar_po: facturaConfig.mostrar_po === true,
+      banco_info: {
+        'Bank name': bancoInfo['Bank name'] || '',
+        'Account Number': bancoInfo['Account Number'] || '',
+        'Swift Code': bancoInfo['Swift Code'] || '',
+        TITULAR: bancoInfo.TITULAR || '',
+      },
+    },
   })
   const [saving, setSaving] = useState(false)
+
+  const setFacturaConfig = (key, value) => {
+    setForm(prev => ({
+      ...prev,
+      factura_config: { ...prev.factura_config, [key]: value },
+    }))
+  }
+
+  const setBancoInfo = (key, value) => {
+    setForm(prev => ({
+      ...prev,
+      factura_config: {
+        ...prev.factura_config,
+        banco_info: { ...prev.factura_config.banco_info, [key]: value },
+      },
+    }))
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -1214,6 +1251,126 @@ function ProveedorForm({ proveedor, onSave, onCancel }) {
             className="w-full px-3 py-2 border rounded-md text-sm"
             placeholder="Proveedor de informes comerciales..."
           />
+        </div>
+        <div className="sm:col-span-2 lg:col-span-3 border-t pt-4 mt-1">
+          <h6 className="text-sm font-semibold text-gray-900 mb-3">Datos de factura</h6>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="sm:col-span-2 lg:col-span-3">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Nombre cliente en factura</label>
+              <input
+                type="text"
+                value={form.factura_config.cliente_nombre}
+                onChange={e => setFacturaConfig('cliente_nombre', e.target.value)}
+                className="w-full px-3 py-2 border rounded-md text-sm"
+                placeholder="CESCE - CIA. ESPAÑOLA..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Línea 2</label>
+              <input
+                type="text"
+                value={form.factura_config.cliente_linea2}
+                onChange={e => setFacturaConfig('cliente_linea2', e.target.value)}
+                className="w-full px-3 py-2 border rounded-md text-sm"
+                placeholder="Velázquez 74"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Dirección cliente</label>
+              <input
+                type="text"
+                value={form.factura_config.cliente_direccion}
+                onChange={e => setFacturaConfig('cliente_direccion', e.target.value)}
+                className="w-full px-3 py-2 border rounded-md text-sm"
+                placeholder="28001 Madrid - ESPAÑA"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">VAT Number</label>
+              <input
+                type="text"
+                value={form.factura_config.vat_number}
+                onChange={e => setFacturaConfig('vat_number', e.target.value)}
+                className="w-full px-3 py-2 border rounded-md text-sm"
+                placeholder="BE0867435663..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Tipo documento</label>
+              <select
+                value={form.factura_config.doc_tipo}
+                onChange={e => setFacturaConfig('doc_tipo', e.target.value)}
+                className="w-full px-3 py-2 border rounded-md text-sm"
+              >
+                <option value="Invoice">Invoice</option>
+                <option value="Remito">Remito</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Emisor nombre</label>
+              <input
+                type="text"
+                value={form.factura_config.emisor_nombre}
+                onChange={e => setFacturaConfig('emisor_nombre', e.target.value)}
+                className="w-full px-3 py-2 border rounded-md text-sm"
+                placeholder="DI LORETO LUIS"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Emisor dirección</label>
+              <input
+                type="text"
+                value={form.factura_config.emisor_direccion}
+                onChange={e => setFacturaConfig('emisor_direccion', e.target.value)}
+                className="w-full px-3 py-2 border rounded-md text-sm"
+                placeholder="Stgo. Del estero 286 Piso 3 Of. 3"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Emisor CP / ciudad</label>
+              <input
+                type="text"
+                value={form.factura_config.emisor_cp}
+                onChange={e => setFacturaConfig('emisor_cp', e.target.value)}
+                className="w-full px-3 py-2 border rounded-md text-sm"
+                placeholder="C.P. 1075 - Caba - Argentina"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={form.factura_config.mostrar_banco}
+                onChange={e => setFacturaConfig('mostrar_banco', e.target.checked)}
+              />
+              Mostrar datos bancarios
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={form.factura_config.mostrar_po}
+                onChange={e => setFacturaConfig('mostrar_po', e.target.checked)}
+              />
+              Mostrar PO
+            </label>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Banco</label>
+              <input type="text" value={form.factura_config.banco_info['Bank name']} onChange={e => setBancoInfo('Bank name', e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Cuenta</label>
+              <input type="text" value={form.factura_config.banco_info['Account Number']} onChange={e => setBancoInfo('Account Number', e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Swift</label>
+              <input type="text" value={form.factura_config.banco_info['Swift Code']} onChange={e => setBancoInfo('Swift Code', e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Titular</label>
+              <input type="text" value={form.factura_config.banco_info.TITULAR} onChange={e => setBancoInfo('TITULAR', e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
+            </div>
+          </div>
         </div>
       </div>
       <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 mt-4">

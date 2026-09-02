@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { 
   FileText, Download, Filter, RefreshCw, Loader2, Calendar, Users, 
   Building2, ChevronDown, ChevronRight, Check, Euro, Receipt, FileSpreadsheet,
-  X, Printer, CheckCircle, History, Clock, DollarSign, AlertCircle, MoreVertical, Pencil
+  X, Printer, CheckCircle, History, Clock, DollarSign, AlertCircle, MoreVertical, Pencil, Save
 } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
@@ -75,6 +75,10 @@ export default function AdminFacturacionSolicitudesView() {
   const [invoiceNumber, setInvoiceNumber] = useState('')
   const [invoiceDate, setInvoiceDate] = useState('')
   const [poNumber, setPoNumber] = useState('')
+  const [invoiceHeaderConfig, setInvoiceHeaderConfig] = useState({})
+  const [invoiceHeaderProviderId, setInvoiceHeaderProviderId] = useState(null)
+  const [savingInvoiceHeader, setSavingInvoiceHeader] = useState(false)
+  const [showInvoiceHeaderConfig, setShowInvoiceHeaderConfig] = useState(false)
   const [generatingPdf, setGeneratingPdf] = useState(false)
   const [pdfGenerated, setPdfGenerated] = useState(false)
   const [marking, setMarking] = useState(false)
@@ -107,6 +111,30 @@ export default function AdminFacturacionSolicitudesView() {
 
   const isEstadoPendiente = (sol) => (sol?.factura_estado_pago || '').toLowerCase() === 'pendiente'
   const isFacturable = (sol) => !sol?.facturado || isEstadoPendiente(sol)
+
+  const updateInvoiceHeaderConfig = (key, value) => {
+    setInvoiceHeaderConfig(prev => ({ ...prev, [key]: value }))
+    setPdfGenerated(false)
+  }
+
+  const handleGuardarEncabezadoPdf = async () => {
+    if (!invoiceHeaderProviderId) {
+      toast.error('No se encontró el proveedor para guardar el encabezado')
+      return
+    }
+    setSavingInvoiceHeader(true)
+    try {
+      await axios.put(`/api/admin/proveedores/${invoiceHeaderProviderId}`, {
+        factura_config: invoiceHeaderConfig,
+      })
+      toast.success('Encabezado guardado en la configuración del proveedor')
+      setShowInvoiceHeaderConfig(false)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al guardar encabezado')
+    } finally {
+      setSavingInvoiceHeader(false)
+    }
+  }
 
   // Modal de revertir
   const [showRevertModal, setShowRevertModal] = useState(false)
@@ -651,6 +679,17 @@ export default function AdminFacturacionSolicitudesView() {
       precioOverrides[s.id] = getPrecioByMoneda(s, monedaCliente)
     })
     
+    let facturaConfig = {}
+    let facturaProviderId = null
+    try {
+      const provRes = await axios.get('/api/admin/proveedores')
+      const prov = (provRes.data?.proveedores || []).find(p => p.codigo === primeraSol.proveedor_codigo)
+      facturaConfig = prov?.factura_config_resuelta || prov?.factura_config || {}
+      facturaProviderId = prov?.id || null
+    } catch (err) {
+      facturaConfig = {}
+    }
+
     setModalData({
       usuario_abono: primeraSol.usuario_abono,
       usuario_nombre: primeraSol.usuario_nombre,
@@ -662,6 +701,18 @@ export default function AdminFacturacionSolicitudesView() {
       moneda: monedaCliente,
       precio_overrides: precioOverrides,
     })
+    setInvoiceHeaderConfig({
+      cliente_nombre: facturaConfig.cliente_nombre || '',
+      cliente_linea2: facturaConfig.cliente_linea2 || '',
+      cliente_direccion: facturaConfig.cliente_direccion || '',
+      vat_number: facturaConfig.vat_number || '',
+      doc_tipo: facturaConfig.doc_tipo || (primeraSol.proveedor_codigo === 'CESCE' ? 'Remito' : 'Invoice'),
+      emisor_nombre: facturaConfig.emisor_nombre || '',
+      emisor_direccion: facturaConfig.emisor_direccion || '',
+      emisor_cp: facturaConfig.emisor_cp || '',
+    })
+    setInvoiceHeaderProviderId(facturaProviderId)
+    setShowInvoiceHeaderConfig(false)
     setInvoiceNumber('')
     setInvoiceDate(getTodayInputDate())
     setPoNumber('')
@@ -702,7 +753,8 @@ export default function AdminFacturacionSolicitudesView() {
         mes: mesPayload,
         anio: anioPayload,
         moneda: modalData.moneda || 'EUR',
-        precio_overrides: modalData.precio_overrides || {}
+        precio_overrides: modalData.precio_overrides || {},
+        factura_config: invoiceHeaderConfig
       }, { responseType: 'blob' })
       
       // Descargar PDF
@@ -745,6 +797,7 @@ export default function AdminFacturacionSolicitudesView() {
         anio: anioPayload,
         moneda: modalData.moneda || 'EUR',
         precio_overrides: modalData.precio_overrides || {},
+        factura_config: invoiceHeaderConfig,
         save_to_history: true
       }, { responseType: 'blob' })
 
@@ -2459,7 +2512,7 @@ export default function AdminFacturacionSolicitudesView() {
       {/* Modal de Facturación */}
       {showModal && modalData && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
             {/* Header */}
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <div>
@@ -2531,6 +2584,112 @@ export default function AdminFacturacionSolicitudesView() {
                   className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
                 <p className="mt-1 text-xs text-gray-500">Si no se modifica, se usa la fecha de hoy.</p>
+              </div>
+
+              <div className="rounded-lg border border-gray-200 bg-gray-50">
+                <button
+                  type="button"
+                  onClick={() => setShowInvoiceHeaderConfig(prev => !prev)}
+                  className="w-full px-4 py-3 flex items-center justify-between text-left"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Encabezado del PDF</p>
+                    <p className="text-xs text-gray-500">
+                      {invoiceHeaderConfig.cliente_nombre || modalData.proveedor_nombre || modalData.proveedor_codigo}
+                      {invoiceHeaderConfig.cliente_direccion ? ` · ${invoiceHeaderConfig.cliente_direccion}` : ''}
+                    </p>
+                  </div>
+                  {showInvoiceHeaderConfig ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                </button>
+                {showInvoiceHeaderConfig && (
+                  <div className="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Nombre cliente en factura</label>
+                      <input
+                        type="text"
+                        value={invoiceHeaderConfig.cliente_nombre || ''}
+                        onChange={e => updateInvoiceHeaderConfig('cliente_nombre', e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Línea 2</label>
+                      <input
+                        type="text"
+                        value={invoiceHeaderConfig.cliente_linea2 || ''}
+                        onChange={e => updateInvoiceHeaderConfig('cliente_linea2', e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Dirección cliente</label>
+                      <input
+                        type="text"
+                        value={invoiceHeaderConfig.cliente_direccion || ''}
+                        onChange={e => updateInvoiceHeaderConfig('cliente_direccion', e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Tipo documento</label>
+                      <select
+                        value={invoiceHeaderConfig.doc_tipo || 'Invoice'}
+                        onChange={e => updateInvoiceHeaderConfig('doc_tipo', e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
+                      >
+                        <option value="Invoice">Invoice</option>
+                        <option value="Remito">Remito</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">VAT Number</label>
+                      <input
+                        type="text"
+                        value={invoiceHeaderConfig.vat_number || ''}
+                        onChange={e => updateInvoiceHeaderConfig('vat_number', e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Emisor nombre</label>
+                      <input
+                        type="text"
+                        value={invoiceHeaderConfig.emisor_nombre || ''}
+                        onChange={e => updateInvoiceHeaderConfig('emisor_nombre', e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Emisor dirección</label>
+                      <input
+                        type="text"
+                        value={invoiceHeaderConfig.emisor_direccion || ''}
+                        onChange={e => updateInvoiceHeaderConfig('emisor_direccion', e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Emisor CP / ciudad</label>
+                      <input
+                        type="text"
+                        value={invoiceHeaderConfig.emisor_cp || ''}
+                        onChange={e => updateInvoiceHeaderConfig('emisor_cp', e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
+                      />
+                    </div>
+                    <div className="sm:col-span-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleGuardarEncabezadoPdf}
+                        disabled={savingInvoiceHeader || !invoiceHeaderProviderId}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300"
+                      >
+                        {savingInvoiceHeader ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        Actualizar encabezado
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* PO Number (solo para Ducroire) */}
