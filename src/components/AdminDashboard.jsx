@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, LineChart, Line, AreaChart, Area
@@ -78,7 +78,7 @@ function ChartCard({ title, children, className = '', headerRight = null }) {
   )
 }
 
-function DetailPanel({ data, title, nameKey = 'pais', valueKey = 'cantidad', valueLabel = 'Registros', onClose, source }) {
+function DetailPanel({ data, title, nameKey = 'pais', valueKey = 'cantidad', valueLabel = 'Registros', onClose, source, onItemClick = null }) {
   const total = data.reduce((a, b) => a + b[valueKey], 0)
   const [downloading, setDownloading] = useState(null) // 'json' | 'csv' | 'pdf' | 'pais:Argentina:json' etc
 
@@ -112,21 +112,21 @@ function DetailPanel({ data, title, nameKey = 'pais', valueKey = 'cantidad', val
       : 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border hover:bg-gray-50 transition-colors text-xs font-medium'
     return (
       <div className="flex items-center gap-1">
-        <button onClick={() => handleDownload('json', pais)} title="Descargar JSON"
+        <button onClick={(e) => { e.stopPropagation(); handleDownload('json', pais) }} title="Descargar JSON"
           className={`${btnBase} text-amber-600`}
           disabled={!!downloading}>
           {downloading === (pais ? `pais:${pais}:json` : 'json')
             ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
             : <><FileJson2 className="h-3.5 w-3.5" />{size !== 'sm' && <span>JSON</span>}</>}
         </button>
-        <button onClick={() => handleDownload('csv', pais)} title="Descargar CSV (Excel)"
+        <button onClick={(e) => { e.stopPropagation(); handleDownload('csv', pais) }} title="Descargar CSV (Excel)"
           className={`${btnBase} text-green-600`}
           disabled={!!downloading}>
           {downloading === (pais ? `pais:${pais}:csv` : 'csv')
             ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
             : <><FileSpreadsheet className="h-3.5 w-3.5" />{size !== 'sm' && <span>Excel</span>}</>}
         </button>
-        <button onClick={() => handleDownload('pdf', pais)} title="Descargar PDF"
+        <button onClick={(e) => { e.stopPropagation(); handleDownload('pdf', pais) }} title="Descargar PDF"
           className={`${btnBase} text-red-600`}
           disabled={!!downloading}>
           {downloading === (pais ? `pais:${pais}:pdf` : 'pdf')
@@ -154,7 +154,21 @@ function DetailPanel({ data, title, nameKey = 'pais', valueKey = 'cantidad', val
           {data.map((item, i) => {
             const pct = total > 0 ? (item[valueKey] / total * 100) : 0
             return (
-              <div key={i} className="group flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-blue-50 transition-colors">
+              <div
+                key={i}
+                className={`group flex items-center gap-3 p-3 rounded-lg bg-gray-50 transition-colors ${
+                  onItemClick ? 'hover:bg-blue-50 cursor-pointer' : 'hover:bg-blue-50'
+                }`}
+                onClick={onItemClick ? () => onItemClick(item[nameKey]) : undefined}
+                role={onItemClick ? 'button' : undefined}
+                tabIndex={onItemClick ? 0 : undefined}
+                onKeyDown={onItemClick ? (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onItemClick(item[nameKey])
+                  }
+                } : undefined}
+              >
                 <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS_PIE[i % COLORS_PIE.length] }} />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-gray-800 truncate">{item[nameKey]}</p>
@@ -328,6 +342,171 @@ function DashboardDetalleModal({
   )
 }
 
+function PrecargadosDetalleModal({
+  open,
+  pais,
+  rows,
+  loading,
+  pagination,
+  razonSocial,
+  onRazonSocialChange,
+  onBuscar,
+  onLimpiarFiltro,
+  identificadorLabel,
+  onClose,
+  onChangePage,
+}) {
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border shadow-2xl w-full max-w-6xl max-h-[88vh] overflow-hidden">
+        <div className="px-4 py-3 border-b bg-gradient-to-r from-slate-50 to-cyan-50 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800">Detalle Precargados · {pais || 'Todos'}</h3>
+            <p className="text-xs text-gray-500">Total: {pagination.total?.toLocaleString() || 0}</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-200 text-gray-500">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto overflow-x-auto max-h-[72vh]">
+          <div className="px-4 py-3 border-b bg-white sticky top-0 z-10">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <input
+                value={razonSocial}
+                onChange={(e) => onRazonSocialChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') onBuscar()
+                }}
+                placeholder="Filtrar por razón social"
+                className="w-full sm:max-w-md rounded-md border border-gray-300 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-cyan-200"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={onBuscar}
+                  disabled={loading}
+                  className="px-3 py-1.5 text-xs rounded-md border bg-white hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Buscar
+                </button>
+                <button
+                  onClick={onLimpiarFiltro}
+                  disabled={loading || !razonSocial}
+                  className="px-3 py-1.5 text-xs rounded-md border bg-white hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Limpiar
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-20 text-sm text-gray-500 gap-2">
+              <Loader2 className="h-5 w-5 animate-spin text-cyan-600" /> Cargando información...
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="text-center py-16 text-sm text-gray-500">Sin registros para este país.</div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="bg-gray-100 sticky top-0">
+                <tr>
+                  <th className="text-left px-3 py-2 font-semibold text-gray-700">ID</th>
+                  <th className="text-left px-3 py-2 font-semibold text-gray-700">{identificadorLabel}</th>
+                  <th className="text-left px-3 py-2 font-semibold text-gray-700">Razón Social</th>
+                  <th className="text-left px-3 py-2 font-semibold text-gray-700">Estado</th>
+                  <th className="text-left px-3 py-2 font-semibold text-gray-700">Actualizado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {rows.map((row) => (
+                  <tr key={row.id} className="hover:bg-cyan-50/40">
+                    <td className="px-3 py-2 text-gray-700">{row.id}</td>
+                    <td className="px-3 py-2 text-gray-700">{row.cuit || '-'}</td>
+                    <td className="px-3 py-2 text-gray-800">{row.razon_social || '-'}</td>
+                    <td className="px-3 py-2 text-gray-700">{row.estado || '-'}</td>
+                    <td className="px-3 py-2 text-gray-500">{row.updated_at ? new Date(row.updated_at).toLocaleString('es-AR') : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="px-4 py-3 border-t bg-gray-50 flex items-center justify-between">
+          <p className="text-xs text-gray-500">Página {pagination.page || 1} de {pagination.total_pages || 1}</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onChangePage((pagination.page || 1) - 1)}
+              disabled={loading || (pagination.page || 1) <= 1}
+              className="px-3 py-1.5 text-xs rounded-md border bg-white hover:bg-gray-50 disabled:opacity-50"
+            >
+              Anterior
+            </button>
+            <button
+              onClick={() => onChangePage((pagination.page || 1) + 1)}
+              disabled={loading || (pagination.page || 1) >= (pagination.total_pages || 1)}
+              className="px-3 py-1.5 text-xs rounded-md border bg-white hover:bg-gray-50 disabled:opacity-50"
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PrecargadosPanel({ loading, error, total, porPais, onReload, onOpenPais, onClose }) {
+  return (
+    <div className="bg-white rounded-xl border border-cyan-200 shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-4 sm:px-5 py-3 bg-cyan-50 border-b border-cyan-100">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700">Informes Precargados</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Datos desde solicitudes_investigacion</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-600">Total: <span className="font-semibold">{(total || 0).toLocaleString()}</span></span>
+          <button onClick={onReload} className="px-2 py-1 text-xs rounded-md bg-white border hover:bg-gray-50">Recargar</button>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-cyan-100 text-gray-400"><X className="h-4 w-4" /></button>
+        </div>
+      </div>
+
+      <div className="p-4 sm:p-5">
+        {loading ? (
+          <div className="flex items-center justify-center py-8 text-sm text-gray-500 gap-2">
+            <Loader2 className="h-5 w-5 animate-spin text-cyan-600" /> Cargando información de precargados...
+          </div>
+        ) : error ? (
+          <div className="text-center py-8 text-sm text-red-600">
+            <p>{error}</p>
+            <button onClick={onReload} className="mt-2 px-3 py-1.5 text-xs rounded-md bg-red-50 border border-red-200 hover:bg-red-100">Reintentar</button>
+          </div>
+        ) : (porPais || []).length === 0 ? (
+          <p className="text-center text-gray-400 py-8">No hay datos de precargados.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+            {(porPais || []).map((item, i) => (
+              <button
+                key={`${item.pais || 'pais'}-${i}`}
+                onClick={() => onOpenPais(item.pais)}
+                className="text-left group flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-cyan-50 transition-colors border border-transparent hover:border-cyan-200"
+              >
+                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS_PIE[i % COLORS_PIE.length] }} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-800 truncate">{item.pais || 'Sin país'}</p>
+                  <p className="text-xs text-gray-500">{Number(item.cantidad || 0).toLocaleString()} registros</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
   return (
@@ -370,12 +549,25 @@ const EmpresasPaisTooltip = ({ active, payload, label }) => {
 }
 
 export default function AdminDashboard() {
+  const isFirstDashboardLoadRef = useRef(true)
+  const precargadosResumenInFlightRef = useRef(false)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [expandedKpi, setExpandedKpi] = useState(null) // 'empresas' | 'precarga' | 'solicitudes' | 'informes' | null
+  const [refreshing, setRefreshing] = useState(false)
+  const [expandedKpi, setExpandedKpi] = useState(null) // 'empresas' | 'precargados' | 'solicitudes' | 'informes' | null
   const [solicitudesActivas, setSolicitudesActivas] = useState(null)
   const [informesMes, setInformesMes] = useState(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
+  const [precargadosResumen, setPrecargadosResumen] = useState({ total: 0, por_pais: [] })
+  const [loadingPrecargados, setLoadingPrecargados] = useState(false)
+  const [precargadosError, setPrecargadosError] = useState('')
+
+  const [precargadosDetalleOpen, setPrecargadosDetalleOpen] = useState(false)
+  const [precargadosDetallePais, setPrecargadosDetallePais] = useState('')
+  const [precargadosDetalleRazonSocial, setPrecargadosDetalleRazonSocial] = useState('')
+  const [precargadosDetalleRows, setPrecargadosDetalleRows] = useState([])
+  const [precargadosDetalleLoading, setPrecargadosDetalleLoading] = useState(false)
+  const [precargadosDetallePagination, setPrecargadosDetallePagination] = useState({ page: 1, total_pages: 1, total: 0, per_page: 30 })
   
   // Filtros para solicitudes activas
   const [filtroEstado, setFiltroEstado] = useState('')
@@ -479,6 +671,66 @@ export default function AdminDashboard() {
     finally { setLoadingDetail(false) }
   }
 
+  const loadPrecargadosResumen = useCallback(async () => {
+    if (precargadosResumenInFlightRef.current) return
+    precargadosResumenInFlightRef.current = true
+    setLoadingPrecargados(true)
+    setPrecargadosError('')
+    try {
+      const res = await axios.get('/api/admin/dashboard/precargados-resumen')
+      if (res.data?.success) {
+        setPrecargadosResumen(res.data.data || { total: 0, por_pais: [] })
+      } else {
+        setPrecargadosError(res.data?.error || 'No se pudo cargar precargados')
+      }
+    } catch {
+      setPrecargadosError('Error al cargar precargados')
+    } finally {
+      precargadosResumenInFlightRef.current = false
+      setLoadingPrecargados(false)
+    }
+  }, [])
+
+  const loadPrecargadosDetalle = useCallback(async (pais, page = 1, razonSocial = '') => {
+    setPrecargadosDetalleLoading(true)
+    try {
+      const params = { pais, page, per_page: 30, razon_social: razonSocial || undefined }
+      const res = await axios.get('/api/admin/dashboard/precargados-detalle', { params })
+      if (res.data?.success) {
+        setPrecargadosDetalleRows(res.data.data?.rows || [])
+        setPrecargadosDetallePagination(res.data.data?.pagination || { page: 1, total_pages: 1, total: 0, per_page: 30 })
+      } else {
+        toast.error(res.data?.error || 'No se pudo cargar el detalle de precargados')
+      }
+    } catch {
+      toast.error('Error al cargar detalle de precargados')
+    } finally {
+      setPrecargadosDetalleLoading(false)
+    }
+  }, [])
+
+  const handleOpenPrecargadoPais = (pais) => {
+    setPrecargadosDetallePais(pais || '')
+    setPrecargadosDetalleRazonSocial('')
+    setPrecargadosDetalleOpen(true)
+    loadPrecargadosDetalle(pais || '', 1, '')
+  }
+
+  const identificadorLabelPrecargados = useMemo(() => {
+    const p = (precargadosDetallePais || '').toLowerCase()
+    if (p === 'argentina') return 'CUIT'
+    if (p === 'brasil') return 'CNPJ'
+    if (p === 'chile') return 'RUT'
+    if (p === 'peru') return 'RUC'
+    if (p === 'uruguay') return 'RUT'
+    if (p === 'rep. dominicana' || p === 'república dominicana' || p === 'republica dominicana') return 'RNC'
+    if (p === 'colombia') return 'NIT'
+    if (p === 'honduras') return 'RTN'
+    if (p === 'costa rica') return 'Cedula Juridica'
+    if (p === 'guatemala') return 'DPI'
+    return 'ID'
+  }, [precargadosDetallePais])
+
   const handleDownloadSolicitudes = async (format) => {
     setDownloading(`sol-${format}`)
     try {
@@ -532,6 +784,9 @@ export default function AdminDashboard() {
     }
     if (key === 'informes' && !informesMes) {
       loadInformesMes()
+    }
+    if (key === 'precargados' && !loadingPrecargados && (!precargadosResumen.por_pais || precargadosResumen.por_pais.length === 0)) {
+      loadPrecargadosResumen()
     }
   }
 
@@ -628,8 +883,14 @@ export default function AdminDashboard() {
     resumenEmpresas = periodoResumenEmpresas,
     resumenSolicitudes = periodoResumenSolicitudes,
     resumenClientes = periodoResumenClientes,
+    options = {},
   ) => {
-    setLoading(true)
+    const { silent = false } = options
+    if (isFirstDashboardLoadRef.current) {
+      setLoading(true)
+    } else if (!silent) {
+      setRefreshing(true)
+    }
     try {
       const params = {
         periodo_facturacion: periodo,
@@ -644,7 +905,9 @@ export default function AdminDashboard() {
     } catch {
       toast.error('Error al cargar dashboard')
     } finally {
+      isFirstDashboardLoadRef.current = false
       setLoading(false)
+      setRefreshing(false)
     }
   }, [periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes, dashboardDesde, dashboardHasta])
   
@@ -700,12 +963,17 @@ export default function AdminDashboard() {
 
   // Auto-refresh cada 30 segundos usando filtros actuales
   useEffect(() => {
-    loadDashboard(periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes)
+    loadDashboard(periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes, { silent: true })
     const interval = setInterval(() => {
-      loadDashboard(periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes)
+      loadDashboard(periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes, { silent: true })
     }, 30000) // 30 segundos
     return () => clearInterval(interval)
   }, [loadDashboard, periodoFacturacion, periodoResumenEmpresas, periodoResumenSolicitudes, periodoResumenClientes, dashboardDesde, dashboardHasta])
+
+  // Precargados: cargar al entrar al dashboard (solo una request activa por vez)
+  useEffect(() => {
+    loadPrecargadosResumen()
+  }, [loadPrecargadosResumen])
 
   if (loading) {
     return (
@@ -777,10 +1045,11 @@ export default function AdminDashboard() {
           </div>
           <button
             onClick={loadDashboard}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-xl hover:bg-gray-50 transition-colors self-start sm:self-auto"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-xl hover:bg-gray-50 transition-colors self-start sm:self-auto disabled:opacity-60"
+            disabled={refreshing}
           >
-            <RefreshCcw className="h-4 w-4" />
-            Actualizar
+            <RefreshCcw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Actualizando...' : 'Actualizar'}
           </button>
         </div>
       </div>
@@ -792,6 +1061,12 @@ export default function AdminDashboard() {
           description="Informes en el sistema"
           active={expandedKpi === 'empresas'}
           onClick={() => toggleKpi('empresas')}
+        />
+        <KpiCard
+          icon={FileText} label="Informes precargados" value={loadingPrecargados ? '...' : (precargadosResumen.total || 0)} color="purple"
+          description={loadingPrecargados ? 'Cargando información...' : 'Solicitudes precarga/precargado'}
+          active={expandedKpi === 'precargados'}
+          onClick={() => toggleKpi('precargados')}
         />
         <KpiCard icon={ClipboardList} label="Pendientes" value={kpis.solicitudes_pendientes || 0} color="amber"
           description="⚡ Tiempo real"
@@ -806,12 +1081,51 @@ export default function AdminDashboard() {
           active={expandedKpi === 'informes'}
           onClick={() => toggleKpi('informes')}
         />
-        <KpiCard icon={TrendingUp} label="Score promedio" value={kpis.score_promedio} sub="/ 100" color="purple" />
         <KpiCard
           icon={Database} label="Facturación" value={fmtDual(kpis.facturacion_mes)} color="rose"
           description="Este mes"
         />
       </div>
+
+      {expandedKpi === 'empresas' && (data.empresas_por_pais || []).length > 0 && (
+        <DetailPanel
+          data={data.empresas_por_pais}
+          title="Empresas por País — Click en un país para descargar"
+          nameKey="pais"
+          valueKey="cantidad"
+          valueLabel="empresas"
+          onClose={() => setExpandedKpi(null)}
+          source="empresas"
+        />
+      )}
+
+      {expandedKpi === 'precargados' && (
+        loadingPrecargados && (!precargadosResumen.por_pais || precargadosResumen.por_pais.length === 0) ? (
+          <div className="bg-white rounded-xl border border-cyan-200 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-center py-8 text-sm text-gray-500 gap-2">
+              <Loader2 className="h-5 w-5 animate-spin text-cyan-600" /> Cargando información de precargados...
+            </div>
+          </div>
+        ) : precargadosError ? (
+          <div className="bg-white rounded-xl border border-red-200 shadow-sm overflow-hidden">
+            <div className="text-center py-8 text-sm text-red-600">
+              <p>{precargadosError}</p>
+              <button onClick={loadPrecargadosResumen} className="mt-2 px-3 py-1.5 text-xs rounded-md bg-red-50 border border-red-200 hover:bg-red-100">Reintentar</button>
+            </div>
+          </div>
+        ) : (
+          <DetailPanel
+            data={precargadosResumen.por_pais || []}
+            title="Informes Precargados — Click en un país para abrir detalle"
+            nameKey="pais"
+            valueKey="cantidad"
+            valueLabel="registros"
+            onClose={() => setExpandedKpi(null)}
+            source="precargados"
+            onItemClick={handleOpenPrecargadoPais}
+          />
+        )
+      )}
 
       {/* ── Facturación Global ── */}
       {(data.facturas_proveedores || data.facturas_clientes) && (
@@ -877,19 +1191,6 @@ export default function AdminDashboard() {
             </div>
           )}
         </div>
-      )}
-
-      {/* ── Panel expandible: Empresas por país ── */}
-      {expandedKpi === 'empresas' && (data.empresas_por_pais || []).length > 0 && (
-        <DetailPanel
-          data={data.empresas_por_pais}
-          title="Empresas por País — Click en un país para descargar"
-          nameKey="pais"
-          valueKey="cantidad"
-          valueLabel="empresas"
-          onClose={() => setExpandedKpi(null)}
-          source="empresas"
-        />
       )}
 
       {/* ── Panel expandible: Solicitudes Activas ── */}
@@ -1590,6 +1891,27 @@ export default function AdminDashboard() {
           },
           `detalle_${dashboardDetalleTipo}`
         )}
+      />
+
+      <PrecargadosDetalleModal
+        open={precargadosDetalleOpen}
+        pais={precargadosDetallePais}
+        rows={precargadosDetalleRows}
+        loading={precargadosDetalleLoading}
+        pagination={precargadosDetallePagination}
+        razonSocial={precargadosDetalleRazonSocial}
+        onRazonSocialChange={setPrecargadosDetalleRazonSocial}
+        onBuscar={() => loadPrecargadosDetalle(precargadosDetallePais, 1, precargadosDetalleRazonSocial)}
+        onLimpiarFiltro={() => {
+          setPrecargadosDetalleRazonSocial('')
+          loadPrecargadosDetalle(precargadosDetallePais, 1, '')
+        }}
+        identificadorLabel={identificadorLabelPrecargados}
+        onClose={() => setPrecargadosDetalleOpen(false)}
+        onChangePage={(nextPage) => {
+          if (nextPage < 1 || nextPage > (precargadosDetallePagination.total_pages || 1)) return
+          loadPrecargadosDetalle(precargadosDetallePais, nextPage, precargadosDetalleRazonSocial)
+        }}
       />
     </div>
   )

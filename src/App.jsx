@@ -21,6 +21,7 @@ import ScoreCompare from './components/ScoreCompare'
 import ComparadorEmpresas from './components/ComparadorEmpresas'
 import SolicitudesView from './components/SolicitudesView'
 import PedidosSolicitudesView from './components/PedidosSolicitudesView'
+import RegistrosPrecargadosView from './components/RegistrosPrecargadosView'
 import AdminDashboard from './components/AdminDashboard'
 import AdminNotifications from './components/AdminNotifications'
 import ClientPortal from './components/portal/ClientPortal'
@@ -47,7 +48,7 @@ function App() {
   const isClienteAdmin = user?.rol === 'cliente_admin'
   const canAccessScoring = isAdmin && hasPermission('scoring')
   const canAccessDashboard = hasPermission('inicio')
-  const [currentView, setCurrentView] = useState(canAccessDashboard ? 'dashboard' : 'search') // dashboard, search, upload, bulk, edit, view, list, historial, admin, scoring, scoring-dashboard, scoring-compare
+  const [currentView, setCurrentView] = useState(null) // dashboard, search, upload, bulk, edit, view, list, historial, admin, scoring, scoring-dashboard, scoring-compare
   const [previousView, setPreviousView] = useState(null) // Para rastrear de dónde viene
   const [originView, setOriginView] = useState(null) // Para navegación profunda (list -> historial -> ver versión)
   const [extractedData, setExtractedData] = useState(null)
@@ -107,20 +108,22 @@ function App() {
       setAlertasCount(0)
       return
     }
+    const controller = new AbortController()
     const fetchAlertasCount = async () => {
       try {
-        const res = await axios.get('/api/admin/notifications/count')
+        const res = await axios.get('/api/admin/notifications/count', { signal: controller.signal })
         if (res.data.success) {
           setAlertasCount(res.data.total || 0)
         }
       } catch (err) {
+        if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return
         console.error('Error fetching alertas count:', err)
       }
     }
     fetchAlertasCount()
     // Refrescar cada 30 segundos
     const interval = setInterval(fetchAlertasCount, 30000)
-    return () => clearInterval(interval)
+    return () => { clearInterval(interval); controller.abort() }
   }, [user])
 
   // Fetch contador de aprobaciones pendientes para admin
@@ -129,19 +132,21 @@ function App() {
       setAprobacionesCount(0)
       return
     }
+    const controller = new AbortController()
     const fetchAprobaciones = async () => {
       try {
-        const res = await axios.get('/api/admin/aprobaciones-count')
+        const res = await axios.get('/api/admin/aprobaciones-count', { signal: controller.signal })
         if (res.data.success) {
           setAprobacionesCount(res.data.count || 0)
         }
       } catch (err) {
+        if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return
         console.error('Error fetching aprobaciones count:', err)
       }
     }
     fetchAprobaciones()
     const interval = setInterval(fetchAprobaciones, 30000)
-    return () => clearInterval(interval)
+    return () => { clearInterval(interval); controller.abort() }
   }, [user])
 
   // Fetch contador de aprobaciones pendientes para cliente_admin
@@ -171,6 +176,7 @@ function App() {
       setBoAlertasCount(0)
       return
     }
+    const controller = new AbortController()
     
     // Usar caché de localStorage para evitar llamadas frecuentes
     const cacheKey = 'bo_alertas_cache'
@@ -195,7 +201,7 @@ function App() {
       }
       
       try {
-        const res = await axios.get('/api/v1/boletin-oficial/alertas?limite=100')
+        const res = await axios.get('/api/v1/boletin-oficial/alertas?limite=100', { signal: controller.signal })
         if (res.data.success) {
           const alertas = res.data.data?.alertas || []
           // Guardar en caché
@@ -203,6 +209,7 @@ function App() {
           processAlertas(alertas)
         }
       } catch (err) {
+        if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return
         // Ignorar silenciosamente errores de rate limit
         if (err.response?.status !== 429) {
           console.error('Error fetching BO alertas count:', err)
@@ -226,7 +233,7 @@ function App() {
     fetchBoAlertas()
     // Refrescar cada 5 minutos
     const interval = setInterval(fetchBoAlertas, 300000)
-    return () => clearInterval(interval)
+    return () => { clearInterval(interval); controller.abort() }
   }, [user])
 
   // Resetear estado al cambiar de usuario o cerrar sesión
@@ -254,6 +261,214 @@ function App() {
   }, [user])
 
   const [sinopsisInfo, setSinopsisInfo] = useState(null)
+
+  const normalizeCompanyName = (value) => {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  const cleanTaxId = (value) => String(value || '').replace(/\D/g, '')
+
+  const isArgentinaPrecargado = (row) => {
+    const tipo = String(row?.tipo_identificacion || '').toUpperCase()
+    const pais = String(row?.pais || row?.pais_inferido || '').toLowerCase()
+    const codigoPais = String(row?.codigo_pais || '').toUpperCase()
+    const cuit = cleanTaxId(row?.cuit)
+
+    if (tipo === 'CUIT') return true
+    if (codigoPais === 'AR') return true
+    if (pais === 'argentina') return true
+    return cuit.length === 11 && !['RUC', 'RUT', 'RNC', 'NIT', 'RTN', 'RFC', 'CNPJ'].includes(tipo)
+  }
+
+  const buildBcraRiskText = (bcra) => {
+    const deudas = bcra?.deudas
+    if (!deudas?.disponible) return ''
+
+    const lines = []
+    if (deudas.periodo) lines.push(`Periodo: ${deudas.periodo}`)
+    if (deudas.peor_situacion != null) {
+      lines.push(`Peor situacion BCRA: ${deudas.peor_situacion}${deudas.peor_situacion_desc ? ` (${deudas.peor_situacion_desc})` : ''}`)
+    }
+    if (deudas.monto_total_deuda != null) lines.push(`Monto total de deuda: ${deudas.monto_total_deuda}`)
+    if (deudas.cant_entidades != null) lines.push(`Cantidad de entidades: ${deudas.cant_entidades}`)
+    if (Array.isArray(deudas.entidades) && deudas.entidades.length > 0) {
+      lines.push('Entidades:')
+      deudas.entidades.slice(0, 5).forEach((entidad) => {
+        const entidadNombre = entidad.entidad || 'Entidad'
+        const situacion = entidad.situacion ?? '-'
+        const monto = entidad.monto != null ? entidad.monto : '-'
+        lines.push(`- ${entidadNombre}: situacion ${situacion}, monto ${monto}`)
+      })
+    }
+    return lines.join('\n')
+  }
+
+  const buildBoletinHistoryText = (boData) => {
+    const resultados = Array.isArray(boData?.resultados) ? boData.resultados.slice(0, 5) : []
+    if (!resultados.length) return ''
+
+    return resultados.map((item, index) => {
+      const lines = [`Publicacion ${index + 1}`]
+      if (item.titulo) lines.push(`Titulo: ${item.titulo}`)
+      if (item.fecha) lines.push(`Fecha: ${item.fecha}`)
+      if (item.seccion) lines.push(`Seccion: ${item.seccion}`)
+      if (item.numero_boletin) lines.push(`Boletin: ${item.numero_boletin}`)
+      if (item.url) lines.push(`Fuente: ${item.url}`)
+      if (item.texto_completo) lines.push(`Texto: ${item.texto_completo}`)
+      return lines.join('\n')
+    }).join('\n\n---\n\n')
+  }
+
+  const buildArgentinaSynopsis = (resultado, boData) => {
+    const parts = []
+    if (resultado?.estado_afip) parts.push(`AFIP: ${resultado.estado_afip}`)
+    if (resultado?.tipo_contribuyente) parts.push(`Tipo contribuyente: ${resultado.tipo_contribuyente}`)
+    if (resultado?.actividad_principal) parts.push(`Actividad: ${resultado.actividad_principal}`)
+    const deudas = resultado?.bcra?.deudas
+    if (deudas?.disponible) {
+      parts.push(`BCRA situacion ${deudas.peor_situacion ?? '-'} con deuda total ${deudas.monto_total_deuda ?? 0}`)
+    }
+    if (resultado?.osint?.website_online && resultado?.osint?.url_analizada) {
+      parts.push(`Sitio web detectado: ${resultado.osint.url_analizada}`)
+    }
+    if (boData?.encontrado) {
+      parts.push(`Boletin Oficial: ${boData.resultados_totales || 0} publicacion(es) detectadas`)
+    }
+    return parts.join(' | ')
+  }
+
+  const buildOsintContactExtras = (osint) => {
+    const extras = []
+    if (osint?.url_analizada) {
+      extras.push({
+        id: `extra_osint_web_${Date.now()}`,
+        group: 'contacto',
+        label: 'Sitio Web',
+        type: 'url',
+        value: osint.url_analizada,
+      })
+    }
+    if (osint?.linkedin_details?.perfil_url) {
+      extras.push({
+        id: `extra_osint_linkedin_${Date.now()}`,
+        group: 'contacto',
+        label: 'LinkedIn',
+        type: 'url',
+        value: osint.linkedin_details.perfil_url,
+      })
+    }
+    return extras
+  }
+
+  const enrichArgentinaPrecargado = async (row) => {
+    const cuit = cleanTaxId(row?.cuit)
+    if (!cuit) return row
+
+    const [externoRes, boRes] = await Promise.all([
+      axios.get(`/api/buscar-externo/${cuit}?country_code=AR`).catch(() => null),
+      axios.post('/api/v1/boletin-oficial/search', {
+        cuit,
+        razon_social: row?.razon_social || '',
+      }).catch(() => null),
+    ])
+
+    const resultado = externoRes?.data?.resultado || {}
+    const boData = boRes?.data?.data || null
+    const extraFields = buildOsintContactExtras(resultado?.osint)
+
+    return {
+      ...row,
+      tipo_identificacion: 'CUIT',
+      pais: 'Argentina',
+      codigo_pais: 'AR',
+      cuit: resultado?.cuit || row?.cuit || '',
+      razon_social: resultado?.razon_social || row?.razon_social || '',
+      domicilio: resultado?.domicilio || row?.domicilio || '',
+      domicilio_legal: resultado?.domicilio || row?.domicilio_legal || '',
+      actividad_principal: resultado?.actividad_principal || row?.actividad_principal || '',
+      ingresos_brutos: resultado?.ingresos_brutos || row?.ingresos_brutos || '',
+      fecha_contrato_social: resultado?.fecha_contrato_social || row?.fecha_contrato_social || '',
+      fecha_inscripcion_afip: resultado?.fecha_inscripcion_afip || row?.fecha_inscripcion_afip || '',
+      sinopsis: row?.sinopsis || buildArgentinaSynopsis(resultado, boData),
+      historia: row?.historia || buildBoletinHistoryText(boData),
+      relaciones_bancarias_riesgo: row?.relaciones_bancarias_riesgo || buildBcraRiskText(resultado?.bcra),
+      cumplimiento_concepto: row?.cumplimiento_concepto || (resultado?.estado_afip
+        ? `Estado AFIP: ${resultado.estado_afip}${resultado?.estado_activo === false ? ' | Contribuyente no activo' : ''}`
+        : ''),
+      extra_fields: [...(row?.extra_fields || []), ...extraFields],
+    }
+  }
+
+  const openDirectEdit = (empresaId, empresaCuit = '', sourceView = currentView) => {
+    setSolicitudActiva(null)
+    setSelectedEmpresaId(empresaId)
+    setSelectedEmpresaCuit(empresaCuit || '')
+    setSelectedEmpresaMode('edit')
+    setExtractedData(null)
+    setNewReportCountry(null)
+    setPreviousView(sourceView)
+    setCurrentView('edit')
+  }
+
+  const getPrecargadoAutofill = (row) => {
+    const data = row?.datos_externos && typeof row.datos_externos === 'object' ? row.datos_externos : {}
+    const autofill = data?.autofill_ar && typeof data.autofill_ar === 'object' ? data.autofill_ar : {}
+    return autofill
+  }
+
+  const openSeedEditFromPrecargado = (row, sourceView = 'registros-precargados') => {
+    const autofill = getPrecargadoAutofill(row)
+    setSolicitudActiva(null)
+    setSelectedEmpresaId(null)
+    setSelectedEmpresaCuit(row?.cuit || '')
+    setSelectedEmpresaMode('edit')
+    setFilename('')
+    setSinopsisInfo(null)
+    setNewReportCountry(null)
+    setExtractedData({
+      tipo_identificacion: row?.tipo_identificacion || 'ID',
+      cuit: row?.cuit || '',
+      razon_social: autofill?.razon_social || row?.razon_social || '',
+      domicilio: autofill?.domicilio || row?.domicilio || '',
+      actividad_principal: autofill?.actividad_principal || row?.actividad_principal || '',
+      pais: row?.pais || row?.pais_inferido || '',
+      codigo_pais: row?.codigo_pais || '',
+      email: autofill?.email || row?.email || '',
+      telefono_1: autofill?.telefono_1 || row?.telefono_1 || '',
+      telefono_2: autofill?.telefono_2 || row?.telefono_2 || '',
+      sinopsis: autofill?.sinopsis || '',
+      objeto_social: autofill?.objeto_social || '',
+      estructura_societaria: autofill?.estructura_societaria || '',
+      composicion_capital: autofill?.composicion_capital || '',
+      datos_directivos: autofill?.datos_directivos || '',
+      historia: autofill?.historia || '',
+      situacion_economica_financiera: autofill?.situacion_economica_financiera || '',
+      bienes_uso: autofill?.bienes_uso || '',
+      evolucion_resultados: autofill?.evolucion_resultados || '',
+      sociedades_vinculadas: autofill?.sociedades_vinculadas || '',
+      cumplimiento_concepto: autofill?.cumplimiento_concepto || '',
+      sucursales: autofill?.sucursales || '',
+      relaciones_bancarias_riesgo: autofill?.relaciones_bancarias_riesgo || '',
+      conclusion: autofill?.conclusion || '',
+      ingresos_brutos: autofill?.ingresos_brutos || '',
+      forma_legal: autofill?.forma_legal || '',
+      fecha_contrato_social: autofill?.fecha_contrato_social || '',
+      fecha_inscripcion_afip: autofill?.fecha_inscripcion_afip || '',
+      duracion_anios: autofill?.duracion_anios || '',
+      cierre_ejercicio: autofill?.cierre_ejercicio || '',
+      domicilio_legal: autofill?.domicilio_legal || '',
+      emails_contacto: autofill?.emails_contacto || '',
+      extra_fields: Array.isArray(autofill?.extra_fields) ? autofill.extra_fields : [],
+    })
+    setPreviousView(sourceView)
+    setCurrentView('edit')
+  }
 
   const handleDataExtracted = (data, name, sinopsisInfoData) => {
     setExtractedData(data)
@@ -304,15 +519,7 @@ function App() {
   const handleIniciarInformeSolicitud = async (solicitud) => {
     setLoadingSolicitudView(true)
     try {
-      const normalizeCompanyName = (value) => {
-        return String(value || '')
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .toLowerCase()
-          .replace(/[^a-z0-9\s]/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim()
-      }
+      const sourceView = solicitud?.view_source || currentView || 'pedidos-solicitudes'
 
       // Marcar como en_proceso en backend y obtener datos del pedido
       let pedidoInfo = null
@@ -354,7 +561,7 @@ function App() {
         setSelectedEmpresaMode('edit')
         setExtractedData(null)
         setNewReportCountry(null)
-        setPreviousView('pedidos-solicitudes')
+        setPreviousView(sourceView)
         setCurrentView('solicitud-informe')
       }
       
@@ -420,27 +627,99 @@ function App() {
       setSelectedEmpresaCuit(null)
       setSelectedEmpresaMode(null)
       setNewReportCountry(null)
-      setPreviousView('pedidos-solicitudes')
+      setPreviousView(sourceView)
       setCurrentView('solicitud-informe')
     } finally {
       setLoadingSolicitudView(false)
     }
   }
 
+  const handleAbrirEditorPrecargado = async (row) => {
+    setLoadingSolicitudView(true)
+    try {
+      const sourceView = 'registros-precargados'
+      const cuit = (row?.empresa_modelo_cuit || row?.cuit || '').replace(/\D/g, '')
+
+      if (row?.empresa_modelo_id) {
+        openDirectEdit(row.empresa_modelo_id, row.empresa_modelo_cuit || row.cuit || '', sourceView)
+        return
+      }
+
+      if (cuit) {
+        try {
+          const res = await axios.get(`/api/empresas/por-cuit/${cuit}`)
+          if (res.data.success && res.data.empresa) {
+            openDirectEdit(res.data.empresa.id, res.data.empresa.cuit || cuit, sourceView)
+            return
+          }
+        } catch (err) {
+          console.error('[handleAbrirEditorPrecargado] Error buscando empresa por CUIT:', err)
+        }
+      }
+
+      if (row?.razon_social) {
+        try {
+          const res = await axios.get(`/api/search?q=${encodeURIComponent(row.razon_social)}&limit=5`)
+          if (res.data.success && res.data.empresas?.length > 0) {
+            const empresas = res.data.empresas.filter(e => e.source === 'empresa')
+            const requestedName = normalizeCompanyName(row.razon_social)
+
+            const exactNormalized = empresas.find(e =>
+              normalizeCompanyName(e.razon_social) === requestedName
+            )
+
+            if (exactNormalized) {
+              openDirectEdit(exactNormalized.id, exactNormalized.cuit, sourceView)
+              return
+            }
+
+            const containsMatches = empresas.filter(e => {
+              const candidate = normalizeCompanyName(e.razon_social)
+              return candidate && requestedName && (candidate.includes(requestedName) || requestedName.includes(candidate))
+            })
+
+            if (containsMatches.length === 1) {
+              const singleMatch = containsMatches[0]
+              openDirectEdit(singleMatch.id, singleMatch.cuit, sourceView)
+              return
+            }
+          }
+        } catch (err) {
+          console.error('[handleAbrirEditorPrecargado] Error buscando empresa por razon social:', err)
+        }
+      }
+
+      let seedRow = row
+      if (isArgentinaPrecargado(row)) {
+        try {
+          seedRow = await enrichArgentinaPrecargado(row)
+        } catch (err) {
+          console.error('[handleAbrirEditorPrecargado] Error enriqueciendo Argentina:', err)
+        }
+      }
+
+      openSeedEditFromPrecargado(seedRow, sourceView)
+    } finally {
+      setLoadingSolicitudView(false)
+    }
+  }
+
   const handleSolicitudInformeComplete = () => {
+    const returnView = previousView || 'pedidos-solicitudes'
     setSolicitudActiva(null)
     setSelectedEmpresaId(null)
     setSelectedEmpresaCuit(null)
     setRefreshKey(k => k + 1)
-    setCurrentView('pedidos-solicitudes')
+    setCurrentView(returnView)
     setPreviousView(null)
   }
 
   const handleBackFromSolicitudInforme = () => {
+    const returnView = previousView || 'pedidos-solicitudes'
     setSolicitudActiva(null)
     setSelectedEmpresaId(null)
     setSelectedEmpresaCuit(null)
-    setCurrentView('pedidos-solicitudes')
+    setCurrentView(returnView)
     setPreviousView(null)
   }
 
@@ -585,7 +864,7 @@ function App() {
       setOriginView(null)
       setListDetailEmpresaId(null)
       setCurrentView('list')
-    } else if (previousView === 'pedidos-solicitudes' || previousView === 'solicitudes') {
+    } else if (previousView === 'pedidos-solicitudes' || previousView === 'solicitudes' || previousView === 'registros-precargados') {
       // Volver a Solicitudes
       setSelectedEmpresaId(null)
       setSelectedEmpresaCuit(null)
@@ -683,6 +962,14 @@ function App() {
     return <ChangePasswordModal required onClose={() => {}} onSuccess={onPasswordChanged} />
   }
 
+  if (user && !currentView) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
+      </div>
+    )
+  }
+
   // Portal cliente: usuarios con rol cliente_admin, cliente_usuario, usuario o cliente_presentacion ven el portal con sidebar
   const isClientUser = ['cliente_admin', 'cliente_usuario', 'usuario', 'cliente_presentacion'].includes(user?.rol) && !isAdmin
   if (isClientUser) {
@@ -708,6 +995,8 @@ function App() {
   // Nuevo Informe: solo para usuarios normales, no admin/analista (ellos usan Solicitudes)
   if (hasPermission('nuevo_informe') && !isAdmin && user?.rol !== 'analista') sidebarItems.push({ id: 'new-blank', label: t('nav.newReport'), icon: FilePlus2 })
   if (hasPermission('editar')) sidebarItems.push({ id: 'list', label: t('nav.records'), icon: List })
+  if (user?.rol === 'analista') sidebarItems.push({ id: 'registros-precargados', label: 'Registros Precargados', icon: FileText, color: 'amber' })
+  if (isAdmin) sidebarItems.push({ id: 'registros-precargados', label: 'Registros Precargados', icon: FileText, color: 'amber' })
   if (canAccessScoring) {
     sidebarItems.push({ id: '_sep_scoring', separator: true, label: t('nav.scoring') })
     sidebarItems.push({ id: 'scoring', label: t('nav.calculateScore'), icon: Calculator, color: 'emerald' })
@@ -1122,10 +1411,9 @@ function App() {
         </header>
 
         <main className="p-4 lg:p-8">
-        {/* SearchView se mantiene montado pero oculto para preservar búsqueda */}
-        <div className={currentView === 'search' ? '' : 'hidden'}>
+        {currentView === 'search' && (
           <SearchView onSelectEmpresa={handleSelectEmpresa} refreshKey={refreshKey} />
-        </div>
+        )}
         
         {currentView === 'upload' && (
             <PDFUploader onDataExtracted={handleDataExtracted} />
@@ -1338,6 +1626,13 @@ function App() {
               }}
             />
         )}
+
+          {currentView === 'registros-precargados' && (isAdmin || user?.rol === 'analista') && (
+            <RegistrosPrecargadosView
+              onIniciarInforme={handleIniciarInformeSolicitud}
+              onAbrirEditor={handleAbrirEditorPrecargado}
+            />
+          )}
 
         {currentView === 'solicitud-informe' && solicitudActiva && (
           selectedEmpresaId ? (
