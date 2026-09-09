@@ -8,6 +8,7 @@ const COUNTRY_FLAGS = {
   CL: '🇨🇱', SV: '🇸🇻', DE: '🇩🇪', US: '🇺🇸', BR: '🇧🇷',
   MX: '🇲🇽', HN: '🇭🇳', BO: '🇧🇴', PY: '🇵🇾', VE: '🇻🇪',
   JM: '🇯🇲', AG: '🇦🇬', // Jamaica / Antigua & Barbuda
+  BL: '🇧🇱',
 }
 
 // Países con validación externa disponible

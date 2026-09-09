@@ -52,6 +52,7 @@ const PAISES_DISPONIBLES = [
   { codigo: 'DO', nombre: 'Rep. Dominicana', bandera: '🇩🇴' },
   { codigo: 'HN', nombre: 'Honduras', bandera: '🇭🇳' },
   { codigo: 'JM', nombre: 'Jamaica', bandera: '🇯🇲' },
+  { codigo: 'BL', nombre: 'San Bartolomé', bandera: '🇧🇱' },
 ]
 
 export default function AmpliarPlanModal({ isOpen, onClose, planActual }) {

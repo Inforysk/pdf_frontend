@@ -47,6 +47,8 @@ function App() {
   const isClienteAdmin = user?.rol === 'cliente_admin'
   const canAccessScoring = isAdmin && hasPermission('scoring')
   const canAccessDashboard = hasPermission('inicio')
+  const canAccessPreciosPais = isAdmin || hasPermission('ver_precios_pais') || hasPermission('gestionar_precios_pais')
+  const canAccessMotorPricing = isAdmin || hasPermission('ver_pricing') || hasPermission('gestionar_pricing')
   const [currentView, setCurrentView] = useState(canAccessDashboard ? 'dashboard' : 'search') // dashboard, search, upload, bulk, edit, view, list, historial, admin, scoring, scoring-dashboard, scoring-compare
   const [previousView, setPreviousView] = useState(null) // Para rastrear de dónde viene
   const [originView, setOriginView] = useState(null) // Para navegación profunda (list -> historial -> ver versión)
@@ -731,10 +733,10 @@ function App() {
   if (isAdmin) sidebarItems.push({ id: 'cupones', label: t('nav.coupons'), icon: Ticket, color: 'purple' })
   if (isAdmin) sidebarItems.push({ id: 'productos-admin', label: t('nav.products'), icon: Package, color: 'violet' })
 
-  if (isAdmin) sidebarItems.push({ id: '_sep_config', separator: true, label: 'Configuración' })
+  if (isAdmin || canAccessPreciosPais || canAccessMotorPricing) sidebarItems.push({ id: '_sep_config', separator: true, label: 'Configuración' })
   if (isAdmin) sidebarItems.push({ id: 'pasarelas', label: t('nav.paymentGateways'), icon: Webhook, color: 'purple' })
-  if (isAdmin) sidebarItems.push({ id: 'precios-pais', label: t('nav.countryPricing'), icon: Globe, color: 'teal' })
-  if (isAdmin) sidebarItems.push({ id: 'proveedores-pricing', label: t('nav.pricingEngine'), icon: Calculator, color: 'cyan' })
+  if (canAccessPreciosPais) sidebarItems.push({ id: 'precios-pais', label: t('nav.countryPricing'), icon: Globe, color: 'teal' })
+  if (canAccessMotorPricing) sidebarItems.push({ id: 'proveedores-pricing', label: t('nav.pricingEngine'), icon: Calculator, color: 'cyan' })
 
   if (isAdmin) sidebarItems.push({ 
     id: 'admin', 
@@ -1264,11 +1266,11 @@ function App() {
             <AdminPaymentsView />
         )}
 
-        {currentView === 'precios-pais' && isAdmin && (
+        {currentView === 'precios-pais' && canAccessPreciosPais && (
             <AdminPreciosPaisView />
         )}
 
-        {currentView === 'proveedores-pricing' && isAdmin && (
+        {currentView === 'proveedores-pricing' && canAccessMotorPricing && (
             <AdminProveedoresView />
         )}
 

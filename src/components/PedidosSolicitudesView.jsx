@@ -51,21 +51,21 @@ const buildStaticCountryIsoMap = () => {
   return map
 }
 
-const PAISES_DISPONIBLES = ['Argentina', 'Uruguay', 'Chile', 'Colombia', 'Perú', 'Panamá', 'Rep. Dominicana', 'Honduras', 'México', 'Costa Rica', 'Guatemala', 'España', 'Saint Lucia', 'Jamaica', 'Antigua & Barbuda', 'Brasil', 'Estados Unidos', 'Alemania']
+const PAISES_DISPONIBLES = ['Argentina', 'Uruguay', 'Chile', 'Colombia', 'Perú', 'Panamá', 'Rep. Dominicana', 'Honduras', 'México', 'Costa Rica', 'Guatemala', 'España', 'Saint Lucia', 'San Bartolomé', 'Jamaica', 'Antigua & Barbuda', 'Brasil', 'Estados Unidos', 'Alemania']
 
 // Mapeo de país a tipo de identificación fiscal
 const PAIS_TIPO_ID = {
   'Argentina': 'CUIT', 'Uruguay': 'RUT', 'Chile': 'RUT', 'Colombia': 'NIT',
   'Perú': 'RUC', 'Panamá': 'RUC', 'Panama': 'RUC', 'Rep. Dominicana': 'RNC', 'Honduras': 'RTN', 'México': 'RFC',
   'Costa Rica': 'CEDULA JURIDICA', 'Guatemala': 'NIT', 'España': 'CIF',
-  'Saint Lucia': 'ID', 'Jamaica': 'TRN', 'Antigua & Barbuda': 'ID', 'Brasil': 'CNPJ', 'Estados Unidos': 'EIN', 'Alemania': 'ID'
+  'Saint Lucia': 'ID', 'San Bartolomé': 'ID', 'Jamaica': 'TRN', 'Antigua & Barbuda': 'ID', 'Brasil': 'CNPJ', 'Estados Unidos': 'EIN', 'Alemania': 'ID'
 }
 
 const PAIS_POR_CODIGO = {
   AR: 'Argentina', UY: 'Uruguay', BR: 'Brasil', CL: 'Chile',
   CO: 'Colombia', PE: 'Perú', PA: 'Panamá', DO: 'Rep. Dominicana', HN: 'Honduras',
   CR: 'Costa Rica', GT: 'Guatemala', MX: 'México', ES: 'España',
-  JM: 'Jamaica', LC: 'Saint Lucia', AG: 'Antigua & Barbuda',
+  JM: 'Jamaica', LC: 'Saint Lucia', BL: 'San Bartolomé', AG: 'Antigua & Barbuda',
   US: 'Estados Unidos', DE: 'Alemania'
 }
 
@@ -74,6 +74,9 @@ const PAIS_ALIAS = {
   peru: 'Perú',
   mexico: 'México',
   'republica dominicana': 'Rep. Dominicana',
+  'saint barthelemy': 'San Bartolomé',
+  'saint barthélemy': 'San Bartolomé',
+  'san bartolome': 'San Bartolomé',
 }
 
 const PER_PAGE = 5

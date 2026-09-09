@@ -8,6 +8,7 @@ const COUNTRY_FLAGS = {
   PE: '🇵🇪', EC: '🇪🇨', PA: '🇵🇦', NI: '🇳🇮', DO: '🇩🇴',
   CL: '🇨🇱', SV: '🇸🇻', DE: '🇩🇪', US: '🇺🇸', BR: '🇧🇷',
   MX: '🇲🇽', HN: '🇭🇳', BO: '🇧🇴', PY: '🇵🇾', VE: '🇻🇪',
+  BL: '🇧🇱',
 }
 
 const PAISES_CON_VALIDACION = new Set(['AR'])
@@ -243,6 +244,8 @@ export default function NewReportView({ onCreated, onBack, onEditExisting }) {
       const saveData = {
         tipo_identificacion: selectedCountry.tipo_id_fiscal || 'CUIT',
         cuit: taxId.trim(),
+        pais: selectedCountry.nombre_pais || '',
+        codigo_pais: selectedCountry.codigo_pais || '',
         razon_social: afipData?.razon_social || '',
         domicilio: afipData?.domicilio || '',
         actividad_principal: afipData?.actividad_principal || '',

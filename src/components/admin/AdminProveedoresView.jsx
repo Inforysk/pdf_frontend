@@ -78,7 +78,7 @@ const PAISES_LABELS = {
   AR: 'Argentina', BB: 'Barbados', BR: 'Brasil', BS: 'Bahamas',
   CA: 'Canadá', CL: 'Chile', CO: 'Colombia', DO: 'Rep. Dominicana',
   FK: 'Malvinas', GY: 'Guyana', JM: 'Jamaica', MX: 'México',
-  PE: 'Perú', US: 'Estados Unidos', UY: 'Uruguay', VE: 'Venezuela',
+  PE: 'Perú', US: 'Estados Unidos', UY: 'Uruguay', VE: 'Venezuela', BL: 'San Bartolomé',
   EC: 'Ecuador', BO: 'Bolivia', PY: 'Paraguay', PA: 'Panamá',
   CR: 'Costa Rica', GT: 'Guatemala', HN: 'Honduras', NI: 'Nicaragua',
   SV: 'El Salvador', PR: 'Puerto Rico', CU: 'Cuba', HT: 'Haití',

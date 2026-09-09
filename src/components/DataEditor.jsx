@@ -497,6 +497,7 @@ const COUNTRY_FLAGS = {
   PE: '🇵🇪', EC: '🇪🇨', PA: '🇵🇦', NI: '🇳🇮', DO: '🇩🇴',
   CL: '🇨🇱', SV: '🇸🇻', DE: '🇩🇪', US: '🇺🇸', BR: '🇧🇷',
   MX: '🇲🇽', HN: '🇭🇳', BO: '🇧🇴', PY: '🇵🇾', VE: '🇻🇪',
+  BL: '🇧🇱',
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -716,6 +717,8 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     ? {
         tipo_identificacion: countryConfig.tipo_id_fiscal || 'CUIT',
         cuit: afipData.cuit || '',
+      pais: countryConfig.nombre_pais || '',
+      codigo_pais: countryConfig.codigo_pais || '',
         razon_social: afipData.razon_social || '',
         domicilio: afipData.domicilio || '',
         actividad_principal: afipData.actividad_principal || '',
@@ -782,6 +785,9 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     }
 
     if (!paisMatch) {
+      if (sourceData.lock_country_detection || sourceData.tipo_identificacion?.toUpperCase() === 'ID') {
+        return null
+      }
       const cuitDigits = (sourceData.cuit || '').replace(/\D/g, '')
       let codigoPais = ''
       if (cuitDigits.length === 11) codigoPais = 'AR'
@@ -1377,6 +1383,7 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
 
   useEffect(() => {
     if (!shouldShowCountrySelector || !paisesDisponibles.length) return
+    if (selectedPaisSource === 'manual' || isNewReport || countryConfig?.codigo_pais) return
 
     const sourceData = {
       pais: formData?.pais || data?.pais || countryConfig?.nombre_pais,

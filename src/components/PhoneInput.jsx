@@ -20,6 +20,7 @@ const COUNTRY_CODES = [
   { code: 'DO', dial: '+1809', name: 'Rep. Dominicana', format: 'XXX-XXXX', minDigits: 7, maxDigits: 10 },
   { code: 'HN', dial: '+504', name: 'Honduras', format: 'XXXX-XXXX', minDigits: 8, maxDigits: 8 },
   { code: 'GT', dial: '+502', name: 'Guatemala', format: 'XXXX-XXXX', minDigits: 8, maxDigits: 8 },
+  { code: 'BL', dial: '+590', name: 'San Bartolomé', format: 'XXX XXX XXX', minDigits: 6, maxDigits: 9 },
   { code: 'SV', dial: '+503', name: 'El Salvador', format: 'XXXX-XXXX', minDigits: 8, maxDigits: 8 },
   { code: 'NI', dial: '+505', name: 'Nicaragua', format: 'XXXX-XXXX', minDigits: 8, maxDigits: 8 },
   { code: 'US', dial: '+1', name: 'Estados Unidos', format: '(XXX) XXX-XXXX', minDigits: 10, maxDigits: 10 },
