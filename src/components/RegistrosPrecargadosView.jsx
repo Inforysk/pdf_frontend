@@ -36,7 +36,7 @@ export default function RegistrosPrecargadosView({ onIniciarInforme, onAbrirEdit
   const [query, setQuery] = useState('')
   const [searchValue, setSearchValue] = useState('')
   const [estado, setEstado] = useState('')
-  const [pais, setPais] = useState('')
+  const pais = 'Argentina'
   const [openingId, setOpeningId] = useState(null)
   const [openingPdfId, setOpeningPdfId] = useState(null)
   const [prefetching, setPrefetching] = useState(false)
@@ -46,13 +46,13 @@ export default function RegistrosPrecargadosView({ onIniciarInforme, onAbrirEdit
   const inFlightPrefetchRef = useRef(new Set())
 
   const filterKey = useMemo(() => `${query}::${estado}::${pais}`, [query, estado, pais])
-  const countryOptions = useMemo(() => ['Argentina', 'Brasil', 'Colombia', 'Costa Rica', 'Guatemala', 'Honduras', 'Mexico', 'Peru', 'Rep. Dominicana', 'Uruguay'], [])
 
   const buildParams = (targetPage, options = {}) => {
     const params = new URLSearchParams({ page: String(targetPage), per_page: String(PER_PAGE) })
     if (query) params.append('q', query)
     if (estado) params.append('estado', estado)
-    if (pais) params.append('pais', pais)
+    params.append('pais', pais)
+    params.append('solo_con_datos', '1')
     if (options.includeTotal) params.append('include_total', '1')
     if (options.totalsOnly) params.append('totals_only', '1')
     return params
@@ -237,7 +237,7 @@ export default function RegistrosPrecargadosView({ onIniciarInforme, onAbrirEdit
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Registros Precargados</h2>
-            <p className="text-sm text-gray-500 mt-1">Solo solicitudes de investigaciones en estados precarga y precargado.</p>
+            <p className="text-sm text-gray-500 mt-1">Solo CUIT argentinos con datos cargados para generar informe.</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 lg:min-w-[700px]">
             <label className="flex-1 relative">
@@ -261,25 +261,14 @@ export default function RegistrosPrecargadosView({ onIniciarInforme, onAbrirEdit
               <option value="precarga">Precarga</option>
               <option value="precargado">Precargado</option>
             </select>
-            <select
-              value={pais}
-              onChange={(e) => {
-                setPage(1)
-                setPais(e.target.value)
-              }}
-              className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-inforysk-navy-200"
-            >
-              <option value="">Todos los paises</option>
-              {countryOptions.map((country) => (
-                <option key={country} value={country}>{country}</option>
-              ))}
-            </select>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-800">
+              Argentina
+            </div>
             <button
               onClick={() => {
                 setSearchValue('')
                 setQuery('')
                 setEstado('')
-                setPais('')
                 setPage(1)
               }}
               className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
