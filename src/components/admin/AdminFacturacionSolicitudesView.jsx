@@ -109,7 +109,10 @@ export default function AdminFacturacionSolicitudesView() {
     })
   }
 
-  const isEstadoPendiente = (sol) => (sol?.factura_estado_pago || '').toLowerCase() === 'pendiente'
+  const isEstadoPendiente = (sol) => {
+    const estado = (sol?.factura_estado_pago || '').toLowerCase()
+    return estado === 'pendiente' || estado === 'cancelada'
+  }
   const isFacturable = (sol) => !sol?.facturado || isEstadoPendiente(sol)
   const getClienteBillingKey = (item) => `${item?.usuario_id || 'sin-id'}|${item?.usuario_abono || 'sin-abono'}`
 
@@ -436,7 +439,7 @@ export default function AdminFacturacionSolicitudesView() {
 
     solicitudes.forEach((s) => {
       const estadoPago = String(s?.factura_estado_pago || '').toLowerCase()
-      const esFacturable = !s?.facturado || estadoPago === 'pendiente'
+      const esFacturable = !s?.facturado || estadoPago === 'pendiente' || estadoPago === 'cancelada'
       if (!esFacturable) return
 
       cantidad += 1
