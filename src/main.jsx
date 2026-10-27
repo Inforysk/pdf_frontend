@@ -36,10 +36,8 @@ axios.interceptors.response.use(
 )
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <AuthProvider>
-      <Toaster position="top-right" />
-      <App />
-    </AuthProvider>
-  </React.StrictMode>,
+  <AuthProvider>
+    <Toaster position="top-right" />
+    <App />
+  </AuthProvider>,
 )

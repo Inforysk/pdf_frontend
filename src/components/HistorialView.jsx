@@ -21,6 +21,19 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
+const CAMPOS_EXCLUIDOS_HISTORIAL = new Set([
+  'abonado',
+  'expediente',
+  'referencia',
+])
+
+const normalizarCampo = (value) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+
 function HistorialView({ empresaId, cuit, onBack, onViewVersion }) {
   const [loading, setLoading] = useState(true)
   const [historial, setHistorial] = useState(null)
@@ -78,18 +91,27 @@ function HistorialView({ empresaId, cuit, onBack, onViewVersion }) {
   }
 
   const loadCambiosVersion = async (versionId) => {
-    if (cambiosVersion[versionId]) return // Ya cargados
+    if (Object.prototype.hasOwnProperty.call(cambiosVersion, versionId)) return // Ya cargados
     
     try {
       const response = await axios.get(`/api/empresas/${versionId}/cambios`)
       if (response.data.success) {
+        const cambiosFiltrados = (response.data.cambios || []).filter((cambio) => {
+          const campoNorm = normalizarCampo(cambio?.campo)
+          return !CAMPOS_EXCLUIDOS_HISTORIAL.has(campoNorm)
+        })
+
         setCambiosVersion(prev => ({
           ...prev,
-          [versionId]: response.data.cambios
+          [versionId]: cambiosFiltrados
         }))
       }
     } catch (err) {
       console.error('Error cargando cambios:', err)
+      setCambiosVersion(prev => ({
+        ...prev,
+        [versionId]: []
+      }))
     }
   }
 
@@ -455,6 +477,11 @@ function HistorialView({ empresaId, cuit, onBack, onViewVersion }) {
                         </div>
                       ))}
                     </div>
+                  </div>
+                ) : Object.prototype.hasOwnProperty.call(cambiosVersion, version.id) ? (
+                  <div className="text-center py-4 text-gray-500 text-sm">
+                    <FileText className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                    Sin cambios relevantes para historial
                   </div>
                 ) : version.version === 1 ? (
                   <div className="text-center py-4 text-gray-500 text-sm">

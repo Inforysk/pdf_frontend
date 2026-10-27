@@ -520,11 +520,100 @@ function App() {
     setLoadingSolicitudView(true)
     try {
       const sourceView = solicitud?.view_source || currentView || 'pedidos-solicitudes'
+      const source = solicitud?.solicitud_source || 'pedidos-solicitudes'
+      const solicitudTaxIdRaw = [
+        solicitud?.cuit,
+        solicitud?.tax_id,
+        solicitud?.identificacion,
+        solicitud?.id_fiscal,
+        solicitud?.numero_identificacion,
+      ].find((value) => String(value || '').trim() !== '') || ''
+
+      const parseDatosExternos = (raw) => {
+        if (!raw) return {}
+        if (typeof raw === 'object') return raw
+        if (typeof raw === 'string') {
+          try {
+            const parsed = JSON.parse(raw)
+            return parsed && typeof parsed === 'object' ? parsed : {}
+          } catch {
+            return {}
+          }
+        }
+        return {}
+      }
+
+      const mergeSolicitudSeed = (base, seed) => {
+        if (!seed || typeof seed !== 'object') return base
+        const preferredFields = [
+          'tipo_identificacion', 'pais', 'codigo_pais', 'razon_social', 'cuit',
+          'domicilio', 'actividad_principal', 'sinopsis', 'objeto_social',
+          'estructura_societaria', 'composicion_capital', 'datos_directivos',
+          'historia', 'situacion_economica_financiera', 'bienes_uso',
+          'evolucion_resultados', 'sociedades_vinculadas', 'cumplimiento_concepto',
+          'sucursales', 'relaciones_bancarias_riesgo', 'conclusion', 'ingresos_brutos',
+          'forma_legal', 'fecha_contrato_social', 'fecha_inscripcion_afip',
+          'duracion_anios', 'cierre_ejercicio', 'domicilio_legal',
+          'telefono_1', 'telefono_2', 'email', 'emails_contacto', 'extra_fields',
+          'datos_externos'
+        ]
+        const next = { ...base }
+        preferredFields.forEach((field) => {
+          const val = seed[field]
+          if (val === null || val === undefined) return
+          if (typeof val === 'string' && val.trim() === '') return
+          if (Array.isArray(val) && val.length === 0) return
+          next[field] = val
+        })
+        return next
+      }
+
+      // Para solicitudes legacy, traer detalle completo (incluye datos_externos/autofill)
+      // y evitar abrir el editor sin data precargada.
+      let solicitudBase = solicitud
+      let hydratedSolicitudId = null
+      if (source === 'solicitudes_investigacion' && solicitud?.id) {
+        try {
+          const detailRes = await axios.get(`/api/solicitudes/${solicitud.id}`)
+          if (detailRes.data?.success && detailRes.data?.solicitud) {
+            solicitudBase = { ...solicitud, ...detailRes.data.solicitud }
+            hydratedSolicitudId = detailRes.data.solicitud?.id || null
+          }
+        } catch (err) {
+          console.error('[handleIniciarInformeSolicitud] Error cargando detalle de solicitud:', err)
+        }
+      }
+
+      // Si viene de pedidos-solicitudes, buscar solicitud precargada por CUIT
+      // para inyectar datos_externos/autofill en el editor sin perder el ID del pedido.
+      if (source === 'pedidos-solicitudes' && solicitudTaxIdRaw) {
+        try {
+          const checkRes = await axios.get(`/api/check-cuit/${encodeURIComponent(solicitudTaxIdRaw)}`)
+          const hydratedSolicitud = checkRes.data?.solicitud
+          const checkValid = checkRes.data?.valid !== false
+          if (checkValid && hydratedSolicitud) {
+            solicitudBase = mergeSolicitudSeed(solicitudBase, checkRes.data.solicitud)
+            hydratedSolicitudId = checkRes.data.solicitud?.id || null
+            console.info('[handleIniciarInformeSolicitud] check-cuit hidratado', {
+              solicitudId: checkRes.data.solicitud?.id,
+              cuit: checkRes.data.solicitud?.cuit,
+              hasDatosExternos: !!checkRes.data.solicitud?.datos_externos,
+            })
+          } else {
+            console.warn('[handleIniciarInformeSolicitud] check-cuit sin solicitud util para hidratar', {
+              valid: checkRes.data?.valid,
+              exists: checkRes.data?.exists,
+              hasSolicitud: !!checkRes.data?.solicitud,
+            })
+          }
+        } catch (err) {
+          console.error('[handleIniciarInformeSolicitud] Error hidratando solicitud desde check-cuit:', err)
+        }
+      }
 
       // Marcar como en_proceso en backend y obtener datos del pedido
       let pedidoInfo = null
       try {
-        const source = solicitud?.solicitud_source || 'pedidos-solicitudes'
         const updateUrl = source === 'solicitudes_investigacion'
           ? `/api/solicitudes/${solicitud.id}`
           : `/api/pedidos-solicitudes/${solicitud.id}`
@@ -542,19 +631,36 @@ function App() {
       console.log('[handleIniciarInformeSolicitud] Abonado final:', abonadoFinal, 'cliente_abono:', solicitud.cliente_abono)
       
       const solicitudEnriquecida = {
-        ...solicitud,
-        solicitud_source: solicitud.solicitud_source || 'pedidos-solicitudes',
+        ...solicitudBase,
+        solicitud_source: source,
         abonado: abonadoFinal,
         expediente: pedidoInfo?.expediente || '',
         referencia: pedidoInfo?.referencia || '',
         fecha_informe: new Date().toISOString().split('T')[0]
       }
       console.log('[handleIniciarInformeSolicitud] Solicitud enriquecida:', solicitudEnriquecida)
+
+      const debugOpenEditorPayload = () => {
+        const datosExternos = parseDatosExternos(solicitudEnriquecida?.datos_externos)
+        const hasDatosExternos = Object.keys(datosExternos || {}).length > 0
+        const hasAutofillAr = !!(datosExternos?.autofill_ar && typeof datosExternos.autofill_ar === 'object' && Object.keys(datosExternos.autofill_ar).length > 0)
+        const hasAutofillPe = !!(datosExternos?.autofill_pe && typeof datosExternos.autofill_pe === 'object' && Object.keys(datosExternos.autofill_pe).length > 0)
+        console.info('[CONTINUAR_INFORME_DEBUG]', {
+          source,
+          solicitudBaseId: solicitudBase?.id,
+          hydratedSolicitudId,
+          requestedTaxId: solicitudTaxIdRaw,
+          hasDatosExternos,
+          hasAutofillAr,
+          hasAutofillPe,
+        })
+      }
       
-      const cuit = (solicitud.cuit || '').replace(/\D/g, '')
-      console.log('[handleIniciarInformeSolicitud] CUIT limpio:', cuit, 'Original:', solicitud.cuit)
+      const cuit = (solicitudBase.cuit || solicitudTaxIdRaw || '').replace(/\D/g, '')
+      console.log('[handleIniciarInformeSolicitud] CUIT limpio:', cuit, 'Original:', solicitudBase.cuit)
       
       const abrirEmpresaExistente = (empresaId, empresaCuit) => {
+        debugOpenEditorPayload()
         setSolicitudActiva(solicitudEnriquecida)
         setSelectedEmpresaId(empresaId)
         setSelectedEmpresaCuit(empresaCuit || '')
@@ -583,14 +689,14 @@ function App() {
         }
       }
       
-      if (solicitud.razon_social) {
+      if (solicitudBase.razon_social) {
         try {
-          console.log('[handleIniciarInformeSolicitud] Buscando empresa por razón social:', solicitud.razon_social)
-          const res = await axios.get(`/api/search?q=${encodeURIComponent(solicitud.razon_social)}&limit=5`)
+          console.log('[handleIniciarInformeSolicitud] Buscando empresa por razón social:', solicitudBase.razon_social)
+          const res = await axios.get(`/api/search?q=${encodeURIComponent(solicitudBase.razon_social)}&limit=5`)
           
           if (res.data.success && res.data.empresas?.length > 0) {
             const empresas = res.data.empresas.filter(e => e.source === 'empresa')
-            const requestedName = normalizeCompanyName(solicitud.razon_social)
+            const requestedName = normalizeCompanyName(solicitudBase.razon_social)
 
             const exactNormalized = empresas.find(e =>
               normalizeCompanyName(e.razon_social) === requestedName
@@ -621,6 +727,7 @@ function App() {
       }
       
       console.log('[handleIniciarInformeSolicitud] Creando nueva empresa desde solicitud')
+      debugOpenEditorPayload()
       setSolicitudActiva(solicitudEnriquecida)
       setExtractedData(null)
       setSelectedEmpresaId(null)
@@ -634,10 +741,9 @@ function App() {
     }
   }
 
-  const handleAbrirEditorPrecargado = async (row) => {
+  const handleAbrirEditorPrecargado = async (row, sourceView = 'registros-precargados') => {
     setLoadingSolicitudView(true)
     try {
-      const sourceView = 'registros-precargados'
       const cuit = (row?.empresa_modelo_cuit || row?.cuit || '').replace(/\D/g, '')
 
       if (row?.empresa_modelo_id) {
@@ -1411,8 +1517,12 @@ function App() {
         </header>
 
         <main className="p-4 lg:p-8">
-        {currentView === 'search' && (
-          <SearchView onSelectEmpresa={handleSelectEmpresa} refreshKey={refreshKey} />
+          {currentView === 'search' && (
+          <SearchView
+            onSelectEmpresa={handleSelectEmpresa}
+            onAbrirSolicitudData={(row) => handleAbrirEditorPrecargado(row, 'search')}
+            refreshKey={refreshKey}
+          />
         )}
         
         {currentView === 'upload' && (
@@ -1628,10 +1738,7 @@ function App() {
         )}
 
           {currentView === 'registros-precargados' && (isAdmin || user?.rol === 'analista') && (
-            <RegistrosPrecargadosView
-              onIniciarInforme={handleIniciarInformeSolicitud}
-              onAbrirEditor={handleAbrirEditorPrecargado}
-            />
+            <RegistrosPrecargadosView />
           )}
 
         {currentView === 'solicitud-informe' && solicitudActiva && (

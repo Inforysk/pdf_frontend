@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import ReactQuill from 'react-quill'
+import ReactQuill from 'react-quill-new'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { Check, ChevronDown, Copy, Info, Loader2, Plus, Search, Trash2, Users, X } from 'lucide-react'
@@ -207,7 +207,8 @@ const notesModules = {
   ],
 }
 
-const notesFormats = ['bold', 'italic', 'underline', 'list', 'bullet']
+// En Quill 2, las viñetas/ordenadas se representan con el formato "list".
+const notesFormats = ['bold', 'italic', 'underline', 'list']
 
 const textToSimpleHtml = (text = '') => {
   const clean = String(text || '').trim()

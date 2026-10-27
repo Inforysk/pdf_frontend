@@ -133,6 +133,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
   const [empresaExistente, setEmpresaExistente] = useState(false) // true si viene de BD (no editable)
   const [searchingEmpresa, setSearchingEmpresa] = useState(false)
   const [empresasEncontradas, setEmpresasEncontradas] = useState([])
+  const [modalExactMatch, setModalExactMatch] = useState(false)
   const [creandoSolicitud, setCreandoSolicitud] = useState(false)
   const [prioridadSeleccionada, setPrioridadSeleccionada] = useState('normal')
   const [monitoreoFacturar, setMonitoreoFacturar] = useState(true) // true = facturar con precio configurado, false = precio 0
@@ -487,6 +488,8 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
 
   // Cargar datos cuando cambian filtros, página o reloadKey
   useEffect(() => {
+    const controller = new AbortController()
+
     const loadData = async () => {
       setLoading(true)
       try {
@@ -517,8 +520,8 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
         if (filtroMes) statsParams.set('mes', filtroMes)
 
         const responses = await Promise.all([
-          axios.get(`/api/pedidos-solicitudes?${params}`),
-          axios.get(`/api/pedidos-solicitudes/stats?${statsParams}`)
+          axios.get(`/api/pedidos-solicitudes?${params}`, { signal: controller.signal }),
+          axios.get(`/api/pedidos-solicitudes/stats?${statsParams}`, { signal: controller.signal })
         ])
 
         if (responses[0].data.success) {
@@ -530,13 +533,18 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
           setStats(responses[1].data.stats)
           setPaises(responses[1].data.paises || {})
         }
-      } catch {
+      } catch (err) {
+        if (err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') return
         toast.error('Error al cargar solicitudes')
       } finally {
-        setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       }
     }
     loadData()
+
+    return () => {
+      controller.abort()
+    }
   }, [filtroEstado, paisFilter, origenFilter, busqueda, page, reloadKey, filtroSolicitante, filtroCliente, filtroEmpresa, filtroFechaInicio, filtroFechaFin, filtroMes])
 
   const actualizarEstado = async (id, nuevoEstado, motivo = null) => {
@@ -1219,6 +1227,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     
     setSearchingEmpresa(true)
     setEmpresasEncontradas([])
+    setModalExactMatch(false)
     setEmpresaData({ razon_social: '', cuit: '', pais: modalCountryFilter !== 'all' ? modalCountryFilter : 'Argentina', tipo_identificacion: PAIS_TIPO_ID[modalCountryFilter] || 'CUIT', referencia_cliente: '' })
     setEmpresaExistente(false)
     try {
@@ -1243,6 +1252,40 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
       } else if (hasText && modalSearchType === 'nombre') {
         const term = searchValue.toLowerCase()
         resultados = resultados.filter(e => (e.razon_social || '').toLowerCase().includes(term))
+      }
+
+      if (hasText && resultados.length > 0) {
+        const normalizeText = (value) => String(value || '')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+
+        const queryNorm = normalizeText(searchValue)
+        const canMatchName = modalSearchType !== 'cuit' && queryNorm.length > 0
+        const canMatchTaxId = modalSearchType !== 'nombre' && taxIdQuery.length > 0
+
+        const exactMatches = resultados.filter((e) => {
+          const companyName = normalizeText(e.razon_social)
+          const companyId = String(e.cuit || '').toUpperCase().replace(/[^0-9K]/g, '')
+          const nameExact = canMatchName && companyName === queryNorm
+          const idExact = canMatchTaxId && companyId === taxIdQuery
+          return nameExact || idExact
+        })
+
+        if (exactMatches.length > 0) {
+          const rankQuality = (e) => {
+            let score = 0
+            if (e?.source === 'empresa') score += 100
+            if (e?.empresa_id_resolved) score += 40
+            if (e?.cuit) score += 20
+            return score
+          }
+          exactMatches.sort((a, b) => rankQuality(b) - rankQuality(a))
+          resultados = [exactMatches[0]]
+          setModalExactMatch(true)
+        }
       }
       
       if (resultados.length > 0) {
@@ -1393,6 +1436,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     setEmpresaData({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT', referencia_cliente: '' })
     setEmpresaExistente(false)
     setEmpresasEncontradas([])
+    setModalExactMatch(false)
     setModalSearchType('all')
     setModalCountryFilter('all')
     setModalCountryOpen(false)
@@ -2686,7 +2730,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                       />
                       {empresaSearch && !searchingEmpresa && (
                         <button
-                          onClick={() => { setEmpresaSearch(''); setEmpresasEncontradas([]) }}
+                          onClick={() => { setEmpresaSearch(''); setEmpresasEncontradas([]); setModalExactMatch(false) }}
                           className="absolute right-3 top-3 p-0.5 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100"
                         >
                           <X className="h-4 w-4" />
@@ -2750,7 +2794,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                           {modalCountryFilter !== 'all' ? modalCountryFilter : 'Por Países'}
                           {modalCountryFilter !== 'all' ? (
                             <span
-                              onClick={(e) => { e.stopPropagation(); setModalCountryFilter('all'); setModalCountryOpen(false); setEmpresasEncontradas([]) }}
+                              onClick={(e) => { e.stopPropagation(); setModalCountryFilter('all'); setModalCountryOpen(false); setEmpresasEncontradas([]); setModalExactMatch(false) }}
                               className="ml-0.5 p-0.5 rounded hover:bg-red-700 transition-colors cursor-pointer"
                             >
                               <X className="h-3 w-3" />
@@ -2792,6 +2836,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                             setModalCountryFilter('all')
                             setEmpresaSearch('')
                             setEmpresasEncontradas([])
+                            setModalExactMatch(false)
                             setEmpresaData({ razon_social: '', cuit: '', pais: 'Argentina', tipo_identificacion: 'CUIT', referencia_cliente: '' })
                             setEmpresaExistente(false)
                           }}
@@ -2806,6 +2851,11 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                   {/* Resultados de búsqueda */}
                   {empresasEncontradas.length > 0 && (
                     <div className="mb-4">
+                      {modalExactMatch && empresasEncontradas.length === 1 && (
+                        <p className="text-[11px] text-emerald-700 mb-2 inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 border border-emerald-200">
+                          Coincidencia exacta
+                        </p>
+                      )}
                       {empresasEncontradas.length >= 50 && (
                         <p className="text-xs text-amber-600 mb-2 flex items-center gap-1">
                           <span className="inline-block w-1.5 h-1.5 bg-amber-500 rounded-full"></span>

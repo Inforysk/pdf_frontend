@@ -4,8 +4,6 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import formasLegalesData from '../data/formasLegales.json'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000'
-
 /**
  * Selector de formas legales/tipos societarios por país
  * Muestra las opciones según el país detectado
@@ -42,7 +40,7 @@ export default function FormaLegalSelector({
 
   const loadCustomFormas = async () => {
     try {
-      const res = await axios.get(`${API_BASE}/api/formas-legales/${countryCode}`)
+      const res = await axios.get(`/api/formas-legales/${countryCode}`)
       if (res.data?.formas) {
         setCustomFormas(res.data.formas)
       }
@@ -148,7 +146,7 @@ export default function FormaLegalSelector({
 
     setSavingNew(true)
     try {
-      await axios.post(`${API_BASE}/api/formas-legales`, {
+      await axios.post('/api/formas-legales', {
         codigo_pais: countryCode,
         descripcion: trimmed
       })

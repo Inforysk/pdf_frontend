@@ -215,6 +215,95 @@ const plainTextToQuillHtml = (value) => {
     .join('')
 }
 
+const BCRA_LABELS_PATTERN = 'situaci[oó]n(?:\\s+informada)?|deuda\\s+total(?:\\s+informada)?|entidades\\s+reportantes?|per[ií]odo|cheques\\s+rechazados?|entidad'
+
+const decodeBasicHtmlEntities = (value) =>
+  String(value || '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+
+const normalizeRichTextToLines = (value) => {
+  const withBreaks = String(value || '')
+    .replace(/<\/(p|div|li)\s*>/gi, '\n')
+    .replace(/<br\s*\/?\s*>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '- ')
+    .replace(/<[^>]+>/g, ' ')
+
+  return decodeBasicHtmlEntities(withBreaks)
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+const compactText = (value) => String(value || '').replace(/\s+/g, ' ').trim()
+
+const extractBcraField = (text, labelPattern) => {
+  const regex = new RegExp(
+    `${labelPattern}\\s*:\\s*([\\s\\S]*?)(?=\\s*(?:${BCRA_LABELS_PATTERN})\\s*:|$)`,
+    'i'
+  )
+  const match = text.match(regex)
+  return match?.[1] ? compactText(match[1]) : ''
+}
+
+const parseBcraPreviewData = (rawValue) => {
+  const text = normalizeRichTextToLines(rawValue)
+  if (!text) return null
+
+  const data = {
+    situacion: extractBcraField(text, 'situaci[oó]n(?:\\s+informada)?'),
+    deuda: extractBcraField(text, 'deuda\\s+total(?:\\s+informada)?'),
+    entidades: extractBcraField(text, 'entidades\\s+reportantes?'),
+    periodo: extractBcraField(text, 'per[ií]odo'),
+    cheques: extractBcraField(text, 'cheques\\s+rechazados?'),
+    entidadesDetalle: [],
+  }
+
+  const entityBlockRegex = /entidad\s*:\s*([\s\S]*?)(?=\s*(?:entidad\s*:|detalle\s+por\s+entidad\s*:|situaci[oó]n\s+general\s*:|deuda\s+total\s*:|entidades\s+(?:reportantes?|informantes?)\s*:|per[ií]odo\s*:|$))/gi
+  let entityMatch
+  while ((entityMatch = entityBlockRegex.exec(text)) !== null) {
+    const body = compactText(entityMatch[1])
+    if (!body) continue
+
+    const entity = {}
+    body.split('|').forEach((part) => {
+      const piece = compactText(part)
+      if (!piece) return
+
+      const kv = piece.match(/^([^:=]+?)\s*[:=]\s*(.+)$/)
+      if (!kv) {
+        if (!entity.banco) entity.banco = piece
+        return
+      }
+
+      const key = compactText(kv[1]).toLowerCase()
+      const value = compactText(kv[2])
+      if (key === 'banco' || key === 'entidad') entity.banco = value
+      else if (key.includes('situacion') || key.includes('situación')) entity.situacion = value
+      else if (key.includes('monto')) entity.monto = value
+      else if ((key.includes('dias') || key.includes('días')) && key.includes('atraso')) entity.diasAtraso = value
+    })
+
+    if (entity.banco || entity.situacion || entity.monto || entity.diasAtraso) {
+      data.entidadesDetalle.push(entity)
+    }
+  }
+
+  const hasData = Boolean(
+    data.situacion || data.deuda || data.entidades || data.periodo || data.cheques || data.entidadesDetalle.length
+  )
+  if (!hasData) return null
+
+  const situacionMatch = data.situacion.match(/\b([1-5])\b/)
+  data.situacionNum = situacionMatch ? Number(situacionMatch[1]) : null
+  return data
+}
+
 const normalizeForEditor = (raw = {}) => {
   const next = { ...raw }
 
@@ -695,18 +784,191 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
   ]
 
   const { isAdmin } = useAuth()
+  const getSolicitudAutofill = (solicitud) => {
+    const raw = solicitud?.datos_externos
+    let datos = raw
+    if (typeof raw === 'string') {
+      try {
+        datos = JSON.parse(raw)
+      } catch {
+        datos = {}
+      }
+    }
+    if (!datos || typeof datos !== 'object') return {}
+    const candidatos = [datos.autofill_ar, datos.autofill_pe, datos.autofill]
+    for (const item of candidatos) {
+      if (item && typeof item === 'object') return item
+    }
+    return {}
+  }
+
+  const buildSolicitudSeed = (solicitud) => {
+    const autofill = getSolicitudAutofill(solicitud)
+    const rawDatos = solicitud?.datos_externos
+    let datosExternos = rawDatos
+    if (typeof rawDatos === 'string') {
+      try {
+        datosExternos = JSON.parse(rawDatos)
+      } catch {
+        datosExternos = {}
+      }
+    }
+    const afip = (datosExternos && typeof datosExternos === 'object') ? (datosExternos.afip || {}) : {}
+
+    const formatDomicilio = (value) => {
+      if (!value) return ''
+      if (typeof value === 'string') return value
+      if (typeof value !== 'object') return ''
+      const parts = [
+        value.calle,
+        value.numero,
+        value.piso ? `Piso ${value.piso}` : '',
+        value.departamento ? `Depto ${value.departamento}` : '',
+        value.localidad,
+        value.provincia,
+        value.cp ? `CP ${value.cp}` : '',
+      ].filter(Boolean)
+      return parts.join(', ')
+    }
+
+    const afipDomicilioFiscal = formatDomicilio(afip?.domicilio_fiscal)
+    const afipDomicilioLegal = formatDomicilio(afip?.domicilio_legal)
+
+    return {
+      tipo_identificacion: solicitud?.tipo_identificacion || autofill?.tipo_identificacion || 'ID',
+      cuit: solicitud?.cuit || autofill?.cuit || '',
+      razon_social: autofill?.razon_social || solicitud?.razon_social || '',
+      domicilio: autofill?.domicilio || solicitud?.domicilio || afipDomicilioFiscal || '',
+      actividad_principal: autofill?.actividad_principal || solicitud?.actividad_principal || afip?.actividad_principal || '',
+      pais: solicitud?.pais || autofill?.pais || '',
+      codigo_pais: solicitud?.codigo_pais || autofill?.codigo_pais || '',
+      sinopsis: autofill?.sinopsis || solicitud?.sinopsis || '',
+      objeto_social: autofill?.objeto_social || solicitud?.objeto_social || '',
+      estructura_societaria: autofill?.estructura_societaria || solicitud?.estructura_societaria || '',
+      composicion_capital: autofill?.composicion_capital || solicitud?.composicion_capital || '',
+      datos_directivos: autofill?.datos_directivos || solicitud?.datos_directivos || '',
+      historia: autofill?.historia || solicitud?.historia || '',
+      situacion_economica_financiera: autofill?.situacion_economica_financiera || solicitud?.situacion_economica_financiera || '',
+      bienes_uso: autofill?.bienes_uso || solicitud?.bienes_uso || '',
+      evolucion_resultados: autofill?.evolucion_resultados || solicitud?.evolucion_resultados || '',
+      sociedades_vinculadas: autofill?.sociedades_vinculadas || solicitud?.sociedades_vinculadas || '',
+      cumplimiento_concepto: autofill?.cumplimiento_concepto || solicitud?.cumplimiento_concepto || '',
+      sucursales: autofill?.sucursales || solicitud?.sucursales || '',
+      relaciones_bancarias_riesgo: autofill?.relaciones_bancarias_riesgo || solicitud?.relaciones_bancarias_riesgo || '',
+      conclusion: autofill?.conclusion || solicitud?.conclusion || '',
+      ingresos_brutos: autofill?.ingresos_brutos || solicitud?.ingresos_brutos || '',
+      forma_legal: autofill?.forma_legal || solicitud?.forma_legal || afip?.tipo_societario || '',
+      fecha_contrato_social: autofill?.fecha_contrato_social || solicitud?.fecha_contrato_social || '',
+      fecha_inscripcion_afip: autofill?.fecha_inscripcion_afip || solicitud?.fecha_inscripcion_afip || '',
+      duracion_anios: autofill?.duracion_anios || solicitud?.duracion_anios || '',
+      cierre_ejercicio: autofill?.cierre_ejercicio || solicitud?.cierre_ejercicio || '',
+      domicilio_legal: autofill?.domicilio_legal || solicitud?.domicilio_legal || afipDomicilioLegal || '',
+      telefono_1: autofill?.telefono_1 || solicitud?.telefono_1 || '',
+      telefono_2: autofill?.telefono_2 || solicitud?.telefono_2 || '',
+      email: autofill?.email || solicitud?.email || '',
+      emails_contacto: autofill?.emails_contacto || solicitud?.emails_contacto || '',
+      extra_fields: Array.isArray(autofill?.extra_fields)
+        ? autofill.extra_fields
+        : (Array.isArray(solicitud?.extra_fields) ? solicitud.extra_fields : []),
+    }
+  }
+
+  const mergeOnlyMissing = (target, seed) => {
+    const isEmptyRichText = (val) => {
+      const raw = String(val || '').trim()
+      if (!raw) return true
+      const normalized = raw
+        .replace(/<br\s*\/?>/gi, '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/<[^>]*>/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+      return normalized === ''
+    }
+
+    const isEmptyValue = (val) => {
+      if (val === null || val === undefined) return true
+      if (Array.isArray(val)) return val.length === 0
+      if (typeof val === 'string') {
+        const trimmed = val.trim()
+        if (!trimmed) return true
+        if (trimmed === '—' || trimmed === '-' || trimmed.toLowerCase() === 'n/a') return true
+        if (trimmed.includes('<') && trimmed.includes('>')) return isEmptyRichText(trimmed)
+      }
+      return false
+    }
+
+    const next = { ...target }
+    Object.entries(seed || {}).forEach(([key, value]) => {
+      if (value === null || value === undefined) return
+      const hasText = typeof value === 'string' ? value.trim() !== '' : true
+      if (!hasText && !Array.isArray(value)) return
+
+      const current = next[key]
+      const currentEmpty = isEmptyValue(current)
+
+      if (currentEmpty) next[key] = value
+    })
+    return next
+  }
+
+  const mergePreferSolicitudContent = (target, seed) => {
+    const next = { ...target }
+    const contentFields = [
+      'sinopsis',
+      'objeto_social',
+      'estructura_societaria',
+      'composicion_capital',
+      'datos_directivos',
+      'historia',
+      'situacion_economica_financiera',
+      'bienes_uso',
+      'evolucion_resultados',
+      'sociedades_vinculadas',
+      'cumplimiento_concepto',
+      'sucursales',
+      'relaciones_bancarias_riesgo',
+      'conclusion',
+      'ingresos_brutos',
+      'forma_legal',
+      'fecha_contrato_social',
+      'fecha_inscripcion_afip',
+      'duracion_anios',
+      'cierre_ejercicio',
+      'domicilio_legal',
+      'telefono_1',
+      'telefono_2',
+      'email',
+      'emails_contacto',
+      'extra_fields',
+      'actividad_principal',
+      'domicilio',
+    ]
+
+    const hasValue = (val) => {
+      if (val === null || val === undefined) return false
+      if (Array.isArray(val)) return val.length > 0
+      if (typeof val === 'string') {
+        return val.trim() !== '' && val.trim() !== '—' && val.trim() !== '-'
+      }
+      return true
+    }
+
+    contentFields.forEach((field) => {
+      if (hasValue(seed?.[field])) {
+        next[field] = seed[field]
+      }
+    })
+
+    return next
+  }
+
   const isNewReport = !data && !empresaId && !!countryConfig
   const afipData = countryConfig?.afipData || {}
   const afipLocked = !!afipData._afip_validated // Campos traídos de AFIP son de solo lectura
   const initialData = (isNewBlank && fromSolicitud)
     ? {
-        tipo_identificacion: fromSolicitud.tipo_identificacion || 'ID',
-        cuit: fromSolicitud.cuit || '',
-        razon_social: fromSolicitud.razon_social || '',
-        domicilio: fromSolicitud.domicilio || '',
-        actividad_principal: fromSolicitud.actividad_principal || '',
-        pais: fromSolicitud.pais || '',
-        codigo_pais: fromSolicitud.codigo_pais || '',
+        ...buildSolicitudSeed(fromSolicitud),
         abonado: fromSolicitud.abonado ? String(fromSolicitud.abonado) : '',
         expediente: fromSolicitud.expediente ? String(fromSolicitud.expediente) : '',
         referencia: fromSolicitud.referencia || '',
@@ -912,14 +1174,12 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
 
             // Siempre sembrar datos de solicitud para evitar pantallas vacías
             // cuando no hay match de país o llega tarde el patrón.
+            const solicitudSeed = buildSolicitudSeed(fromSolicitud)
             setFormData(normalizeForEditor({
-              tipo_identificacion: fromSolicitud.tipo_identificacion || paisMatch?.tipo_id_fiscal || 'ID',
-              cuit: fromSolicitud.cuit || '',
-              razon_social: fromSolicitud.razon_social || '',
-              domicilio: fromSolicitud.domicilio || '',
-              actividad_principal: fromSolicitud.actividad_principal || '',
-              pais: fromSolicitud.pais || paisMatch?.nombre_pais || '',
-              codigo_pais: fromSolicitud.codigo_pais || paisMatch?.codigo_pais || '',
+              ...solicitudSeed,
+              tipo_identificacion: solicitudSeed.tipo_identificacion || paisMatch?.tipo_id_fiscal || 'ID',
+              pais: solicitudSeed.pais || paisMatch?.nombre_pais || '',
+              codigo_pais: solicitudSeed.codigo_pais || paisMatch?.codigo_pais || '',
               // Datos del pedido (correlativo, referencia, etc.)
               abonado: fromSolicitud.abonado ? String(fromSolicitud.abonado) : '',
               expediente: fromSolicitud.expediente ? String(fromSolicitud.expediente) : '',
@@ -1413,18 +1673,23 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
         originalDataRef.current = { ...empresaData }
         // Si viene de solicitud, aplicar datos del pedido sobre los de la empresa
         if (fromSolicitud) {
+          const solicitudSeed = buildSolicitudSeed(fromSolicitud)
+          let mergedEmpresaData = mergeOnlyMissing(empresaData, solicitudSeed)
+          mergedEmpresaData = mergePreferSolicitudContent(mergedEmpresaData, solicitudSeed)
           // Regla: cuando viene desde solicitud, el abonado debe respetar ese flujo (vacío si no viene cliente).
-          empresaData.abonado = fromSolicitud.abonado ? String(fromSolicitud.abonado) : ''
+          mergedEmpresaData.abonado = fromSolicitud.abonado ? String(fromSolicitud.abonado) : ''
           if (fromSolicitud.expediente) {
-            empresaData.expediente = String(fromSolicitud.expediente)
+            mergedEmpresaData.expediente = String(fromSolicitud.expediente)
           }
           // Referencia: SIEMPRE usar el valor de la solicitud (vacío si no la ingresó el cliente)
-          empresaData.referencia = fromSolicitud.referencia || ''
+          mergedEmpresaData.referencia = fromSolicitud.referencia || ''
           if (fromSolicitud.fecha_informe) {
-            empresaData.fecha_informe = fromSolicitud.fecha_informe
+            mergedEmpresaData.fecha_informe = fromSolicitud.fecha_informe
           }
           // Expandir grupo informe para mostrar los datos del pedido
           setExpandedGroups(prev => [...new Set([...prev, 'informe'])])
+          setFormData(mergedEmpresaData)
+          return
         }
         setFormData(empresaData)
       }
@@ -2568,6 +2833,8 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
     const isCuitLocked = field.name === 'cuit' && originalCuit && !isAdmin
     const fieldDisabled = !editMode || locked || (fromSolicitud && isPedidoField) || isCuitLocked
 
+    const bcraPreview = field.name === 'relaciones_bancarias_riesgo' ? parseBcraPreviewData(value || '') : null
+
     return (
       <div
         key={field.name}
@@ -2708,6 +2975,86 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
                 />
               </div>
             </div>
+
+            {bcraPreview && (
+              <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/40 p-4">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h4 className="text-sm font-semibold text-blue-900">Vista previa estilo PDF (BCRA)</h4>
+                  <span className="text-xs text-blue-700">Se actualiza en vivo</span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-md border border-gray-200 bg-white p-2">
+                    <p className="text-[11px] font-semibold uppercase text-gray-500">Situación</p>
+                    <p className="text-sm font-medium text-gray-900">{bcraPreview.situacion || '-'}</p>
+                  </div>
+                  <div className="rounded-md border border-gray-200 bg-white p-2">
+                    <p className="text-[11px] font-semibold uppercase text-gray-500">Deuda informada</p>
+                    <p className="text-sm font-medium text-gray-900">{bcraPreview.deuda || '-'}</p>
+                  </div>
+                  <div className="rounded-md border border-gray-200 bg-white p-2">
+                    <p className="text-[11px] font-semibold uppercase text-gray-500">Entidades</p>
+                    <p className="text-sm font-medium text-gray-900">{bcraPreview.entidades || '-'}</p>
+                  </div>
+                  <div className="rounded-md border border-gray-200 bg-white p-2">
+                    <p className="text-[11px] font-semibold uppercase text-gray-500">Período</p>
+                    <p className="text-sm font-medium text-gray-900">{bcraPreview.periodo || '-'}</p>
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <p className="mb-1 text-[11px] font-semibold uppercase text-gray-500">Escala BCRA</p>
+                  <div className="grid grid-cols-5 gap-1">
+                    {[
+                      { n: 1, label: 'Normal', cls: 'bg-emerald-200' },
+                      { n: 2, label: 'Riesgo bajo', cls: 'bg-yellow-200' },
+                      { n: 3, label: 'Riesgo medio', cls: 'bg-orange-200' },
+                      { n: 4, label: 'Riesgo alto', cls: 'bg-rose-200' },
+                      { n: 5, label: 'Irrecuperable', cls: 'bg-red-300' },
+                    ].map((item) => (
+                      <div
+                        key={item.n}
+                        className={`rounded-md p-2 text-center text-[11px] text-gray-900 ${item.cls} ${bcraPreview.situacionNum === item.n ? 'ring-2 ring-gray-900' : 'ring-1 ring-white'}`}
+                      >
+                        <div className="font-bold">{item.n}</div>
+                        <div>{item.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {bcraPreview.entidadesDetalle.length > 0 && (
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="min-w-full border-collapse rounded-md border border-gray-200 bg-white text-xs">
+                      <thead className="bg-gray-100 text-gray-700">
+                        <tr>
+                          <th className="border border-gray-200 px-2 py-1 text-left">Entidad</th>
+                          <th className="border border-gray-200 px-2 py-1 text-center">Situación</th>
+                          <th className="border border-gray-200 px-2 py-1 text-center">Monto</th>
+                          <th className="border border-gray-200 px-2 py-1 text-center">Días atraso</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bcraPreview.entidadesDetalle.map((entidad, idx) => (
+                          <tr key={`${entidad.banco}-${idx}`}>
+                            <td className="border border-gray-200 px-2 py-1 text-left text-gray-800">{entidad.banco || '-'}</td>
+                            <td className="border border-gray-200 px-2 py-1 text-center">{entidad.situacion || '-'}</td>
+                            <td className="border border-gray-200 px-2 py-1 text-center">{entidad.monto || '-'}</td>
+                            <td className="border border-gray-200 px-2 py-1 text-center">{entidad.diasAtraso || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {bcraPreview.cheques && (
+                  <p className="mt-3 text-xs text-gray-700">
+                    <span className="font-semibold">Cheques:</span> {bcraPreview.cheques}
+                  </p>
+                )}
+              </div>
+            )}
           </>
         ) : field.type === 'textarea' ? (
           <div className={`quill-wrapper ${fieldDisabled ? 'quill-disabled' : ''} ${isEmpty ? 'quill-empty' : ''}`}>
@@ -3692,6 +4039,9 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
         const isExpanded = expandedGroups.includes(groupKey)
         const fields = groupedFields[groupKey] || []
         const extraFields = groupedExtraFields[groupKey] || []
+        const isTextoGroup = groupKey === 'texto'
+        const regularFields = isTextoGroup ? fields.filter((field) => field.name !== 'conclusion') : fields
+        const conclusionField = isTextoGroup ? fields.find((field) => field.name === 'conclusion') : null
         
         return (
           <div key={groupKey} className="bg-white rounded-lg shadow-sm border mb-4 overflow-hidden">
@@ -3740,8 +4090,20 @@ function DataEditor({ data, filename, empresaId, mode = 'edit', onSave, onBack, 
                   renderContactoBlock()
                 ) : (
                   <div className={groupKey === 'texto' ? 'space-y-4' : 'grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4'}>
-                    {fields.map(renderField)}
-                    {extraFields.map(renderExtraField)}
+                    {regularFields.map(renderField)}
+
+                    {extraFields.length > 0 && (
+                      <details className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
+                        <summary className="cursor-pointer text-sm font-medium text-gray-700">
+                          Campos extra avanzados ({extraFields.length})
+                        </summary>
+                        <div className="mt-3">
+                          {extraFields.map(renderExtraField)}
+                        </div>
+                      </details>
+                    )}
+
+                    {conclusionField && renderField(conclusionField)}
                   </div>
                 )}
               </div>

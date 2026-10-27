@@ -23,7 +23,7 @@ const CLIENT_PRIORITY_OPTIONS = [
   { val: 'urgente', labelKey: 'search.priorityUrgent', color: 'border-red-200 text-red-700 bg-red-50', active: 'border-red-500 bg-red-100 ring-1 ring-red-400' },
 ]
 
-function SearchView({ onSelectEmpresa, refreshKey }) {
+function SearchView({ onSelectEmpresa, onAbrirSolicitudData, refreshKey }) {
     const { t, i18n } = useTranslation()
     const cleanDisplayRazonSocial = (value) => {
       const text = String(value || '').trim()
@@ -46,6 +46,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
   const canUseScoringFilter = canSeeScoring && hasPermission('buscar_scoring')
   const [searchTerm, setSearchTerm] = useState('')
   const [searchType, setSearchType] = useState('all') // 'all', 'cuit', 'nombre'
+  const [matchMode, setMatchMode] = useState('exact') // 'exact' | 'similar'
   const [results, setResults] = useState([])
   const [allEmpresas, setAllEmpresas] = useState([])
   const [loading, setLoading] = useState(false)
@@ -83,6 +84,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
   const [sinSaldoModal, setSinSaldoModal] = useState(null) // {report_type, tipo_nombre, packs_sugeridos}
   const [solicitudElapsed, setSolicitudElapsed] = useState(0) // Timer para modal de solicitud
   const [solicitudResultado, setSolicitudResultado] = useState(null) // {success, message, error}
+  const hasSearchInput = searchTerm.trim().length > 0
   const dropdownRef = useRef(null)
   const auditTimerRef = useRef(null)
   const solicitudesTimerRef = useRef(null)
@@ -98,7 +100,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
     if (!canSeeBalanceGeneralBadge || !Array.isArray(results) || results.length === 0) return
 
     const pending = results
-      .filter((empresa) => empresa?.id && !empresa?.has_balance_general && balanceGeneralByEmpresa[empresa.id] === undefined)
+      .filter((empresa) => empresa?.source === 'empresa' && empresa?.id && !empresa?.has_balance_general && balanceGeneralByEmpresa[empresa.id] === undefined)
       .slice(0, 25)
 
     if (!pending.length) return
@@ -355,11 +357,25 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
     return validation
   }
 
+  const normalizeFiscalId = (value) => String(value || '').replace(/\D/g, '')
+
+  const hasInformeDisponible = (empresa) => {
+    const estado = String(empresa?.solicitud_estado || '').toLowerCase()
+    if (empresa?.informe_disponible) return true
+    return estado === 'precarga' || estado === 'precargado' || estado === 'completada'
+  }
+
   const hasScoring = (empresa) => {
     return Boolean(empresa?.scoring && empresa.scoring.score_total !== undefined && empresa.scoring.score_total !== null)
   }
 
   const availableCountries = useMemo(() => {
+    if (!allEmpresas.length) {
+      return Object.keys(COUNTRY_ISO)
+        .filter((pais) => COUNTRY_ISO[pais])
+        .filter((pais) => pais !== 'Internacional' && pais !== 'Union Europea' && pais !== 'Desconocido')
+        .sort((a, b) => a.localeCompare(b, 'es'))
+    }
     const unique = new Set()
     allEmpresas.forEach((empresa) => {
       const pais = resolvePais(empresa)
@@ -418,8 +434,6 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
     setAfipFilter('all')
     setScoringFilter('all')
     setExternalResult(null)
-    // Recargar empresas
-    loadEmpresas()
   }, [refreshKey])
 
   // Ref para debounce de búsqueda principal
@@ -437,6 +451,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
       setResults([])
       setTotalResults(0)
       setIsSearching(false)
+      if (matchMode !== 'exact') setMatchMode('exact')
       return
     }
 
@@ -453,42 +468,14 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
         clearTimeout(searchTimerRef.current)
       }
     }
-  }, [searchTerm, searchType, allEmpresas, countryFilter, afipFilter, scoringFilter, canUseAfipFilter, canUseScoringFilter])
+  }, [searchTerm, searchType, matchMode, countryFilter, afipFilter, scoringFilter, canUseAfipFilter, canUseScoringFilter])
 
-  // Buscar en solicitudes_investigacion SOLO cuando:
-  // - No hay resultados locales suficientes (< 3)
-  // - Y es una búsqueda válida (ID >= 7 dígitos o nombre >= 3 chars)
+  // La búsqueda principal ya combina empresas + solicitudes en /api/search.
+  // Evitar una segunda búsqueda que reordena dinámicamente la grilla.
   useEffect(() => {
-    const trimmed = (searchTerm || '').trim()
-    const digits = trimmed.replace(/\D/g, '')
-    const isIdSearch = digits.length >= 7
-    const isNameSearch = trimmed.length >= 3 && digits.length < 7
-
-    // Si hay suficientes resultados locales, no buscar en solicitudes
-    if (results.length >= 3) {
-      setSolicitudesResults([])
-      setSolicitudesTotal(0)
-      return
-    }
-
-    // Si no hay búsqueda válida, limpiar
-    if (!isIdSearch && !isNameSearch) {
-      setSolicitudesResults([])
-      setSolicitudesTotal(0)
-      return
-    }
-    if (!trimmed) {
-      setSolicitudesResults([])
-      setSolicitudesTotal(0)
-      return
-    }
-    if (solicitudesTimerRef.current) clearTimeout(solicitudesTimerRef.current)
-    // Aumentar debounce a 600ms para evitar búsquedas excesivas
-    solicitudesTimerRef.current = setTimeout(() => {
-      searchSolicitudes(searchTerm, countryFilter)
-    }, 600)
-    return () => { if (solicitudesTimerRef.current) clearTimeout(solicitudesTimerRef.current) }
-  }, [searchTerm, countryFilter, results.length])
+    setSolicitudesResults([])
+    setSolicitudesTotal(0)
+  }, [searchTerm, countryFilter])
 
   const searchSolicitudes = async (term, pais) => {
     // Cancelar búsqueda anterior si existe
@@ -547,7 +534,6 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
   // Auto-buscar en fuentes externas cuando no hay resultados internos y parece CUIT (debounce 600ms)
   useEffect(() => {
     if (!searchTerm || isSearching || results.length > 0) return
-    if (solicitudesSearching || solicitudesResults.length > 0) return
     const digits = searchTerm.replace(/\D/g, '')
     if (digits.length < 7) return
     if (!hasPermission('buscar_externo')) return
@@ -557,15 +543,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
       handleExternalSearch()
     }, 600)
     return () => clearTimeout(timer)
-  }, [results, isSearching, searchTerm, externalSearching, solicitudesSearching, solicitudesResults.length])
-
-  // Si aparecen resultados en solicitudes, ocultar tarjeta externa para evitar duplicados visuales.
-  useEffect(() => {
-    if (solicitudesResults.length > 0 && externalResult) {
-      setExternalResult(null)
-      setExternalSearching(false)
-    }
-  }, [solicitudesResults.length, externalResult])
+  }, [results, isSearching, searchTerm, externalSearching])
 
   const handleExternalSearch = async () => {
     if (!searchTerm.trim()) return
@@ -645,79 +623,165 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
     }
   }
 
-  const performSearch = (term) => {
-    const searchTerm_lower = term.toLowerCase().trim()
-    const searchClean = searchTerm_lower.replace(/[-\s]/g, '')
-
-    let filtered = allEmpresas.filter(empresa => {
-      const cuit = empresa.cuit?.toLowerCase() || ''
-      const nombre = empresa.razon_social?.toLowerCase() || ''
-      const actividad = empresa.actividad_principal?.toLowerCase() || ''
-      const paisTexto = resolvePais(empresa) || ''
-      const pais = paisTexto.toLowerCase()
-      const countryMatch = countryFilter === 'all' || paisTexto === countryFilter
-      const afipValidation = getArgentinaAfipValidation(empresa)
-      const companyHasScoring = hasScoring(empresa)
-      const afipMatch = !canUseAfipFilter || paisTexto !== 'Argentina' || afipFilter === 'all'
-        ? true
-        : afipFilter === 'validated'
-          ? Boolean(afipValidation?.is_successful)
-          : !afipValidation?.is_successful
-      const scoringMatch = !canUseScoringFilter || paisTexto !== 'Argentina' || scoringFilter === 'all'
-        ? true
-        : scoringFilter === 'with_scoring'
-          ? companyHasScoring
-          : !companyHasScoring
-
-      if (!countryMatch || !afipMatch || !scoringMatch) {
-        return false
-      }
-
-      // Remover caracteres especiales del CUIT para búsqueda flexible
-      const cuitClean = cuit.replace(/[-\s]/g, '')
-
-      // Si no hay término de búsqueda, aplicar solo filtro de país.
-      if (!searchTerm_lower) {
-        return true
-      }
-
-      // 'pais' se trata como 'all' para búsqueda de texto
-      const effectiveSearchType = searchType === 'pais' ? 'all' : searchType
-
-      switch (effectiveSearchType) {
-        case 'cuit':
-          return cuitClean.includes(searchClean)
-        case 'nombre':
-          return nombre.includes(searchTerm_lower) || actividad.includes(searchTerm_lower) || pais.includes(searchTerm_lower)
-        case 'all':
-        default:
-          return (
-            cuitClean.includes(searchClean) ||
-            nombre.includes(searchTerm_lower) ||
-            actividad.includes(searchTerm_lower) ||
-            pais.includes(searchTerm_lower)
-          )
-      }
-    })
-
-    setTotalResults(filtered.length)
-
-    // Limitar a 20 resultados (eficiencia)
-    setResults(filtered.slice(0, 20))
-    setIsSearching(false)
-
-    // Verificar monitoreo para usuario cliente
-    if (isClientUser && filtered.length > 0) {
-      const cuits = filtered.slice(0, 20).map(e => e.cuit).filter(Boolean)
-      if (cuits.length) {
-        axios.post('/api/portal/monitoreo/check-cuits', { cuits }).then(r => {
-          if (r.data.success) setMonitorMap(r.data.monitoreados)
-        }).catch(() => {})
-      }
+  const performSearch = async (term) => {
+    const trimmed = (term || '').trim()
+    if (!trimmed && countryFilter === 'all') {
+      setResults([])
+      setTotalResults(0)
+      setIsSearching(false)
+      return
     }
 
-    // Registrar búsqueda en auditoría (debounced)
-    auditSearch(term, searchType, filtered.length)
+    try {
+      const params = new URLSearchParams()
+      params.set('q', trimmed || '*')
+      params.set('limit', '20')
+      if (countryFilter !== 'all') params.set('pais', countryFilter)
+
+      const response = await axios.get(`/api/search?${params.toString()}`)
+      let filtered = response.data?.success ? (response.data.empresas || []) : []
+
+      const searchTermLower = trimmed.toLowerCase()
+      const searchClean = searchTermLower.replace(/[-\s]/g, '')
+      const normalizeText = (value) => String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim()
+      const effectiveSearchType = searchType === 'pais' ? 'all' : searchType
+
+      filtered = filtered.filter((empresa) => {
+        const paisTexto = resolvePais(empresa) || ''
+        const countryMatch = countryFilter === 'all' || paisTexto === countryFilter
+        if (!countryMatch) return false
+
+        const afipValidation = getArgentinaAfipValidation(empresa)
+        const companyHasScoring = hasScoring(empresa)
+        const afipMatch = !canUseAfipFilter || paisTexto !== 'Argentina' || afipFilter === 'all'
+          ? true
+          : afipFilter === 'validated'
+            ? Boolean(afipValidation?.is_successful)
+            : !afipValidation?.is_successful
+        const scoringMatch = !canUseScoringFilter || paisTexto !== 'Argentina' || scoringFilter === 'all'
+          ? true
+          : scoringFilter === 'with_scoring'
+            ? companyHasScoring
+            : !companyHasScoring
+
+        return afipMatch && scoringMatch
+      })
+
+      if (trimmed) {
+        filtered = filtered.filter((empresa) => {
+          const cuit = String(empresa?.cuit || '').toLowerCase()
+          const nombre = String(empresa?.razon_social || '').toLowerCase()
+          const actividad = String(empresa?.actividad_principal || '').toLowerCase()
+          const pais = String(resolvePais(empresa) || '').toLowerCase()
+          const cuitClean = cuit.replace(/[-\s]/g, '')
+
+          switch (effectiveSearchType) {
+            case 'cuit':
+              return cuitClean.includes(searchClean)
+            case 'nombre':
+              return nombre.includes(searchTermLower) || actividad.includes(searchTermLower) || pais.includes(searchTermLower)
+            case 'all':
+            default:
+              return (
+                cuitClean.includes(searchClean) ||
+                nombre.includes(searchTermLower) ||
+                actividad.includes(searchTermLower) ||
+                pais.includes(searchTermLower)
+              )
+          }
+        })
+      }
+
+      if (trimmed) {
+        const qNorm = normalizeText(trimmed)
+        const qDigits = normalizeFiscalId(trimmed)
+        const qTokens = qNorm.split(/\s+/).filter(Boolean)
+
+        const scoreEmpresa = (empresa) => {
+          const nameNorm = normalizeText(empresa?.razon_social)
+          const actividadNorm = normalizeText(empresa?.actividad_principal)
+          const paisNorm = normalizeText(resolvePais(empresa))
+          const idNorm = normalizeFiscalId(empresa?.cuit)
+          const countryWeight = countryFilter !== 'all' && resolvePais(empresa) === countryFilter ? 220 : 0
+
+          if (qDigits && idNorm === qDigits) return 2000 + countryWeight
+          if (nameNorm === qNorm) return 1900 + countryWeight
+          if (qDigits && idNorm.startsWith(qDigits)) return 1600 + countryWeight
+          if (nameNorm.startsWith(qNorm)) return 1500 + countryWeight
+          if (qTokens.length > 1 && qTokens.every((t) => nameNorm.includes(t))) return 1300 + countryWeight
+          if (nameNorm.includes(qNorm)) return 1200 + countryWeight
+          if (actividadNorm.includes(qNorm)) return 900 + countryWeight
+          if (paisNorm.includes(qNorm)) return 700 + countryWeight
+          return 0
+        }
+
+        const qualityEmpresa = (empresa) => {
+          let quality = 0
+          if (empresa?.source === 'empresa') quality += 600
+          else quality += 250
+
+          if (empresa?.empresa_id_resolved) quality += 200
+
+          const estado = String(empresa?.solicitud_estado || '').toLowerCase()
+          if (estado === 'completada') quality += 90
+          else if (estado === 'precargado') quality += 70
+          else if (estado === 'precarga') quality += 50
+
+          if (empresa?.actividad_principal) quality += 25
+          if (empresa?.domicilio) quality += 20
+          if (empresa?.updated_at || empresa?.created_at) quality += 10
+
+          return quality
+        }
+
+        const scored = filtered
+          .map((empresa) => ({ empresa, score: scoreEmpresa(empresa), quality: qualityEmpresa(empresa) }))
+          .filter((item) => item.score > 0)
+
+        const exact = scored.filter((item) => item.score >= 1900)
+        const sortByRank = (a, b) => {
+          if (b.score !== a.score) return b.score - a.score
+          if (b.quality !== a.quality) return b.quality - a.quality
+          return String(a.empresa?.razon_social || '').localeCompare(String(b.empresa?.razon_social || ''), 'es')
+        }
+
+        const ordered = scored.sort(sortByRank)
+        const exactOrdered = exact.sort(sortByRank)
+
+        // Si no hay exactos, similares representa mejor el resultado.
+        const preferredMode = exactOrdered.length > 0 ? 'exact' : 'similar'
+        if (matchMode !== preferredMode) {
+          setMatchMode(preferredMode)
+        }
+
+        const finalScored = preferredMode === 'exact' ? exactOrdered : ordered
+        filtered = finalScored.map((item) => item.empresa)
+      }
+
+      setTotalResults(filtered.length)
+      setResults(filtered.slice(0, 20))
+
+      if (isClientUser && filtered.length > 0) {
+        const cuits = filtered.slice(0, 20).map(e => e.cuit).filter(Boolean)
+        if (cuits.length) {
+          axios.post('/api/portal/monitoreo/check-cuits', { cuits }).then(r => {
+            if (r.data.success) setMonitorMap(r.data.monitoreados)
+          }).catch(() => {})
+        }
+      }
+
+      auditSearch(term, searchType, filtered.length)
+    } catch (err) {
+      setResults([])
+      setTotalResults(0)
+    } finally {
+      setIsSearching(false)
+    }
+
   }
 
   const handleToggleMonitor = async (empresa) => {
@@ -968,6 +1032,47 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
     }
   }
 
+  const handleOpenSolicitudPdf = async (solicitud, lang = 'es') => {
+    if (!solicitud?.id) {
+      toast.error('Registro sin ID de solicitud')
+      return
+    }
+    try {
+      const token = localStorage.getItem('access_token')
+      const params = new URLSearchParams({ lang })
+      if (token) params.append('token', token)
+      const pdfUrl = `/api/solicitudes-investigacion/${solicitud.id}/pdf?${params.toString()}`
+      const win = window.open(pdfUrl, '_blank', 'noopener,noreferrer')
+      if (!win) {
+        const a = document.createElement('a')
+        a.href = pdfUrl
+        a.target = '_blank'
+        a.rel = 'noopener noreferrer'
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+      }
+    } catch (error) {
+      toast.error(error?.response?.data?.error || 'Error al abrir PDF')
+    }
+  }
+
+  const handleOpenSolicitudData = async (sol) => {
+    if (typeof onAbrirSolicitudData !== 'function') {
+      toast.error('No se pudo abrir el editor de solicitud')
+      return
+    }
+    try {
+      await onAbrirSolicitudData({
+        ...sol,
+        solicitud_source: 'solicitudes_investigacion',
+        view_source: 'search',
+      })
+    } catch (error) {
+      toast.error(error?.response?.data?.error || 'No se pudo abrir el editor')
+    }
+  }
+
   const handleOpenBalanceGeneral = async (empresa) => {
     if (!empresa?.id) {
       toast.error('No se pudo identificar la empresa para abrir el historial de balance')
@@ -1055,6 +1160,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
   const handleClearFilters = () => {
     setSearchTerm('')
     setSearchType('all')
+    setMatchMode('exact')
     setCountryFilter('all')
     setAfipFilter('all')
     setScoringFilter('all')
@@ -1202,7 +1308,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
         </div>
       )}
 
-      <div className="max-w-5xl mx-auto px-3 sm:px-4 py-6 sm:py-12">
+      <div className="w-full px-3 sm:px-4 lg:px-8 py-6 sm:py-12">
         {/* Header */}
         <div className="text-center mb-6 sm:mb-12">
           <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 mb-2 sm:mb-3">
@@ -1281,6 +1387,33 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
               countries={availableCountries}
             />
 
+            {hasSearchInput && (
+              <div className="flex items-center gap-1.5 sm:gap-2 ml-0 sm:ml-1">
+                <button
+                  onClick={() => setMatchMode('exact')}
+                  className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+                    matchMode === 'exact'
+                      ? 'bg-cyan-600 text-white shadow-md'
+                      : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100 border border-cyan-200'
+                  }`}
+                  title="Mostrar solo coincidencias exactas"
+                >
+                  Exacta
+                </button>
+                <button
+                  onClick={() => setMatchMode('similar')}
+                  className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+                    matchMode === 'similar'
+                      ? 'bg-cyan-600 text-white shadow-md'
+                      : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100 border border-cyan-200'
+                  }`}
+                  title="Mostrar coincidencias similares"
+                >
+                  Similares
+                </button>
+              </div>
+            )}
+
             {/* Contador */}
             {(searchTerm || countryFilter !== 'all') && (
               <div className="w-full sm:w-auto sm:ml-auto flex items-center text-sm text-gray-600 font-medium mt-2 sm:mt-0">
@@ -1293,12 +1426,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                   <>
                     <span className="bg-inforysk-red-100 text-inforysk-red-700 px-3 py-1 rounded-full">
                       {(() => {
-                        const empresaCuits = new Set(results.map(e => (e.cuit || '').replace(/[-. ]/g, '')))
-                        // Contar solicitudes únicas (que no estén en empresas) - para todos los usuarios, no solo clientes
-                        const uniqueSol = solicitudesResults.filter(s => !empresaCuits.has((s.cuit || '').replace(/[-. ]/g, ''))).length
-                        // Usar el mayor entre totalResults y results.length para evitar discrepancias
-                        const baseCount = Math.max(totalResults, results.length)
-                        const total = baseCount + uniqueSol
+                        const total = Math.max(totalResults, results.length)
                         return t('search.resultsCount', { count: total })
                       })()}
                     </span>
@@ -1461,6 +1589,10 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
             {results.map((empresa) => {
               const pais = resolvePais(empresa)
               const taxIdLabel = resolveTaxIdLabel(empresa)
+              const informeDisponible = hasInformeDisponible(empresa)
+              const isSolicitudSource = empresa?.source === 'solicitud'
+              const solicitudEstado = String(empresa?.solicitud_estado || '').toLowerCase()
+              const pendienteConsolidacion = isSolicitudSource && !empresa?.empresa_id_resolved
               const rutUruguayValidado = isUruguayRutValidated(empresa)
               const cuitArgentinoValidado = isArgentinaCuitValidated(empresa)
               const afipValidation = getArgentinaAfipValidation(empresa)
@@ -1469,9 +1601,11 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
               // Usar codigo_pais guardado o buscar en mapeo
               const paisIso = empresa?.codigo_pais?.toLowerCase() || (pais ? COUNTRY_ISO[pais] : null)
 
-              // Antigüedad — basado en fecha_informe
-              const antiguedad = empresa.fecha_informe ? (() => {
-                const fecha = new Date(empresa.fecha_informe)
+              // Antigüedad — priorizar fecha de contrato social
+              const fechaBaseAntiguedad = empresa.fecha_contrato_social || empresa.fecha_informe || empresa.created_at
+              const antiguedad = fechaBaseAntiguedad ? (() => {
+                const fecha = new Date(fechaBaseAntiguedad)
+                if (Number.isNaN(fecha.getTime())) return null
                 const hoy = new Date()
                 let anios = hoy.getFullYear() - fecha.getFullYear()
                 let meses = hoy.getMonth() - fecha.getMonth()
@@ -1483,6 +1617,9 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                 if (meses > 0) return `${meses} mes${meses > 1 ? 'es' : ''}`
                 return `${Math.max(dias, 0)} día${dias !== 1 ? 's' : ''}`
               })() : null
+
+              const actividadLabel = empresa.actividad_principal || empresa.actividad || empresa.rubro || '—'
+              const direccionLabel = empresa.domicilio || empresa.direccion || empresa.domicilio_legal || '—'
 
               // Score / Semáforo
               const score = empresa.scoring?.score_total
@@ -1505,6 +1642,15 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                       <div className="flex items-center gap-2 mb-1">
                         {paisIso && <img src={`https://flagcdn.com/20x15/${paisIso}.png`} alt="" className="w-5 h-3.5 rounded-sm object-cover" />}
                         {pais && <span className="text-xs text-gray-500">{pais}</span>}
+                        {isSolicitudSource ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-700 border border-cyan-200 text-[10px] font-semibold">
+                            Fuente: Solicitud
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 border border-slate-200 text-[10px] font-semibold">
+                            Fuente: Empresa
+                          </span>
+                        )}
                       </div>
                       <h3 className="text-base sm:text-lg font-bold text-gray-900">
                         {nombreLimpio || t('search.company.noName')}
@@ -1570,11 +1716,11 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                     </div>
                     <div className="bg-green-50 rounded-lg p-2.5 sm:p-3">
                       <div className="text-[9px] sm:text-[10px] text-gray-500 font-semibold uppercase tracking-wider mb-0.5 sm:mb-1">{t('search.company.activity')}</div>
-                      <div className="text-[10px] sm:text-xs font-semibold text-green-700 line-clamp-2">{empresa.actividad_principal || '—'}</div>
+                      <div className="text-[10px] sm:text-xs font-semibold text-green-700 line-clamp-2">{actividadLabel}</div>
                     </div>
                     <div className="bg-gray-50 rounded-lg p-2.5 sm:p-3">
                       <div className="text-[9px] sm:text-[10px] text-gray-500 font-semibold uppercase tracking-wider mb-0.5 sm:mb-1">{t('search.company.address')}</div>
-                      <div className="text-[10px] sm:text-xs font-semibold text-gray-700 line-clamp-2">{empresa.domicilio || '—'}</div>
+                      <div className="text-[10px] sm:text-xs font-semibold text-gray-700 line-clamp-2">{direccionLabel}</div>
                     </div>
                     <div className="bg-purple-50 rounded-lg p-2.5 sm:p-3">
                       <div className="text-[9px] sm:text-[10px] text-gray-500 font-semibold uppercase tracking-wider mb-0.5 sm:mb-1">{t('search.company.seniority')}</div>
@@ -1591,7 +1737,43 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                   {/* Botones de acción */}
                   {isClientUser ? (
                     <>
-                    {solicitudForm?.key === `emp-${empresa.id}` ? (
+                    {informeDisponible ? (
+                    <div className="bg-green-50 rounded-xl border border-green-200 p-3 sm:p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs sm:text-sm font-semibold text-green-900">Informe disponible</p>
+                          <p className="text-[10px] sm:text-xs text-green-700 mt-0.5">Esta empresa ya tiene informe/carga previa. No es necesario solicitarlo nuevamente.</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleToggleMonitor(empresa)}
+                            className={`flex items-center gap-1.5 px-3 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap ${
+                              monitorMap[empresa.cuit]
+                                ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-300'
+                                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-300'
+                            }`}
+                            title={monitorMap[empresa.cuit] ? t('search.stopFollowing') : t('search.followCompany')}
+                          >
+                            <Star className={`h-4 w-4 ${monitorMap[empresa.cuit] ? 'fill-amber-500' : ''}`} />
+                            <span className="hidden sm:inline">{monitorMap[empresa.cuit] ? t('search.following') : t('search.follow')}</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (hasPermission('ver')) {
+                                handleViewDetails(empresa)
+                                return
+                              }
+                              window.location.hash = '#registros-precargados'
+                            }}
+                            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-xs sm:text-sm font-semibold whitespace-nowrap shadow-sm"
+                          >
+                            <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                            {hasPermission('ver') ? 'Ver informe' : 'Ir a Precargados'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    ) : solicitudForm?.key === `emp-${empresa.id}` ? (
                       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <div>
@@ -1775,6 +1957,45 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                     </div>
                     )}
                     </>
+                  ) : isSolicitudSource ? (
+                  <div className="bg-gradient-to-r from-cyan-50 to-blue-50 rounded-xl border border-cyan-200 p-3 sm:p-4">
+                    <div className="flex justify-end">
+                      <div className="relative" ref={openPdfDropdown === `sol-${empresa.id}` ? dropdownRef : null}>
+                        <button
+                          onClick={() => setOpenPdfDropdown(openPdfDropdown === `sol-${empresa.id}` ? null : `sol-${empresa.id}`)}
+                          className="flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-xs sm:text-sm font-semibold whitespace-nowrap"
+                          title="Ver PDF"
+                        >
+                          <Download className="h-4 w-4" /> Ver PDF <ChevronDown className="h-3 w-3" />
+                        </button>
+                        {openPdfDropdown === `sol-${empresa.id}` && (
+                          <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border z-50 overflow-hidden min-w-[150px]">
+                            <button
+                              onClick={() => handleOpenSolicitudPdf(empresa, 'es')}
+                              className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50 text-left text-sm"
+                            >
+                              <span className="text-base">ES</span>
+                              Español
+                            </button>
+                            <button
+                              onClick={() => handleOpenSolicitudPdf(empresa, 'en')}
+                              className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50 text-left text-sm border-t"
+                            >
+                              <span className="text-base">EN</span>
+                              English
+                            </button>
+                            <button
+                              onClick={() => handleOpenSolicitudPdf(empresa, 'de')}
+                              className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50 text-left text-sm border-t"
+                            >
+                              <span className="text-base">DE</span>
+                              Deutsch
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                   ) : (
                   <div className="grid grid-cols-2 sm:flex gap-2 sm:gap-3">
                     <button
@@ -1976,13 +2197,28 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
               {filteredSolicitudes.map((sol) => {
                 const tipoId = sol.tipo_identificacion || 'ID'
                 const nombreLimpio = cleanDisplayRazonSocial(sol.razon_social)
+                const solicitudHasData = ['precarga', 'precargado', 'completada'].includes(String(sol.estado || '').toLowerCase())
 
                 // Resolver país real priorizando pais/codigo_pais explícitos.
                 const solPais = resolveSolicitudPais(sol)
                 const iso = solPais ? COUNTRY_ISO[solPais] : null
 
-                // Solicitudes no tienen fecha_informe
-                const antiguedad = null
+                // Antigüedad en solicitudes: priorizar fecha de contrato social si existe
+                const fechaBaseAntiguedad = sol.fecha_contrato_social || sol.fecha_informe || sol.created_at
+                const antiguedad = fechaBaseAntiguedad ? (() => {
+                  const fecha = new Date(fechaBaseAntiguedad)
+                  if (Number.isNaN(fecha.getTime())) return null
+                  const hoy = new Date()
+                  let anios = hoy.getFullYear() - fecha.getFullYear()
+                  let meses = hoy.getMonth() - fecha.getMonth()
+                  let dias = hoy.getDate() - fecha.getDate()
+                  if (dias < 0) { meses--; dias += new Date(hoy.getFullYear(), hoy.getMonth(), 0).getDate() }
+                  if (meses < 0) { anios--; meses += 12 }
+                  if (anios > 0 && meses > 0) return `${anios} año${anios > 1 ? 's' : ''} ${meses} mes${meses > 1 ? 'es' : ''}`
+                  if (anios > 0) return `${anios} año${anios > 1 ? 's' : ''}`
+                  if (meses > 0) return `${meses} mes${meses > 1 ? 'es' : ''}`
+                  return `${Math.max(dias, 0)} día${dias !== 1 ? 's' : ''}`
+                })() : null
 
                 return (
                   <div key={`sol-${sol.id}`} className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow border border-gray-100">
@@ -2039,8 +2275,50 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                         </div>
                       </div>
 
-                      {/* Banner Solicitar Informe — mismo estilo que empresas */}
-                      {(sol.estado === 'precarga' || sol.estado === 'consulta') && (
+                      {/* Solicitudes con data precargada: permitir abrir editor y ver PDF */}
+                      {solicitudHasData && (
+                        <div className="bg-gradient-to-r from-cyan-50 to-blue-50 rounded-xl border border-cyan-200 p-3 sm:p-4 mb-4">
+                          <div className="flex justify-end">
+                            <div className="relative" ref={openPdfDropdown === `sol-list-${sol.id}` ? dropdownRef : null}>
+                              <button
+                                onClick={() => setOpenPdfDropdown(openPdfDropdown === `sol-list-${sol.id}` ? null : `sol-list-${sol.id}`)}
+                                className="flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-xs sm:text-sm font-semibold whitespace-nowrap"
+                                title="Ver PDF"
+                              >
+                                <Download className="h-4 w-4" /> Ver PDF <ChevronDown className="h-3 w-3" />
+                              </button>
+                              {openPdfDropdown === `sol-list-${sol.id}` && (
+                                <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border z-50 overflow-hidden min-w-[150px]">
+                                  <button
+                                    onClick={() => handleOpenSolicitudPdf(sol, 'es')}
+                                    className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50 text-left text-sm"
+                                  >
+                                    <span className="text-base">ES</span>
+                                    Español
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenSolicitudPdf(sol, 'en')}
+                                    className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50 text-left text-sm border-t"
+                                  >
+                                    <span className="text-base">EN</span>
+                                    English
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenSolicitudPdf(sol, 'de')}
+                                    className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50 text-left text-sm border-t"
+                                  >
+                                    <span className="text-base">DE</span>
+                                    Deutsch
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Banner Solicitar Informe — solo cuando NO hay data útil */}
+                      {!solicitudHasData && (sol.estado === 'precarga' || sol.estado === 'consulta') && (
                         <>
                         {solicitudForm?.key === `sol-${sol.id}` ? (
                           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-4 space-y-3">
@@ -2238,7 +2516,7 @@ function SearchView({ onSelectEmpresa, refreshKey }) {
                         </div>
                       )}
 
-                      {sol.estado === 'completada' && (
+                      {sol.estado === 'completada' && !solicitudHasData && (
                         <div className="bg-green-50 rounded-xl border border-green-200 p-4 flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3">
                             <CheckCircle2 className="h-5 w-5 text-green-600" />

@@ -5,8 +5,6 @@ import toast from 'react-hot-toast'
 import actividadesAR from '../data/actividadesF883.json'
 import actividadesUY from '../data/actividadesUY.json'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000'
-
 // Mapeo de actividades por país
 const ACTIVIDADES_POR_PAIS = {
   AR: actividadesAR,
@@ -49,7 +47,7 @@ export default function ActividadSelector({
 
   const loadCustomActividades = async () => {
     try {
-      const res = await axios.get(`${API_BASE}/api/actividades/${country}`)
+      const res = await axios.get(`/api/actividades/${country}`)
       if (res.data.success && res.data.actividades) {
         setCustomActividades(res.data.actividades)
       }
@@ -180,7 +178,7 @@ export default function ActividadSelector({
 
     setSavingNew(true)
     try {
-      await axios.post(`${API_BASE}/api/actividades`, {
+      await axios.post('/api/actividades', {
         codigo_pais: country,
         descripcion: trimmed
       })
