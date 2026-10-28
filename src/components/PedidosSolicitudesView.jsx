@@ -146,6 +146,8 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
   const [monitoreoPrepagoTotal, setMonitoreoPrepagoTotal] = useState('')
   const [monitoreoPrepagoTotalFacturado, setMonitoreoPrepagoTotalFacturado] = useState('')
   const [prioridadEditModal, setPrioridadEditModal] = useState(null)
+  const [confirmarPrioridadModal, setConfirmarPrioridadModal] = useState(null)
+  const [guardandoPrioridad, setGuardandoPrioridad] = useState(false)
   const [modalSearchType, setModalSearchType] = useState('all') // 'all', 'cuit', 'nombre'
   const [modalCountryFilter, setModalCountryFilter] = useState('all')
   const [modalCountryOpen, setModalCountryOpen] = useState(false)
@@ -203,6 +205,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
       top: rect.top - 8, // Posición arriba del botón
       right: window.innerWidth - rect.right
     })
+
     setActionDropdownId(solId)
   }
 
@@ -260,10 +263,11 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     const usados = Number(item?.usados || 0)
     const total = Number(item?.total_cupo || 0)
     const disponibles = Number(item?.disponibles || 0)
-    const siguiente = total > 0 ? Math.min(usados + 1, total) : 1
-    const estado = String(item?.estado || '').toLowerCase()
-    const estadoLabel = estado === 'completo' ? 'COMPLETO' : 'VALIDADO'
-    return `#${item.id} - ${siguiente}/${total || '?'} (disp: ${disponibles}) - ${estadoLabel}`
+    const padre = item?.solicitud_padre_id
+      ? `Padre #${item.solicitud_padre_id}: ${item.solicitud_padre_nombre || 'Solicitud'}`
+      : `Prepago #${item.id} sin solicitud padre`
+    const cuit = item?.solicitud_padre_cuit ? ` · ${item.solicitud_padre_cuit}` : ''
+    return `${padre}${cuit} · ${usados}/${total} usados · ${disponibles} disponibles`
   }
 
   const normalizarMesInput = (value) => {
@@ -681,15 +685,21 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
 
   const actualizarPrioridad = async (id, prioridad, extraPayload = {}) => {
     try {
-      await axios.put(`/api/pedidos-solicitudes/${id}`, { prioridad, ...extraPayload })
+      const res = await axios.put(`/api/pedidos-solicitudes/${id}`, { prioridad, ...extraPayload })
+      if (!res.data?.success) {
+        toast.error(res.data?.error || 'Error al actualizar prioridad')
+        return false
+      }
       toast.success('Prioridad actualizada')
       if (detalle?.id === id) {
         setDetalle(prev => ({ ...prev, prioridad, ...extraPayload }))
       }
       reload()
       reloadStats()
+      return true
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error al actualizar prioridad')
+      return false
     }
   }
 
@@ -717,45 +727,50 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
     }
 
     if (nuevaPrioridad !== 'monitoreo') {
-      await actualizarPrioridad(sol.id, nuevaPrioridad)
+      setConfirmarPrioridadModal({ sol, nuevaPrioridad })
       return
     }
 
-    const clienteId = sol.cliente_id || sol.solicitado_por
+    const clienteId = sol.cliente_id || sol.solicitado_por || sol.usuario_id
     setPrioridadEditModal({
       sol,
       facturar: true,
-      prepagoModo: 'existing',
       prepagoId: '',
-      prepagoTotal: ''
+      prepagoTotal: '1'
     })
     await loadMonitoreoPrepagos(clienteId)
+  }
+
+  const confirmarCambioPrioridad = async () => {
+    if (!confirmarPrioridadModal || guardandoPrioridad) return
+    setGuardandoPrioridad(true)
+    const updated = await actualizarPrioridad(confirmarPrioridadModal.sol.id, confirmarPrioridadModal.nuevaPrioridad)
+    setGuardandoPrioridad(false)
+    if (updated) setConfirmarPrioridadModal(null)
   }
 
   const confirmarCambioPrioridadMonitoreo = async () => {
     if (!prioridadEditModal?.sol) return
 
     const payload = {}
-    if (!prioridadEditModal.facturar) {
-      payload.facturar_monitoreo = false
-      if (prioridadEditModal.prepagoModo === 'existing') {
-        if (!prioridadEditModal.prepagoId) {
-          toast.error('Seleccioná un prepago existente')
-          return
-        }
-        payload.monitoreo_prepago_id = Number(prioridadEditModal.prepagoId)
-      } else {
-        const total = Number(prioridadEditModal.prepagoTotal)
-        if (!Number.isInteger(total) || total < 1) {
-          toast.error('Ingresá un total válido de monitoreos prepagados')
-          return
-        }
-        payload.monitoreo_prepago_total_cupo = total
+    if (prioridadEditModal.facturar) {
+      const total = Number(prioridadEditModal.prepagoTotal)
+      if (!Number.isInteger(total) || total < 1) {
+        toast.error('Ingresá al menos 1 monitoreo incluido en este pago')
+        return
       }
+      payload.monitoreo_prepago_total_cupo = total
+    } else {
+      payload.facturar_monitoreo = false
+      if (!prioridadEditModal.prepagoId) {
+        toast.error('Seleccioná un prepago disponible que ya esté pagado')
+        return
+      }
+      payload.monitoreo_prepago_id = Number(prioridadEditModal.prepagoId)
     }
 
-    await actualizarPrioridad(prioridadEditModal.sol.id, 'monitoreo', payload)
-    setPrioridadEditModal(null)
+    const updated = await actualizarPrioridad(prioridadEditModal.sol.id, 'monitoreo', payload)
+    if (updated) setPrioridadEditModal(null)
   }
 
   const loadBalanceAntecedentes = async (solicitudId) => {
@@ -1352,8 +1367,12 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
 
       if (prioridadSeleccionada === 'monitoreo' && !monitoreoFacturar) {
         if (monitoreoPrepagoModo === 'existing') {
-          if (!monitoreoPrepagoId) {
-            toast.error('Seleccioná un prepago existente')
+          const prepagoDisponible = monitoreoPrepagos.some(item => (
+            Number(item?.id) === Number(monitoreoPrepagoId)
+            && Number(item?.disponibles || 0) > 0
+          ))
+          if (!prepagoDisponible) {
+            toast.error('Seleccioná un prepago existente con cupo disponible')
             setCreandoSolicitud(false)
             return
           }
@@ -2978,27 +2997,26 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
 
                                 {monitoreoPrepagoModo === 'existing' ? (
                                   <div>
-                                    <label className="text-xs text-gray-600">Prepago asociado</label>
+                                    <label className="text-xs text-gray-600">Prepago disponible ya pagado</label>
                                     <select
                                       value={monitoreoPrepagoId}
                                       onChange={(e) => setMonitoreoPrepagoId(e.target.value)}
-                                      className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white"
+                                      disabled={loadingMonitoreoPrepagos || !monitoreoPrepagos.some(item => Number(item?.disponibles || 0) > 0)}
+                                      className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white disabled:bg-gray-100"
                                     >
-                                      <option value="">Seleccionar prepago...</option>
-                                      {monitoreoPrepagos.map((item) => (
-                                        <option key={item.id} value={item.id}>
-                                          {formatPrepagoOptionLabel(item)}
-                                        </option>
+                                      <option value="">{loadingMonitoreoPrepagos ? 'Cargando prepagos...' : 'Seleccionar prepago disponible...'}</option>
+                                      {monitoreoPrepagos.filter(item => Number(item?.disponibles || 0) > 0).map((item) => (
+                                        <option key={item.id} value={item.id}>{formatPrepagoOptionLabel(item)}</option>
                                       ))}
                                     </select>
                                     {loadingMonitoreoPrepagos && <p className="text-xs text-gray-500 mt-1">Cargando prepagos...</p>}
-                                    {!loadingMonitoreoPrepagos && monitoreoPrepagos.length === 0 && (
+                                    {!loadingMonitoreoPrepagos && !monitoreoPrepagos.some(item => Number(item?.disponibles || 0) > 0) && (
                                       <p className="text-xs text-amber-600 mt-1">No hay prepagos con cupo disponible para este cliente.</p>
                                     )}
                                   </div>
                                 ) : (
                                   <div>
-                                    <label className="text-xs text-gray-600">Total de monitoreos incluidos en este pago</label>
+                                    <label className="text-xs text-gray-600">Total de monitoreos ya pagados</label>
                                     <input
                                       type="number"
                                       min="1"
@@ -3009,7 +3027,7 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                                       placeholder="Ej: 4"
                                     />
                                     <p className="text-xs text-gray-500 mt-1">
-                                      Esta solicitud tomará el primer cupo: 1/{Number(monitoreoPrepagoTotal) > 0 ? Number(monitoreoPrepagoTotal) : '?'}
+                                      Esta solicitud tomará el primer cupo: 1/{Number(monitoreoPrepagoTotal) > 0 ? Number(monitoreoPrepagoTotal) : '?'}.
                                     </p>
                                   </div>
                                 )}
@@ -3142,6 +3160,44 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
       )}
 
       {/* Modal: cambio de prioridad a monitoreo */}
+      {confirmarPrioridadModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+            <div className="border-b px-5 py-4">
+              <h3 className="font-semibold text-gray-900">Confirmar cambio de prioridad</h3>
+              <p className="mt-1 text-sm text-gray-600">{confirmarPrioridadModal.sol.razon_social}</p>
+            </div>
+            <div className="space-y-3 p-5">
+              <p className="text-sm text-gray-700">¿Confirmás cambiar la prioridad de esta solicitud?</p>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {({ normal: 'Normal', urgente: 'Urgente', '72h': '72 Horas', monitoreo: 'Monitoreo' }[confirmarPrioridadModal.sol.prioridad || 'normal'])}
+                {' → '}
+                {({ normal: 'Normal', urgente: 'Urgente', '72h': '72 Horas', monitoreo: 'Monitoreo' }[confirmarPrioridadModal.nuevaPrioridad])}
+              </div>
+              <p className="text-xs text-gray-500">El cambio se aplicará al confirmar.</p>
+            </div>
+            <div className="flex justify-end gap-2 border-t bg-gray-50 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setConfirmarPrioridadModal(null)}
+                disabled={guardandoPrioridad}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarCambioPrioridad}
+                disabled={guardandoPrioridad}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {guardandoPrioridad ? 'Aplicando...' : 'Confirmar cambio'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {prioridadEditModal && (
         <div className="fixed inset-0 z-[70] overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4">
@@ -3151,6 +3207,9 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
               <p className="text-sm text-gray-600">
                 Empresa: <span className="font-medium">{prioridadEditModal.sol?.razon_social}</span>
               </p>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                Vas a cambiar de {({ normal: 'Normal', urgente: 'Urgente', '72h': '72 Horas', monitoreo: 'Monitoreo' }[prioridadEditModal.sol?.prioridad || 'normal'])} a Monitoreo. Confirmá para aplicar.
+              </div>
 
               <div className="space-y-2">
                 <label className="text-xs text-gray-500">¿Cómo facturar este monitoreo?</label>
@@ -3172,58 +3231,41 @@ export default function PedidosSolicitudesView({ isAdmin, onIniciarInforme, onNu
                 </div>
               </div>
 
-              {!prioridadEditModal.facturar && (
+              {prioridadEditModal.facturar ? (
                 <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 space-y-2">
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setPrioridadEditModal(prev => ({ ...prev, prepagoModo: 'existing' }))}
-                      className={`px-2 py-1 rounded border ${prioridadEditModal.prepagoModo === 'existing' ? 'bg-indigo-100 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-600'}`}
-                    >
-                      Usar prepago existente
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPrioridadEditModal(prev => ({ ...prev, prepagoModo: 'new' }))}
-                      className={`px-2 py-1 rounded border ${prioridadEditModal.prepagoModo === 'new' ? 'bg-indigo-100 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-600'}`}
-                    >
-                      Crear nuevo prepago
-                    </button>
-                  </div>
-
-                  {prioridadEditModal.prepagoModo === 'existing' ? (
-                    <div>
-                      <label className="text-xs text-gray-600">Prepago asociado</label>
-                      <select
-                        value={prioridadEditModal.prepagoId}
-                        onChange={(e) => setPrioridadEditModal(prev => ({ ...prev, prepagoId: e.target.value }))}
-                        className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white"
-                      >
-                        <option value="">Seleccionar prepago...</option>
-                        {monitoreoPrepagos.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {formatPrepagoOptionLabel(item)}
-                          </option>
-                        ))}
-                      </select>
-                      {loadingMonitoreoPrepagos && <p className="text-xs text-gray-500 mt-1">Cargando prepagos...</p>}
-                    </div>
-                  ) : (
-                    <div>
-                      <label className="text-xs text-gray-600">Total de monitoreos incluidos en este pago</label>
-                      <input
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={prioridadEditModal.prepagoTotal}
-                        onChange={(e) => setPrioridadEditModal(prev => ({ ...prev, prepagoTotal: e.target.value }))}
-                        className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white"
-                        placeholder="Ej: 4"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Esta solicitud quedará como 1/{Number(prioridadEditModal.prepagoTotal) > 0 ? Number(prioridadEditModal.prepagoTotal) : '?' }.
-                      </p>
-                    </div>
+                  <label className="text-xs text-gray-600">
+                    Máximo asociados para este pago
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={prioridadEditModal.prepagoTotal}
+                    onChange={(e) => setPrioridadEditModal(prev => ({ ...prev, prepagoTotal: e.target.value }))}
+                    className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white"
+                    placeholder="Ej: 1"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Esta solicitud quedará como 1/{Number(prioridadEditModal.prepagoTotal) >= 1 ? Number(prioridadEditModal.prepagoTotal) : '?' }.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 space-y-2">
+                  <label className="text-xs text-gray-600">Prepago disponible ya pagado</label>
+                  <select
+                    value={prioridadEditModal.prepagoId}
+                    onChange={(e) => setPrioridadEditModal(prev => ({ ...prev, prepagoId: e.target.value }))}
+                    disabled={loadingMonitoreoPrepagos || !monitoreoPrepagos.some(item => Number(item?.disponibles || 0) > 0)}
+                    className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white disabled:bg-gray-100"
+                  >
+                    <option value="">{loadingMonitoreoPrepagos ? 'Cargando prepagos...' : 'Seleccionar prepago disponible...'}</option>
+                    {monitoreoPrepagos.filter(item => Number(item?.disponibles || 0) > 0).map((item) => (
+                      <option key={item.id} value={item.id}>{formatPrepagoOptionLabel(item)}</option>
+                    ))}
+                  </select>
+                  {loadingMonitoreoPrepagos && <p className="text-xs text-gray-500 mt-1">Cargando prepagos...</p>}
+                  {!loadingMonitoreoPrepagos && !monitoreoPrepagos.some(item => Number(item?.disponibles || 0) > 0) && (
+                    <p className="mt-1 text-xs text-amber-700">No hay prepagos con cupos disponibles para este cliente.</p>
                   )}
                 </div>
               )}

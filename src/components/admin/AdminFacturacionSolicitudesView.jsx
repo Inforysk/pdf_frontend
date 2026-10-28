@@ -157,6 +157,11 @@ export default function AdminFacturacionSolicitudesView() {
   const [editingPrecio, setEditingPrecio] = useState(null) // sol.id
   const [editPrecioValue, setEditPrecioValue] = useState('')
   const [savingPrecio, setSavingPrecio] = useState(false)
+  const [prioridadEditModal, setPrioridadEditModal] = useState(null)
+  const [confirmarPrioridadModal, setConfirmarPrioridadModal] = useState(null)
+  const [monitoreoPrepagos, setMonitoreoPrepagos] = useState([])
+  const [loadingMonitoreoPrepagos, setLoadingMonitoreoPrepagos] = useState(false)
+  const [savingPrioridad, setSavingPrioridad] = useState(false)
   const [showMonitoreoHistorialModal, setShowMonitoreoHistorialModal] = useState(false)
   const [loadingMonitoreoHistorial, setLoadingMonitoreoHistorial] = useState(false)
   const [monitoreoHistorialData, setMonitoreoHistorialData] = useState(null)
@@ -503,6 +508,163 @@ export default function AdminFacturacionSolicitudesView() {
     } finally {
       setSavingPrecio(false)
     }
+  }
+
+  const loadMonitoreoPrepagos = async (clienteId) => {
+    if (!clienteId) {
+      setMonitoreoPrepagos([])
+      return
+    }
+    setLoadingMonitoreoPrepagos(true)
+    try {
+      const res = await axios.get('/api/monitoreo-prepagos', { params: { cliente_id: clienteId } })
+      setMonitoreoPrepagos(res.data?.success ? (res.data.items || []) : [])
+    } catch {
+      setMonitoreoPrepagos([])
+    } finally {
+      setLoadingMonitoreoPrepagos(false)
+    }
+  }
+
+  const formatPrepagoOptionLabel = (item) => {
+    const usados = Number(item?.usados || 0)
+    const total = Number(item?.total_cupo || 0)
+    const disponibles = Number(item?.disponibles || 0)
+    const padre = item?.solicitud_padre_id
+      ? `Padre #${item.solicitud_padre_id}: ${item.solicitud_padre_nombre || 'Solicitud'}`
+      : `Prepago #${item.id} sin solicitud padre`
+    const cuit = item?.solicitud_padre_cuit ? ` · ${item.solicitud_padre_cuit}` : ''
+    return `${padre}${cuit} · ${usados}/${total} usados · ${disponibles} disponibles`
+  }
+
+  const handlePrioridadChange = async (sol, nuevaPrioridad) => {
+    if (!isAdmin || !isFacturable(sol) || nuevaPrioridad === sol.prioridad) return
+
+    if (nuevaPrioridad === 'monitoreo') {
+      setPrioridadEditModal({
+        sol,
+        facturar: true,
+        prepagoId: '',
+        prepagoTotal: '1',
+      })
+      await loadMonitoreoPrepagos(sol.cliente_id || sol.solicitado_por || sol.usuario_id)
+      return
+    }
+
+    setConfirmarPrioridadModal({ sol, nuevaPrioridad })
+  }
+
+  const confirmarCambioPrioridad = async () => {
+    const modal = confirmarPrioridadModal
+    if (!modal?.sol || savingPrioridad) return
+
+    setSavingPrioridad(true)
+    try {
+      const res = await axios.put(`/api/pedidos-solicitudes/${modal.sol.id}`, {
+        prioridad: modal.nuevaPrioridad,
+        admin_facturacion_prioridad: true,
+      })
+      if (!res.data?.success) {
+        toast.error(res.data?.error || 'No se pudo actualizar la prioridad')
+        return
+      }
+      toast.success('Prioridad actualizada')
+      setConfirmarPrioridadModal(null)
+      await loadData()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al actualizar prioridad')
+    } finally {
+      setSavingPrioridad(false)
+    }
+  }
+
+  const confirmarCambioPrioridadMonitoreo = async () => {
+    const modal = prioridadEditModal
+    if (!modal?.sol || savingPrioridad) return
+
+    const payload = {
+      prioridad: 'monitoreo',
+      facturar_monitoreo: modal.facturar,
+      admin_facturacion_prioridad: true,
+    }
+    const prepagoTotal = Number(modal.prepagoTotal)
+
+    if (!modal.facturar) {
+      const prepagoElegido = monitoreoPrepagos.find(item => Number(item.id) === Number(modal.prepagoId))
+      if (!prepagoElegido || Number(prepagoElegido.disponibles || 0) < 1) {
+        toast.error('Selecciona un prepago que todavía tenga cupos disponibles')
+        return
+      }
+      payload.monitoreo_prepago_id = Number(modal.prepagoId)
+    } else {
+      if (!Number.isInteger(prepagoTotal) || prepagoTotal < 1) {
+        toast.error('Indica al menos 1 monitoreo incluido en este pago')
+        return
+      }
+      payload.monitoreo_prepago_total_cupo = prepagoTotal
+    }
+
+    setSavingPrioridad(true)
+    try {
+      const res = await axios.put(`/api/pedidos-solicitudes/${modal.sol.id}`, payload)
+      if (!res.data?.success) {
+        toast.error(res.data?.error || 'No se pudo actualizar la prioridad')
+        return
+      }
+      toast.success(modal.facturar ? 'Monitoreo facturable actualizado' : 'Monitoreo asociado al prepago pagado')
+      setPrioridadEditModal(null)
+      await loadData()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al actualizar prioridad')
+    } finally {
+      setSavingPrioridad(false)
+    }
+  }
+
+  const renderPrioridad = (sol, compact = false) => {
+    const options = [
+      { value: 'normal', label: 'Normal' },
+      { value: 'monitoreo', label: 'Monitoreo' },
+      { value: '72h', label: '72h' },
+      { value: 'urgente', label: 'Urgente' },
+    ]
+    const priorityClass = sol.prioridad === 'urgente'
+      ? 'bg-red-100 text-red-700'
+      : sol.prioridad === 'monitoreo'
+        ? 'bg-violet-100 text-violet-700'
+        : sol.prioridad === '72h'
+          ? 'bg-orange-100 text-orange-700'
+          : 'bg-blue-100 text-blue-700'
+
+    return (
+      <div className={`flex ${compact ? 'flex-col items-start' : 'flex-col items-center'} gap-1`}>
+        {isAdmin && isFacturable(sol) ? (
+          <select
+            aria-label={`Prioridad de ${sol.razon_social || sol.cuit || `solicitud ${sol.id}`}`}
+            value={sol.prioridad || 'normal'}
+            disabled={savingPrioridad}
+            onChange={(event) => handlePrioridadChange(sol, event.target.value)}
+            className="max-w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs"
+          >
+            {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        ) : (
+          <span className={`px-2 py-0.5 rounded text-xs font-medium ${priorityClass}`}>
+            {options.find((option) => option.value === sol.prioridad)?.label || 'Normal'}
+          </span>
+        )}
+        {getMonitoreoStatusBadge(sol) && (
+          <button
+            type="button"
+            onClick={() => openMonitoreoHistorialModal(sol)}
+            className={`px-2 py-0.5 rounded text-[11px] border hover:opacity-90 ${getMonitoreoStatusBadge(sol).className}`}
+            title={getMonitoreoStatusBadge(sol).title || 'Ver historial del prepago'}
+          >
+            {getMonitoreoStatusBadge(sol).label}
+          </button>
+        )}
+      </div>
+    )
   }
 
   const loadHistorial = async () => {
@@ -1975,26 +2137,7 @@ export default function AdminFacturacionSolicitudesView() {
                             </div>
 
                             <div className="flex flex-wrap items-center gap-2">
-                              <div className="inline-flex items-center gap-1">
-                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                  sol.prioridad === 'urgente' ? 'bg-red-100 text-red-700' :
-                                  sol.prioridad === 'monitoreo' ? 'bg-violet-100 text-violet-700' :
-                                  sol.prioridad === '72h' ? 'bg-orange-100 text-orange-700' :
-                                  'bg-blue-100 text-blue-700'
-                                }`}>
-                                  {sol.prioridad === 'urgente' ? 'Urgente' : sol.prioridad === 'monitoreo' ? 'Monitoreo' : sol.prioridad === '72h' ? '72h' : 'Normal'}
-                                </span>
-                                {monitoreoStatusBadge && (
-                                  <button
-                                    type="button"
-                                    onClick={() => openMonitoreoHistorialModal(sol)}
-                                    className={`px-2 py-0.5 rounded text-xs border hover:opacity-90 ${monitoreoStatusBadge.className}`}
-                                    title={monitoreoStatusBadge.title || 'Ver árbol/historial del monitoreo asociado'}
-                                  >
-                                    {monitoreoStatusBadge.label}
-                                  </button>
-                                )}
-                              </div>
+                              {renderPrioridad(sol, true)}
                               {!isFacturable(sol) ? (
                                 (() => {
                                   const estadoSol = sol.factura_estado_pago || 'facturada'
@@ -2126,26 +2269,7 @@ export default function AdminFacturacionSolicitudesView() {
                                 </div>
                               </td>
                               <td className="px-3 py-2 text-center">
-                                <div className="inline-flex items-center gap-1">
-                                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                    sol.prioridad === 'urgente' ? 'bg-red-100 text-red-700' :
-                                    sol.prioridad === 'monitoreo' ? 'bg-violet-100 text-violet-700' :
-                                    sol.prioridad === '72h' ? 'bg-orange-100 text-orange-700' :
-                                    'bg-blue-100 text-blue-700'
-                                  }`}>
-                                    {sol.prioridad === 'urgente' ? 'Urgente' : sol.prioridad === 'monitoreo' ? 'Monitoreo' : sol.prioridad === '72h' ? '72h' : 'Normal'}
-                                  </span>
-                                  {monitoreoStatusBadge && (
-                                    <button
-                                      type="button"
-                                      onClick={() => openMonitoreoHistorialModal(sol)}
-                                      className={`px-2 py-0.5 rounded text-[11px] border hover:opacity-90 ${monitoreoStatusBadge.className}`}
-                                      title={monitoreoStatusBadge.title || 'Ver árbol/historial del monitoreo asociado'}
-                                    >
-                                      {monitoreoStatusBadge.label}
-                                    </button>
-                                  )}
-                                </div>
+                                {renderPrioridad(sol)}
                               </td>
                               <td className="px-3 py-2 text-right font-medium">
                                 {editingPrecio === sol.id ? (
@@ -2402,6 +2526,148 @@ export default function AdminFacturacionSolicitudesView() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {prioridadEditModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between border-b px-5 py-4">
+              <div>
+                <h3 className="font-semibold text-gray-900">Cambiar a Monitoreo</h3>
+                <p className="mt-1 text-sm text-gray-600">{prioridadEditModal.sol.razon_social}</p>
+                <p className="font-mono text-xs text-gray-500">{prioridadEditModal.sol.cuit || 'Sin identificador'}</p>
+              </div>
+              <button type="button" onClick={() => setPrioridadEditModal(null)} className="text-gray-400 hover:text-gray-700" aria-label="Cerrar">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                Vas a cambiar de {({ normal: 'Normal', urgente: 'Urgente', '72h': '72 Horas', monitoreo: 'Monitoreo' }[prioridadEditModal.sol.prioridad || 'normal'])} a Monitoreo. Confirmá para aplicar.
+              </div>
+              <fieldset>
+                <legend className="mb-2 text-sm font-medium text-gray-800">¿Se debe facturar este monitoreo?</legend>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setPrioridadEditModal(prev => ({ ...prev, facturar: true }))}
+                    className={`rounded-lg border p-3 text-left ${prioridadEditModal.facturar ? 'border-indigo-500 bg-indigo-50 text-indigo-800 ring-1 ring-indigo-300' : 'border-gray-200 hover:bg-gray-50'}`}
+                  >
+                    <span className="block text-sm font-semibold">Sí, facturar</span>
+                    <span className="mt-1 block text-xs text-gray-600">Usa el precio configurado; podrás ajustarlo luego en la fila.</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrioridadEditModal(prev => ({ ...prev, facturar: false }))}
+                    className={`rounded-lg border p-3 text-left ${!prioridadEditModal.facturar ? 'border-emerald-500 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-300' : 'border-gray-200 hover:bg-gray-50'}`}
+                  >
+                    <span className="block text-sm font-semibold">No, ya pagado</span>
+                    <span className="mt-1 block text-xs text-gray-600">Importe $0; requiere asociar un cupo pagado.</span>
+                  </button>
+                </div>
+              </fieldset>
+
+              {prioridadEditModal.facturar ? (
+                <div className="space-y-2 rounded-lg border border-indigo-100 bg-indigo-50/50 p-3">
+                  <p className="text-sm text-indigo-900">
+                    Precio configurado: €{Number(prioridadEditModal.sol.precio_monitoreo_eur || 0).toFixed(2)}
+                  </p>
+                  <label className="block text-xs text-gray-700" htmlFor="billing-monitoring-included-count">
+                    Máximo asociados para este pago
+                  </label>
+                  <input
+                    id="billing-monitoring-included-count"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={prioridadEditModal.prepagoTotal}
+                    onChange={(event) => setPrioridadEditModal(prev => ({ ...prev, prepagoTotal: event.target.value }))}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+                    placeholder="Ej.: 1"
+                  />
+                  <p className="text-xs text-gray-600">
+                    Esta solicitud quedará como 1/{Number(prioridadEditModal.prepagoTotal) >= 1 ? Number(prioridadEditModal.prepagoTotal) : '?' }.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2 rounded-lg border border-emerald-100 bg-emerald-50/50 p-3">
+                  <label className="mb-1 block text-xs text-gray-700" htmlFor="billing-monitoring-existing-package">Prepago disponible ya pagado</label>
+                  <select
+                    id="billing-monitoring-existing-package"
+                    value={prioridadEditModal.prepagoId}
+                    onChange={(event) => setPrioridadEditModal(prev => ({ ...prev, prepagoId: event.target.value }))}
+                    disabled={loadingMonitoreoPrepagos || !monitoreoPrepagos.some(item => Number(item?.disponibles || 0) > 0)}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm disabled:bg-gray-100"
+                  >
+                    <option value="">{loadingMonitoreoPrepagos ? 'Cargando prepagos...' : 'Seleccionar prepago disponible...'}</option>
+                    {monitoreoPrepagos.filter(item => Number(item?.disponibles || 0) > 0).map((item) => (
+                      <option key={item.id} value={item.id}>{formatPrepagoOptionLabel(item)}</option>
+                    ))}
+                  </select>
+                  {loadingMonitoreoPrepagos && <p className="mt-1 text-xs text-gray-500">Cargando prepagos...</p>}
+                  {!loadingMonitoreoPrepagos && !monitoreoPrepagos.some(item => Number(item?.disponibles || 0) > 0) && (
+                    <p className="mt-1 text-xs text-amber-700">No hay prepagos con cupos disponibles para este cliente.</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 border-t bg-gray-50 px-5 py-4">
+              <button type="button" onClick={() => setPrioridadEditModal(null)} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarCambioPrioridadMonitoreo}
+                disabled={savingPrioridad || loadingMonitoreoPrepagos}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {savingPrioridad && <Loader2 className="h-4 w-4 animate-spin" />}
+                Confirmar cambio
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmarPrioridadModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+            <div className="border-b px-5 py-4">
+              <h3 className="font-semibold text-gray-900">Confirmar cambio de prioridad</h3>
+              <p className="mt-1 text-sm text-gray-600">{confirmarPrioridadModal.sol.razon_social}</p>
+              <p className="font-mono text-xs text-gray-500">{confirmarPrioridadModal.sol.cuit || 'Sin identificador'}</p>
+            </div>
+            <div className="space-y-3 p-5">
+              <p className="text-sm text-gray-700">¿Confirmás cambiar la prioridad de esta solicitud?</p>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {({ normal: 'Normal', urgente: 'Urgente', '72h': '72 Horas', monitoreo: 'Monitoreo' }[confirmarPrioridadModal.sol.prioridad || 'normal'])}
+                {' → '}
+                {({ normal: 'Normal', urgente: 'Urgente', '72h': '72 Horas', monitoreo: 'Monitoreo' }[confirmarPrioridadModal.nuevaPrioridad])}
+              </div>
+              <p className="text-xs text-gray-500">El cambio se aplicará al confirmar.</p>
+            </div>
+            <div className="flex justify-end gap-2 border-t bg-gray-50 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setConfirmarPrioridadModal(null)}
+                disabled={savingPrioridad}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarCambioPrioridad}
+                disabled={savingPrioridad}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {savingPrioridad ? 'Aplicando...' : 'Confirmar cambio'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
