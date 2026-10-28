@@ -350,11 +350,11 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
     const usados = Number(item?.usados || 0)
     const total = Number(item?.total_cupo || 0)
     const disponibles = Number(item?.disponibles || 0)
-    const padre = item?.solicitud_padre_id
-      ? `Padre #${item.solicitud_padre_id}: ${item.solicitud_padre_nombre || 'Solicitud'}`
-      : `Prepago #${item.id} sin solicitud padre`
+    const informePrincipal = item?.solicitud_padre_id
+      ? `Informe principal #${item.solicitud_padre_id}: ${item.solicitud_padre_nombre || 'Razón social no informada'}`
+      : `Prepago #${item.id}: informe principal no identificado`
     const cuit = item?.solicitud_padre_cuit ? ` · ${item.solicitud_padre_cuit}` : ''
-    return `${padre}${cuit} · ${usados}/${total} usados · ${disponibles} disponibles`
+    return `${informePrincipal}${cuit} · ${usados}/${total} usados · ${disponibles} disponibles`
   }
 
   // Cargar clientes para filtro al inicio
