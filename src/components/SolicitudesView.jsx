@@ -134,6 +134,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
   const [monitoreoFacturar, setMonitoreoFacturar] = useState(true)
   const [monitoreoPrepagos, setMonitoreoPrepagos] = useState([])
   const [loadingMonitoreoPrepagos, setLoadingMonitoreoPrepagos] = useState(false)
+  const [monitoreoPrepagosError, setMonitoreoPrepagosError] = useState('')
   const [monitoreoPrepagoModo, setMonitoreoPrepagoModo] = useState('existing')
   const [monitoreoPrepagoId, setMonitoreoPrepagoId] = useState('')
   const [monitoreoPrepagoTotal, setMonitoreoPrepagoTotal] = useState('')
@@ -329,18 +330,26 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
   const loadMonitoreoPrepagos = async (clienteId) => {
     if (!clienteId) {
       setMonitoreoPrepagos([])
+      setMonitoreoPrepagosError('')
       return
     }
     setLoadingMonitoreoPrepagos(true)
+    setMonitoreoPrepagosError('')
     try {
       const res = await axios.get('/api/monitoreo-prepagos', { params: { cliente_id: clienteId } })
       if (res.data?.success) {
         setMonitoreoPrepagos(res.data.items || [])
       } else {
         setMonitoreoPrepagos([])
+        const error = res.data?.error || 'No se pudieron cargar los prepagos disponibles.'
+        setMonitoreoPrepagosError(error)
+        toast.error(error)
       }
-    } catch {
+    } catch (err) {
       setMonitoreoPrepagos([])
+      const error = err.response?.data?.error || 'No se pudieron cargar los prepagos disponibles.'
+      setMonitoreoPrepagosError(error)
+      toast.error(error)
     } finally {
       setLoadingMonitoreoPrepagos(false)
     }
@@ -1206,6 +1215,7 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
     setPrioridadSeleccionada('normal')
     setMonitoreoFacturar(true)
     setMonitoreoPrepagos([])
+    setMonitoreoPrepagosError('')
     setMonitoreoPrepagoModo('existing')
     setMonitoreoPrepagoId('')
     setMonitoreoPrepagoTotal('')
@@ -1220,13 +1230,6 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
     loadPaisesEmpresas()
     setShowNuevaSolicitud(true)
   }
-
-  useEffect(() => {
-    if (!showNuevaSolicitud || modalStep !== 2) return
-    if (prioridadSeleccionada !== 'monitoreo' || monitoreoFacturar) return
-    if (!clienteSeleccionado?.id) return
-    loadMonitoreoPrepagos(clienteSeleccionado.id)
-  }, [showNuevaSolicitud, modalStep, prioridadSeleccionada, monitoreoFacturar, clienteSeleccionado?.id])
 
   const clientesFiltrados = clientes.filter(c => {
     if (!clienteSearch.trim()) return true
@@ -2566,7 +2569,16 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                               <label className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer text-sm ${
                                 !monitoreoFacturar ? 'border-indigo-500 bg-indigo-50 text-indigo-700 font-medium' : 'border-gray-200 text-gray-600'
                               }`}>
-                                <input type="radio" name="facturarMonitoreoSolicitudes" checked={!monitoreoFacturar} onChange={() => setMonitoreoFacturar(false)} className="hidden" />
+                                <input
+                                  type="radio"
+                                  name="facturarMonitoreoSolicitudes"
+                                  checked={!monitoreoFacturar}
+                                  onChange={() => {
+                                    setMonitoreoFacturar(false)
+                                    if (clienteSeleccionado?.id) loadMonitoreoPrepagos(clienteSeleccionado.id)
+                                  }}
+                                  className="hidden"
+                                />
                                 No, ya pagado (monto $0)
                               </label>
                             </div>
@@ -2605,7 +2617,19 @@ export default function SolicitudesView({ isAdmin, onIniciarInforme, onNuevoInfo
                                       ))}
                                     </select>
                                     {loadingMonitoreoPrepagos && <p className="text-xs text-gray-500 mt-1">Cargando prepagos...</p>}
-                                    {!loadingMonitoreoPrepagos && !monitoreoPrepagos.some(item => Number(item?.disponibles || 0) > 0) && (
+                                    {!loadingMonitoreoPrepagos && monitoreoPrepagosError && (
+                                      <div className="mt-1 flex items-center justify-between gap-2 text-xs text-red-700">
+                                        <span>{monitoreoPrepagosError}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => loadMonitoreoPrepagos(clienteSeleccionado?.id)}
+                                          className="font-medium underline"
+                                        >
+                                          Reintentar
+                                        </button>
+                                      </div>
+                                    )}
+                                    {!loadingMonitoreoPrepagos && !monitoreoPrepagosError && !monitoreoPrepagos.some(item => Number(item?.disponibles || 0) > 0) && (
                                       <p className="text-xs text-amber-600 mt-1">No hay prepagos con cupo disponible para este cliente.</p>
                                     )}
                                   </div>
